@@ -119,7 +119,7 @@ it edits the file on disk. All mutable state lives on `UnitInstance`.
 
 Milestones 1–13 of the build plan are done:
 
-- Data-driven units with a 3-tier merge chain
+- Data-driven units with a 7-tier merge chain, doubling per tier
 - Board model with deploy zones, the neutral row, merging, mirror symmetry
 - Tile-based combat: melee, ranged, spells with AoE shapes, A* pathing
 - The movement lockout — a committed unit can't attack, and dies for it
@@ -225,6 +225,52 @@ Three things in here are easy to break, so they each have a test:
 To add a sixth ability: add a `Kind`, add its fields to `AbilityData`, and handle
 it in `CombatSim._resolve_ability` — that match statement is the only place in
 the simulation that knows abilities have kinds.
+
+## Seven tiers, doubling
+
+Each merge doubles **health and damage**. Tier 7 is 64x a tier 1.
+
+Cooldown, move time and range deliberately do **not** scale:
+
+- Cooldown and move time are lower-is-better, so doubling them would make a
+  merged unit worse. Halving them instead would compound with the damage
+  doubling and put tier 7 at 4096x the damage-per-second of a tier 1.
+- Doubling range would give a tier-7 Archer a reach of 256 tiles on a board 11
+  deep — it would hit anything, anywhere, from spawn.
+
+Power scales. Tempo and reach don't.
+
+### The counting problem
+
+2-to-1 merging means a tier N costs **2^(N-1)** tier-1 units:
+
+| Tier | Units | Tier | Units |
+|---|---|---|---|
+| 2 | 2 | 5 | 16 |
+| 3 | 4 | 6 | 32 |
+| 4 | 8 | 7 | **64** |
+
+A whole match hands you 5 units a round over at most 7 rounds — **35 units**.
+So tier 7 is not merely rare, it is arithmetically impossible, and tier 6 needs
+32 of your 35 units to funnel perfectly into one type.
+
+The merge lottery makes it much worse than that. Two units only merge if they are
+*identical*, and each merge rolls a random type, so building toward one high-tier
+unit is fighting the randomness the whole way. Realistically you'll see tier 3
+often, tier 4 sometimes, tier 5 rarely, and nothing above it.
+
+Levers, if you want the top tiers to actually appear:
+
+- **`MatchState.UNITS_PER_DRAW`** — more units per round is the bluntest fix.
+- **`MatchState.WINS_NEEDED`** — longer matches mean more draws.
+- **Weight the merge pool** toward the merging unit's own type, so building is
+  possible at all. Currently uniform across five types.
+- Or leave it, and treat tiers 5 to 7 as something that only happens in a long
+  custom game. Dead content, but harmless.
+
+Also worth watching: a 64x spread means a high-tier unit is untouchable by
+low-tier ones, and a mismatched fight will run to `DEFAULT_TIMEOUT` and be settled
+on remaining health rather than by anyone dying.
 
 ## Merging is a lottery
 

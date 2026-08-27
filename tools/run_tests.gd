@@ -168,24 +168,40 @@ func _test_merging() -> void:
 	_check("merged unit sits on the drop tile", b.unit_at(Vector2i(1, 0)) == merged)
 	_check("board holds one unit", b.all_units().size() == 1)
 
-	# Walk to the top of the chain and confirm it refuses to go further.
-	var t2a := _unit(0, BoardModel.TEAM_A)
-	var t2b := _unit(0, BoardModel.TEAM_A)
+	# Walk the whole chain and confirm where it stops.
+	var chain := _loadout.units[0].chain_length()
+	_check("the merge chain is 7 tiers deep", chain == 7, "it is %d" % chain)
+
+	var top := _loadout.units[0]
+	var tier := 1
+	while top.next_tier != null:
+		var prev := top
+		top = top.next_tier
+		tier += 1
+		_check("tier %d doubles health" % tier,
+			is_equal_approx(top.max_hp, prev.max_hp * 2.0),
+			"%.0f -> %.0f" % [prev.max_hp, top.max_hp])
+		_check("tier %d doubles damage" % tier,
+			is_equal_approx(top.attack_damage, prev.attack_damage * 2.0),
+			"%.1f -> %.1f" % [prev.attack_damage, top.attack_damage])
+		# Tempo and reach must NOT scale, or a tier 7 would be unplayable.
+		_check("tier %d keeps its cooldown" % tier,
+			is_equal_approx(top.attack_cooldown, prev.attack_cooldown))
+		_check("tier %d keeps its reach" % tier, top.attack_range == prev.attack_range)
+
+	_check("tier %d is the top" % tier, top.is_max_tier())
+	_check("a tier 7 is 64x a tier 1",
+		is_equal_approx(top.max_hp, _loadout.units[0].max_hp * 64.0),
+		"%.0f vs %.0f" % [top.max_hp, _loadout.units[0].max_hp * 64.0])
+
 	var b2 := BoardModel.new()
-	b2.place(t2a, Vector2i(0, 0))
-	b2.place(t2b, Vector2i(1, 0))
-	var m2 := b2.merge(t2a, t2b, Vector2i(1, 0))
-	var t3a := _unit(0, BoardModel.TEAM_A)
-	var t3b := _unit(0, BoardModel.TEAM_A)
-	b2.place(t3a, Vector2i(2, 0))
-	b2.place(t3b, Vector2i(3, 0))
-	var m3 := b2.merge(t3a, t3b, Vector2i(3, 0))
-	var top := b2.merge(m2, m3, Vector2i(3, 0))
-	_check("two tier-2s make a tier-3", top != null and top.data.tier == 3)
-	_check("tier 3 is the top", top != null and top.data.is_max_tier())
-	var x1 := _unit(0, BoardModel.TEAM_A)
-	x1.data = top.data
-	_check("merging at max tier refused", not b2.can_merge(top, x1))
+	var maxed := _unit(0, BoardModel.TEAM_A)
+	maxed.data = top
+	var maxed2 := _unit(0, BoardModel.TEAM_A)
+	maxed2.data = top
+	b2.place(maxed, Vector2i(0, 0))
+	b2.place(maxed2, Vector2i(1, 0))
+	_check("merging at max tier refused", not b2.can_merge(maxed, maxed2))
 
 
 ## Merging is a gamble: two identical units yield a RANDOM type one tier up.

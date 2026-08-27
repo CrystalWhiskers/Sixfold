@@ -10,7 +10,7 @@
 extends Node
 
 const ROUNDS := 6
-const MAX_FRAMES := 4000
+const MAX_FRAMES := 20000
 
 var _main: Node2D
 var _frames := 0

@@ -125,6 +125,16 @@ func is_gone() -> bool:
 	return dying and death_t <= 0.0
 
 
+## 940 / 11.5k / 1.2M — health runs to five figures once tiers stack.
+static func _compact(v: float) -> String:
+	var n := maxf(v, 0.0)
+	if n < 10000.0:
+		return "%d" % ceili(n)
+	if n < 1000000.0:
+		return "%.1fk" % (n / 1000.0)
+	return "%.1fM" % (n / 1000000.0)
+
+
 func team_color() -> Color:
 	if unit == null:
 		return Color.GRAY
@@ -164,10 +174,22 @@ func _draw() -> void:
 	if flash > 0.0:
 		draw_rect(body, Color(1, 1, 1, 0.55 * flash), true)
 
-	# Tier pips, top-left. One dot per tier above 1.
-	for i in maxi(unit.data.tier - 1, 0):
-		draw_circle(Vector2(-half + 12.0 + i * 10.0, -half + 12.0), 3.5,
-			Color(1, 1, 1, 0.9 * alpha))
+	# Tier badge, top-left. Dots stop being countable past three or four, and
+	# tiers run to seven, so anything above tier 3 gets the number instead.
+	if unit.data.tier > 1:
+		var tfont := ThemeDB.fallback_font
+		if unit.data.tier <= 3:
+			for i in unit.data.tier - 1:
+				draw_circle(Vector2(-half + 12.0 + i * 10.0, -half + 12.0), 3.5,
+					Color(1, 1, 1, 0.9 * alpha))
+		else:
+			var badge := Rect2(-half + 6.0, -half + 5.0, 19.0, 15.0)
+			draw_rect(badge, Color(0.05, 0.06, 0.09, 0.75 * alpha), true)
+			var tt := "T%d" % unit.data.tier
+			var tw2 := tfont.get_string_size(tt, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
+			draw_string(tfont, Vector2(badge.position.x + (badge.size.x - tw2) * 0.5,
+				badge.position.y + 12.0), tt,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 0.93, 0.72, alpha))
 
 	if dying:
 		# A clear cross, so a corpse is never mistaken for a live unit mid-fade.
@@ -221,9 +243,11 @@ func _draw() -> void:
 	# Numeric HP above the bar. Removes any doubt about whether something is
 	# clinging on at 3 health or already gone.
 	var font := ThemeDB.fallback_font
-	var hp_text := "%d" % maxi(ceili(hp_cur), 0)
+	# Tier 7 units carry five figures of health. Spelling that out in full would
+	# be wider than the tile.
+	var hp_text := _compact(hp_cur)
 	if shield > 0.0:
-		hp_text += "+%d" % roundi(shield)
+		hp_text += "+" + _compact(shield)
 	var tw := font.get_string_size(hp_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
 	draw_string(font, Vector2(-tw * 0.5, -half - BAR_HEIGHT - 7.0), hp_text,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.80, 0.85, 0.92, alpha))

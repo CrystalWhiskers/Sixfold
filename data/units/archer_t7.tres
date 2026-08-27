@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_a5rgs"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_e200b"]
+
+[sub_resource type="Resource" id="Resource_mnybr"]
+script = ExtResource("1_a5rgs")
+id = &"quickdraw"
+display_name = "Quickdraw"
+description = "Permanently quickens the draw. Stacks all battle."
+cast_time = 0.35
+haste_percent = 0.16
+haste_max_stacks = 6
+
+[resource]
+script = ExtResource("2_e200b")
+id = &"archer"
+display_name = "Archer VII"
+tier = 7
+max_hp = 3520.0
+attack_damage = 1216.0
+attack_cooldown = 0.95
+move_time = 0.5
+attack_range = 4
+sight_range = 5
+attack_type = 1
+ability = SubResource("Resource_mnybr")
+accent = Color(0.55, 0.62, 0.32, 1)

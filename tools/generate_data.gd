@@ -15,10 +15,16 @@ const ABILITY_DIR := "res://data/abilities"
 const LOADOUT_DIR := "res://data/loadouts"
 const BUFF_DIR := "res://data/buffs"
 
-const TIERS := 3
-## Per-tier multipliers. Tier 2 is one merge, tier 3 is two.
-const HP_SCALE := 1.65
-const DMG_SCALE := 1.55
+const TIERS := 7
+## Every tier doubles health and damage. Tier 7 is 2^6 = 64x a tier 1.
+##
+## Cooldown, move_time and range deliberately do NOT scale. Two of those are
+## lower-is-better, so doubling them would make a merged unit worse; halving them
+## instead would stack with the damage doubling and put tier 7 at 4096x the DPS
+## of a tier 1. Range doubling would give a tier-7 Archer reach of 256 tiles on a
+## board 11 deep. Power scales, tempo and reach do not.
+const HP_SCALE := 2.0
+const DMG_SCALE := 2.0
 
 ## Every unit has one mana ability. The bar is 100 for all of them; mana_per_attack
 ## is the only thing that differs, so a rate of 25 casts every 4th attack.
@@ -210,4 +216,4 @@ func _make_buffs() -> void:
 
 
 func _numeral(t: int) -> String:
-	return ["", "I", "II", "III", "IV", "V"][clampi(t, 0, 5)]
+	return ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII"][clampi(t, 0, 8)]
