@@ -1,0 +1,69 @@
+[gd_scene format=3 uid="uid://bqv0x1vpukgtm"]
+
+[ext_resource type="Script" uid="uid://d0txdkhh2vhjh" path="res://scripts/view/main.gd" id="1_main"]
+[ext_resource type="Script" uid="uid://cgy0ayvbcw4pn" path="res://scripts/view/board_view.gd" id="2_board"]
+
+[node name="Main" type="Node2D" unique_id=1025092785]
+script = ExtResource("1_main")
+
+[node name="BoardView" type="Node2D" parent="." unique_id=1142255549]
+position = Vector2(108, 132)
+script = ExtResource("2_board")
+
+[node name="UI" type="CanvasLayer" parent="." unique_id=2109746712]
+
+[node name="Root" type="Control" parent="UI" unique_id=1174226123]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Hud" type="Label" parent="UI/Root" unique_id=1899668411]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 26.0
+offset_right = 700.0
+offset_bottom = 58.0
+theme_override_font_sizes/font_size = 17
+text = "Round 1"
+
+[node name="Status" type="Label" parent="UI/Root" unique_id=262717135]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 62.0
+offset_right = 700.0
+offset_bottom = 96.0
+theme_override_colors/font_color = Color(0.65, 0.71, 0.79, 1)
+theme_override_font_sizes/font_size = 15
+text = "Loading..."
+
+[node name="Bench" type="HBoxContainer" parent="UI/Root" unique_id=1431591664]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 1078.0
+offset_right = 700.0
+offset_bottom = 1148.0
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Buttons" type="HBoxContainer" parent="UI/Root" unique_id=277525091]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 1168.0
+offset_right = 700.0
+offset_bottom = 1232.0
+mouse_filter = 2
+theme_override_constants/separation = 12
+
+[node name="Fight" type="Button" parent="UI/Root/Buttons" unique_id=1573020443]
+custom_minimum_size = Vector2(190, 54)
+layout_mode = 2
+text = "Fight"
+
+[node name="Speed" type="Button" parent="UI/Root/Buttons" unique_id=697099753]
+custom_minimum_size = Vector2(150, 54)
+layout_mode = 2
+text = "Speed x2"

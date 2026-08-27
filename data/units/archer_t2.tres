@@ -1,0 +1,44 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_1o7jg"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_gf5jv"]
+
+[sub_resource type="Resource" id="Resource_hm5ul"]
+script = ExtResource("1_1o7jg")
+id = &"quickdraw"
+display_name = "Quickdraw"
+description = "Permanently quickens the draw. Stacks all battle."
+cast_time = 0.35
+haste_percent = 0.16
+haste_max_stacks = 6
+
+[sub_resource type="Resource" id="Resource_um1b0"]
+script = ExtResource("2_gf5jv")
+id = &"archer"
+display_name = "Archer III"
+tier = 3
+max_hp = 150.0
+attack_damage = 45.5
+attack_cooldown = 0.95
+move_time = 0.5
+attack_range = 4
+sight_range = 5
+attack_type = 1
+ability = SubResource("Resource_hm5ul")
+accent = Color(0.55, 0.62, 0.32, 1)
+
+[resource]
+script = ExtResource("2_gf5jv")
+id = &"archer"
+display_name = "Archer II"
+tier = 2
+max_hp = 91.0
+attack_damage = 29.5
+attack_cooldown = 0.95
+move_time = 0.5
+attack_range = 4
+sight_range = 5
+attack_type = 1
+ability = SubResource("Resource_hm5ul")
+next_tier = SubResource("Resource_um1b0")
+accent = Color(0.55, 0.62, 0.32, 1)

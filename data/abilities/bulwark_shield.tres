@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_or6eb"]
+
+[resource]
+script = ExtResource("1_or6eb")
+id = &"bulwark_shield"
+display_name = "Bulwark"
+description = "Raises a shield that soaks damage before health and cannot be healed."
+kind = 1
+cast_time = 0.3
+shield_amount = 70.0
+shield_cap = 70.0

@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/stat_modifier.gd" id="1_gg6al"]
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="2_l7cnj"]
+
+[sub_resource type="Resource" id="Resource_gt77o"]
+script = ExtResource("1_gg6al")
+stat = 2
+mode = 1
+value = -0.28
+
+[resource]
+script = ExtResource("2_l7cnj")
+id = &"frenzy"
+display_name = "Frenzy"
+scope = 0
+modifiers = Array[ExtResource("1_gg6al")]([SubResource("Resource_gt77o")])
+weight = 0.9

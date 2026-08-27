@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/stat_modifier.gd" id="1_0pxm0"]
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="2_n66ev"]
+
+[sub_resource type="Resource" id="Resource_mr8o3"]
+script = ExtResource("1_0pxm0")
+mode = 1
+value = 0.3
+
+[sub_resource type="Resource" id="Resource_w4add"]
+script = ExtResource("1_0pxm0")
+stat = 0
+mode = 1
+value = -0.15
+
+[resource]
+script = ExtResource("2_n66ev")
+id = &"glass_edge"
+display_name = "Glass Edge"
+modifiers = Array[ExtResource("1_0pxm0")]([SubResource("Resource_mr8o3"), SubResource("Resource_w4add")])
+weight = 0.6

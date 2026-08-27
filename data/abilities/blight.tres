@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_gnxui"]
+
+[resource]
+script = ExtResource("1_gnxui")
+id = &"blight"
+display_name = "Blight"
+description = "Poisons one enemy. Keeps working while the Vexer shoots someone else."
+kind = 2
+cast_time = 0.4
+dot_damage = 11.0
+dot_ticks = 6

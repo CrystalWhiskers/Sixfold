@@ -1,0 +1,60 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_a7p5x"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_7v5ep"]
+
+[sub_resource type="Resource" id="Resource_qwp52"]
+script = ExtResource("1_a7p5x")
+id = &"cinder_lance"
+display_name = "Cinder Lance"
+description = "A lance of fire: heavy on the target, scorching everything beside it."
+kind = 3
+cast_time = 0.7
+burst_damage = 78.0
+splash_damage = 16.0
+
+[sub_resource type="Resource" id="Resource_km38t"]
+script = ExtResource("2_7v5ep")
+id = &"pyre"
+display_name = "Pyre III"
+tier = 3
+max_hp = 245.0
+attack_damage = 17.0
+attack_cooldown = 1.4
+move_time = 0.55
+attack_range = 3
+attack_type = 2
+ability = SubResource("Resource_qwp52")
+mana_per_attack = 34.0
+accent = Color(0.78, 0.55, 0.22, 1)
+
+[sub_resource type="Resource" id="Resource_x65dw"]
+script = ExtResource("2_7v5ep")
+id = &"pyre"
+display_name = "Pyre II"
+tier = 2
+max_hp = 149.0
+attack_damage = 11.0
+attack_cooldown = 1.4
+move_time = 0.55
+attack_range = 3
+attack_type = 2
+ability = SubResource("Resource_qwp52")
+mana_per_attack = 34.0
+next_tier = SubResource("Resource_km38t")
+accent = Color(0.78, 0.55, 0.22, 1)
+
+[resource]
+script = ExtResource("2_7v5ep")
+id = &"pyre"
+display_name = "Pyre"
+max_hp = 90.0
+attack_damage = 7.0
+attack_cooldown = 1.4
+move_time = 0.55
+attack_range = 3
+attack_type = 2
+ability = SubResource("Resource_qwp52")
+mana_per_attack = 34.0
+next_tier = SubResource("Resource_x65dw")
+accent = Color(0.78, 0.55, 0.22, 1)

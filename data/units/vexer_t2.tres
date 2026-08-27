@@ -1,0 +1,43 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_twfp1"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_3vpb8"]
+
+[sub_resource type="Resource" id="Resource_qqjtb"]
+script = ExtResource("1_twfp1")
+id = &"blight"
+display_name = "Blight"
+description = "Poisons one enemy. Keeps working while the Vexer shoots someone else."
+kind = 2
+cast_time = 0.4
+dot_damage = 11.0
+dot_ticks = 6
+
+[sub_resource type="Resource" id="Resource_use1e"]
+script = ExtResource("2_3vpb8")
+id = &"vexer"
+display_name = "Vexer III"
+tier = 3
+max_hp = 231.0
+attack_damage = 14.5
+attack_cooldown = 0.42
+attack_range = 2
+attack_type = 1
+ability = SubResource("Resource_qqjtb")
+mana_per_attack = 12.0
+accent = Color(0.45, 0.4, 0.66, 1)
+
+[resource]
+script = ExtResource("2_3vpb8")
+id = &"vexer"
+display_name = "Vexer II"
+tier = 2
+max_hp = 140.0
+attack_damage = 9.5
+attack_cooldown = 0.42
+attack_range = 2
+attack_type = 1
+ability = SubResource("Resource_qqjtb")
+mana_per_attack = 12.0
+next_tier = SubResource("Resource_use1e")
+accent = Color(0.45, 0.4, 0.66, 1)

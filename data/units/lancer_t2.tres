@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_1dxtk"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_05y67"]
+
+[sub_resource type="Resource" id="Resource_q2nqx"]
+script = ExtResource("1_1dxtk")
+id = &"impale"
+display_name = "Impale"
+description = "A driving thrust through up to three enemies."
+kind = 4
+pierce_damage_mult = 2.1
+
+[sub_resource type="Resource" id="Resource_dfmxt"]
+script = ExtResource("2_05y67")
+id = &"lancer"
+display_name = "Lancer III"
+tier = 3
+max_hp = 259.0
+attack_damage = 38.5
+attack_cooldown = 0.9
+move_time = 0.36
+ability = SubResource("Resource_q2nqx")
+pierce_targets = 2
+accent = Color(0.72, 0.35, 0.28, 1)
+
+[resource]
+script = ExtResource("2_05y67")
+id = &"lancer"
+display_name = "Lancer II"
+tier = 2
+max_hp = 157.0
+attack_damage = 25.0
+attack_cooldown = 0.9
+move_time = 0.36
+ability = SubResource("Resource_q2nqx")
+pierce_targets = 2
+next_tier = SubResource("Resource_dfmxt")
+accent = Color(0.72, 0.35, 0.28, 1)

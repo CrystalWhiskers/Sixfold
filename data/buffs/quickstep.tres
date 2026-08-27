@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/stat_modifier.gd" id="1_pavym"]
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="2_k6sn6"]
+
+[sub_resource type="Resource" id="Resource_84g7o"]
+script = ExtResource("1_pavym")
+stat = 3
+mode = 1
+value = -0.3
+
+[resource]
+script = ExtResource("2_k6sn6")
+id = &"quickstep"
+display_name = "Quickstep"
+scope = 0
+modifiers = Array[ExtResource("1_pavym")]([SubResource("Resource_84g7o")])

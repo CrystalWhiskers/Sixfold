@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_ujb8e"]
+
+[resource]
+script = ExtResource("1_ujb8e")
+id = &"impale"
+display_name = "Impale"
+description = "A driving thrust through up to three enemies."
+kind = 4
+pierce_damage_mult = 2.1

@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_dcmfa"]
+
+[resource]
+script = ExtResource("1_dcmfa")
+id = &"cinder_lance"
+display_name = "Cinder Lance"
+description = "A lance of fire: heavy on the target, scorching everything beside it."
+kind = 3
+cast_time = 0.7
+burst_damage = 78.0
+splash_damage = 16.0

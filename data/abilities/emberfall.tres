@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_ayu5p"]
+
+[resource]
+script = ExtResource("1_ayu5p")
+id = &"emberfall"
+display_name = "Emberfall"
+description = "Scorches a 3x3 area. Refuses to fire on fewer than two enemies."
+cast_range = 4
+damage = 26.0
