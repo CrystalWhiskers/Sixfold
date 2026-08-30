@@ -19,6 +19,10 @@ const DEFAULT_TIMEOUT := 45.0
 
 const RESULT_DRAW := -1
 
+## How long a shove reads on screen. Short — displacement should feel like it
+## happened TO the unit, not like a step it decided to take.
+const DISPLACE_TIME := 0.12
+
 var board: BoardModel = null
 var rng := RandomNumberGenerator.new()
 var elapsed := 0.0
@@ -56,8 +60,13 @@ func setup(p_board: BoardModel, p_seed: int) -> void:
 	_astar.cell_size = Vector2.ONE
 	_astar.diagonal_mode = (AStarGrid2D.DIAGONAL_MODE_ALWAYS if BoardModel.DIAGONAL_MOVEMENT
 			else AStarGrid2D.DIAGONAL_MODE_NEVER)
-	_astar.default_compute_heuristic = AStarGrid2D.HEURISTIC_CHEBYSHEV
-	_astar.default_estimate_heuristic = AStarGrid2D.HEURISTIC_CHEBYSHEV
+	# The heuristic has to match the movement rule. Chebyshev on a 4-way grid
+	# underestimates every distance — still correct, but it makes A* explore far
+	# more of the board than it needs to.
+	var heuristic := (AStarGrid2D.HEURISTIC_CHEBYSHEV if BoardModel.DIAGONAL_MOVEMENT
+			else AStarGrid2D.HEURISTIC_MANHATTAN)
+	_astar.default_compute_heuristic = heuristic
+	_astar.default_estimate_heuristic = heuristic
 	_astar.update()
 
 
@@ -344,6 +353,33 @@ func _tick_dots() -> void:
 			if d.ticks_left <= 0:
 				u.dots.remove_at(i)
 			i -= 1
+
+
+## Forced movement from an ability: a knockback, a pull, a leap.
+##
+## Not _begin_move(). Displacement doesn't cost the unit its move_time and
+## doesn't lock it out of attacking, because it isn't the unit's own action.
+## If the unit was mid-step it's dropped back to IDLE — its committed
+## destination is meaningless once something has thrown it somewhere else.
+##
+## Nothing calls this yet. It's the plumbing for displacement abilities, and it's
+## tested, so adding one is a Kind and a case in _resolve_ability().
+func displace(u: UnitInstance, dir: Vector2i, tiles: int) -> int:
+	if not u.is_alive():
+		return 0
+	var from := u.cell
+	var moved := board.push(u, dir, tiles)
+	if moved <= 0:
+		return 0
+	if u.state == UnitInstance.State.MOVING:
+		u.state = UnitInstance.State.IDLE
+		u.state_timer = 0.0
+	u.move_from = from
+	_emit("displace", {
+		uid = u.uid, from = from, to = u.cell,
+		tiles = moved, duration = DISPLACE_TIME,
+	})
+	return moved
 
 
 # ---------------------------------------------------------------- resolution

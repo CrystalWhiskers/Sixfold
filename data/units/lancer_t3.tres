@@ -1,73 +1,11 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_njbos"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_77ogp"]
-
-[sub_resource type="Resource" id="Resource_wj1re"]
-script = ExtResource("1_njbos")
-id = &"impale"
-display_name = "Impale"
-description = "A driving thrust through up to three enemies."
-kind = 4
-pierce_damage_mult = 2.1
-
-[sub_resource type="Resource" id="Resource_34yn3"]
-script = ExtResource("2_77ogp")
-id = &"lancer"
-display_name = "Lancer VII"
-tier = 7
-max_hp = 6080.0
-attack_damage = 1024.0
-attack_cooldown = 0.9
-move_time = 0.36
-ability = SubResource("Resource_wj1re")
-pierce_targets = 2
-accent = Color(0.72, 0.35, 0.28, 1)
-
-[sub_resource type="Resource" id="Resource_hu7ni"]
-script = ExtResource("2_77ogp")
-id = &"lancer"
-display_name = "Lancer VI"
-tier = 6
-max_hp = 3040.0
-attack_damage = 512.0
-attack_cooldown = 0.9
-move_time = 0.36
-ability = SubResource("Resource_wj1re")
-pierce_targets = 2
-next_tier = SubResource("Resource_34yn3")
-accent = Color(0.72, 0.35, 0.28, 1)
-
-[sub_resource type="Resource" id="Resource_tjafb"]
-script = ExtResource("2_77ogp")
-id = &"lancer"
-display_name = "Lancer V"
-tier = 5
-max_hp = 1520.0
-attack_damage = 256.0
-attack_cooldown = 0.9
-move_time = 0.36
-ability = SubResource("Resource_wj1re")
-pierce_targets = 2
-next_tier = SubResource("Resource_hu7ni")
-accent = Color(0.72, 0.35, 0.28, 1)
-
-[sub_resource type="Resource" id="Resource_q2nqx"]
-script = ExtResource("2_77ogp")
-id = &"lancer"
-display_name = "Lancer IV"
-tier = 4
-max_hp = 760.0
-attack_damage = 128.0
-attack_cooldown = 0.9
-move_time = 0.36
-ability = SubResource("Resource_wj1re")
-pierce_targets = 2
-next_tier = SubResource("Resource_tjafb")
-accent = Color(0.72, 0.35, 0.28, 1)
+[ext_resource type="Resource" path="res://data/abilities/impale.tres" id="1_77ogp"]
+[ext_resource type="Resource" path="res://data/units/lancer_t4.tres" id="2_q2nqx"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_vuqef"]
 
 [resource]
-script = ExtResource("2_77ogp")
+script = ExtResource("3_vuqef")
 id = &"lancer"
 display_name = "Lancer III"
 tier = 3
@@ -75,7 +13,7 @@ max_hp = 380.0
 attack_damage = 64.0
 attack_cooldown = 0.9
 move_time = 0.36
-ability = SubResource("Resource_wj1re")
+ability = ExtResource("1_77ogp")
 pierce_targets = 2
-next_tier = SubResource("Resource_q2nqx")
+next_tier = ExtResource("2_q2nqx")
 accent = Color(0.72, 0.35, 0.28, 1)

@@ -38,6 +38,7 @@ func _ready() -> void:
 	# Battles now run to the 45s timeout on large boards, and playback is
 	# real time. Without this the suite would take minutes of wall clock.
 	_main._player.speed = 80.0
+	_check_unbound_board_survives()
 
 
 func _process(_delta: float) -> void:
@@ -49,10 +50,14 @@ func _process(_delta: float) -> void:
 
 	if _frames == 3:
 		_check("scene has a BoardView", _main.get_node_or_null("BoardView") != null)
-		_check("scene has the UI bench", _main.get_node_or_null("UI/Root/Bench") != null)
+		_check("the bench is gone from the scene",
+		_main.get_node_or_null("UI/Root/Bench") == null,
+		"a Bench node is still in main.tscn")
 		_check("loadout resolved", _main.loadout != null)
-		_check("bench was dealt", _main.player_bench.size() == MatchState.UNITS_PER_DRAW,
-			"got %d" % _main.player_bench.size())
+		_check("the first draw landed on the board",
+			_main.board.count_of(BoardModel.TEAM_B) == MatchState.UNITS_PER_DRAW,
+			"got %d units, expected %d" % [
+				_main.board.count_of(BoardModel.TEAM_B), MatchState.UNITS_PER_DRAW])
 		_check("opponent deployed", _main.board.count_of(BoardModel.TEAM_A) > 0)
 		_check("board starts within bounds", _all_units_in_bounds())
 		_check_fog_up()
@@ -92,28 +97,47 @@ func _process(_delta: float) -> void:
 ## Places the whole bench on the first legal tiles, then starts the fight —
 ## exactly the calls the buttons make.
 func _do_prep() -> void:
-	while not _main.player_bench.is_empty():
-		var free: Array[Vector2i] = _main.board.free_deploy_cells(BoardModel.TEAM_B)
-		if free.is_empty():
-			break
-		_main._selected = 0
-		var before: int = _main.player_bench.size()
-		_main._on_cell_pressed(free[0])
-		if _main.player_bench.size() == before:
-			_check("prep placement made progress", false, "bench stuck at %d" % before)
-			break
-	_main._selected = -1
-	_check("player has units before fighting",
-		_main.board.count_of(BoardModel.TEAM_B) > 0)
+	# Units are summoned onto the board now, so prep has nothing to place. What
+	# it does have to verify is that they actually arrived.
 	_check_no_leftover_views()
 	_check_playback_is_event_driven()
 	_check("dealt exactly 5 units this turn",
 		MatchState.UNITS_PER_DRAW == 5,
 		"UNITS_PER_DRAW is %d" % MatchState.UNITS_PER_DRAW)
+	_check("units arrive on the board without being placed",
+		_main.board.count_of(BoardModel.TEAM_B) > 0,
+		"the player's half is empty at the start of prep")
+	# Walk the property list rather than probing the name: reading a property
+	# that doesn't exist raises its own error and drowns out the result.
+	var has_bench := false
+	for prop in _main.get_property_list():
+		if prop.name == "player_bench":
+			has_bench = true
+	_check("nothing is waiting off-board", not has_bench, "a bench still exists")
 	_check_fog_up()
 	_roster_before = _main.board.all_units().size()
 	_main._on_fight_pressed()
 	_check_fog_lifted()
+
+
+## A BoardView that has never been bind()ed must still draw.
+##
+## This is not hypothetical: main.gd returns early when the loadout is missing,
+## and every frame after that used to throw "Nonexistent function in_bounds in
+## base Nil" — which buries the one message explaining what actually went wrong.
+func _check_unbound_board_survives() -> void:
+	var bare := BoardView.new()
+	add_child(bare)
+	bare.flash_cells([Vector2i(2, 2)], Color.RED, 1.0)
+	bare._hover = Vector2i(3, 3)
+	bare.fog = true
+	bare._drag_uid = -1
+	# queue_redraw(), not _draw(): calling _draw() by hand is illegal in Godot and
+	# would raise its own errors, masking the one we care about. Left in the tree
+	# for the whole run, so any nil-board error surfaces in the log.
+	bare.queue_redraw()
+	_check("an unbound BoardView was created and queued for drawing",
+		bare.board == null and bare.is_inside_tree())
 
 
 ## Fog must CONCEAL, not cover. The test is whether enemy UnitViews exist in the

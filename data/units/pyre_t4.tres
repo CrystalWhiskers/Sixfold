@@ -1,67 +1,11 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_jc5y6"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_8i4qj"]
-
-[sub_resource type="Resource" id="Resource_txrw7"]
-script = ExtResource("1_jc5y6")
-id = &"cinder_lance"
-display_name = "Cinder Lance"
-description = "A lance of fire: heavy on the target, scorching everything beside it."
-kind = 3
-cast_time = 0.7
-burst_damage = 78.0
-splash_damage = 16.0
-
-[sub_resource type="Resource" id="Resource_itqcd"]
-script = ExtResource("2_8i4qj")
-id = &"pyre"
-display_name = "Pyre VII"
-tier = 7
-max_hp = 5760.0
-attack_damage = 448.0
-attack_cooldown = 1.4
-move_time = 0.55
-attack_range = 3
-attack_type = 2
-ability = SubResource("Resource_txrw7")
-mana_per_attack = 34.0
-accent = Color(0.78, 0.55, 0.22, 1)
-
-[sub_resource type="Resource" id="Resource_cu0go"]
-script = ExtResource("2_8i4qj")
-id = &"pyre"
-display_name = "Pyre VI"
-tier = 6
-max_hp = 2880.0
-attack_damage = 224.0
-attack_cooldown = 1.4
-move_time = 0.55
-attack_range = 3
-attack_type = 2
-ability = SubResource("Resource_txrw7")
-mana_per_attack = 34.0
-next_tier = SubResource("Resource_itqcd")
-accent = Color(0.78, 0.55, 0.22, 1)
-
-[sub_resource type="Resource" id="Resource_seq2m"]
-script = ExtResource("2_8i4qj")
-id = &"pyre"
-display_name = "Pyre V"
-tier = 5
-max_hp = 1440.0
-attack_damage = 112.0
-attack_cooldown = 1.4
-move_time = 0.55
-attack_range = 3
-attack_type = 2
-ability = SubResource("Resource_txrw7")
-mana_per_attack = 34.0
-next_tier = SubResource("Resource_cu0go")
-accent = Color(0.78, 0.55, 0.22, 1)
+[ext_resource type="Resource" path="res://data/abilities/cinder_lance.tres" id="1_8i4qj"]
+[ext_resource type="Resource" path="res://data/units/pyre_t5.tres" id="2_seq2m"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_x3kw4"]
 
 [resource]
-script = ExtResource("2_8i4qj")
+script = ExtResource("3_x3kw4")
 id = &"pyre"
 display_name = "Pyre IV"
 tier = 4
@@ -71,7 +15,7 @@ attack_cooldown = 1.4
 move_time = 0.55
 attack_range = 3
 attack_type = 2
-ability = SubResource("Resource_txrw7")
+ability = ExtResource("1_8i4qj")
 mana_per_attack = 34.0
-next_tier = SubResource("Resource_seq2m")
+next_tier = ExtResource("2_seq2m")
 accent = Color(0.78, 0.55, 0.22, 1)

@@ -4,9 +4,8 @@
 ## holds no rules of its own — every legality question goes to BoardModel, and
 ## every combat question is already answered by the time playback starts.
 ##
-## Interaction: click a bench card to pick it up, then click a tile to place it.
-## On the board, drag a unit to move it, drop it on a twin to merge, or drop it
-## on a different unit to swap.
+## Interaction: your units arrive on the board already. Drag one to move it, drop
+## it on a twin to merge, or on another of yours to swap.
 extends Node2D
 
 const LOADOUT_PATH := "res://data/loadouts/starter.tres"
@@ -16,14 +15,11 @@ const AI_TEAM := BoardModel.TEAM_A
 @onready var _board_view: BoardView = $BoardView
 @onready var _hud: Label = $UI/Root/Hud
 @onready var _status: Label = $UI/Root/Status
-@onready var _bench_row: HBoxContainer = $UI/Root/Bench
 @onready var _fight_btn: Button = $UI/Root/Buttons/Fight
 @onready var _speed_btn: Button = $UI/Root/Buttons/Speed
 
 var board := BoardModel.new()
 var loadout: LoadoutData
-var player_bench: Array[UnitInstance] = []
-var _selected := -1
 var _player_rng := RandomNumberGenerator.new()
 var _ai_rng := RandomNumberGenerator.new()
 ## The full pre-battle roster: [{unit, cell}, ...]. Everyone on it is restored
@@ -35,17 +31,32 @@ var _speed_idx := 1
 
 
 func _ready() -> void:
-	loadout = load(LOADOUT_PATH) as LoadoutData
-	if loadout == null or not loadout.is_valid():
-		_status.text = "Missing or invalid loadout. Run tools/generate_data.gd first."
+	# Bind the view FIRST. Every early return below leaves the board unbound
+	# otherwise, and BoardView._draw() then throws on every single frame — which
+	# buries the one message that actually explains what went wrong.
+	_board_view.player_team = PLAYER_TEAM
+	_board_view.bind(board)
+
+	# Say WHICH way it failed. "Missing or invalid" covers three very different
+	# problems with three different fixes, and guessing between them wastes time.
+	var raw := load(LOADOUT_PATH)
+	if raw == null:
+		_fail("Can't load %s at all — the file is missing, or its script failed to bind."
+			% LOADOUT_PATH)
+		return
+	if not (raw is LoadoutData):
+		_fail("%s loaded as %s, not a LoadoutData. Your .godot cache is probably stale: close Godot, delete the .godot folder, reopen."
+			% [LOADOUT_PATH, raw.get_class()])
+		return
+	loadout = raw as LoadoutData
+	if not loadout.is_valid():
+		_fail("Loadout at %s is empty or has a null unit in it. Regenerate with tools/generate_data.gd."
+			% LOADOUT_PATH)
 		return
 
 	_player = BattlePlayer.new()
 	add_child(_player)
 	_player.finished.connect(_on_playback_finished)
-
-	_board_view.player_team = PLAYER_TEAM
-	_board_view.bind(board)
 	_board_view.cell_pressed.connect(_on_cell_pressed)
 	_board_view.drag_dropped.connect(_on_drag_dropped)
 
@@ -67,14 +78,10 @@ func _ready() -> void:
 
 func _begin_prep() -> void:
 	MatchState.set_phase(MatchState.Phase.PREP)
-	_selected = -1
 
-	# New units each round, on top of whatever survived. The board filling up is
-	# the pressure that makes merging worth the loss of bodies.
-	var drawn := loadout.draw(_player_rng, MatchState.UNITS_PER_DRAW)
-	player_bench.clear()
-	for d in drawn:
-		player_bench.append(UnitInstance.create(d, PLAYER_TEAM))
+	# New units each round, summoned straight onto the board. The board filling
+	# up is the pressure that makes merging worth the loss of bodies.
+	var summoned := _summon(PLAYER_TEAM, _player_rng)
 
 	_deploy_ai()
 	# Fog goes up for prep and comes down when the fight starts. You commit to an
@@ -87,88 +94,76 @@ func _begin_prep() -> void:
 	_board_view.set_fog(true)
 	_board_view.interactive = true
 	_board_view.sync_positions()
-	_rebuild_bench()
 	_refresh_hud()
-	if board.free_deploy_cells(PLAYER_TEAM).is_empty():
-		_status.text = "Your half is full — merge to make room."
+	_report_summon(summoned)
+
+
+## Drops this round's draw onto free tiles in `team`'s half, at random.
+##
+## Returns how many actually landed. A full half takes fewer than it drew, and
+## the difference is the player's problem to solve by merging — see
+## _report_summon().
+func _summon(team: int, rng: RandomNumberGenerator) -> int:
+	var drawn := loadout.draw(rng, MatchState.UNITS_PER_DRAW)
+	var placed := 0
+	for d in drawn:
+		var free := board.free_deploy_cells(team)
+		if free.is_empty():
+			break
+		var cell: Vector2i = free[rng.randi_range(0, free.size() - 1)]
+		if board.place(UnitInstance.create(d, team), cell):
+			placed += 1
+	return placed
+
+
+## Units that couldn't fit are LOST, not held over. Saying so plainly matters —
+## silently dropping them would read as a bug, and the whole point of the
+## pressure is that you feel it.
+func _report_summon(placed: int) -> void:
+	var wanted := MatchState.UNITS_PER_DRAW
+	if placed == wanted:
+		_status.text = "%d units arrived. Arrange them, then Fight." % placed
+	elif placed > 0:
+		_status.text = "Only %d of %d fit — the rest were lost. Merge to make room." % [
+			placed, wanted]
 	else:
-		_status.text = "Place your 5 units, then Fight. Their half is hidden."
+		_status.text = "Your half is full, so this round's draw was lost entirely. Merge."
 
 
 ## Stand-in opponent so there's something to play against. Replace this with a
 ## real second player or a proper AI once you've decided PvP vs PvE.
 func _deploy_ai() -> void:
-	var drawn := loadout.draw(_ai_rng, MatchState.UNITS_PER_DRAW)
-	for d in drawn:
-		var free := board.free_deploy_cells(AI_TEAM)
-		if free.is_empty():
+	_summon(AI_TEAM, _ai_rng)
+	# Then merge opportunistically, so the AI board escalates the way yours would.
+	for i in MatchState.UNITS_PER_DRAW:
+		if not _ai_merge_once():
 			break
-		var u := UnitInstance.create(d, AI_TEAM)
-		# Try a merge first, so the AI board escalates the way a player's would.
-		var merged := false
-		for other in board.units_of(AI_TEAM):
-			if other.data == d and not d.is_max_tier():
-				board.merge(other, u, other.cell)
-				merged = true
-				break
-		if not merged:
-			board.place(u, free[_ai_rng.randi_range(0, free.size() - 1)])
 
 
-func _rebuild_bench() -> void:
-	for c in _bench_row.get_children():
-		c.queue_free()
-	for i in player_bench.size():
-		var u := player_bench[i]
-		var b := Button.new()
-		b.custom_minimum_size = Vector2(112, 66)
-		b.text = "%s\n%d hp / %d dmg" % [
-			u.data.display_name,
-			roundi(u.stat(StatModifier.Stat.MAX_HP)),
-			roundi(u.stat(StatModifier.Stat.ATTACK_DAMAGE)),
-		]
-		b.add_theme_font_size_override("font_size", 13)
-		b.modulate = u.data.accent.lightened(0.25) if i != _selected else Color.WHITE
-		b.toggle_mode = false
-		b.pressed.connect(_on_bench_pressed.bind(i))
-		_bench_row.add_child(b)
+## Merges the first matching pair it finds. Returns false when none is left.
+func _ai_merge_once() -> bool:
+	var mine := board.units_of(AI_TEAM)
+	for a in mine:
+		for b in mine:
+			if board.can_merge(a, b):
+				board.merge(a, b, b.cell)
+				return true
+	return false
 
 
-func _on_bench_pressed(idx: int) -> void:
+## Nothing is placed by clicking any more — units arrive on the board and are
+## rearranged by dragging. A tap just reads out what's on the tile.
+func _on_cell_pressed(cell: Vector2i) -> void:
 	if MatchState.phase != MatchState.Phase.PREP:
 		return
-	_selected = -1 if _selected == idx else idx
-	_rebuild_bench()
-	if _selected >= 0:
-		_status.text = "Placing %s — click a highlighted tile." % player_bench[_selected].data.display_name
-	else:
-		_status.text = "Place your units, then Fight."
-
-
-func _on_cell_pressed(cell: Vector2i) -> void:
-	if MatchState.phase != MatchState.Phase.PREP or _selected < 0:
+	var u := board.unit_at(cell)
+	if u == null or u.team != PLAYER_TEAM:
 		return
-	var u := player_bench[_selected]
-	var occupant := board.unit_at(cell)
-
-	if occupant != null:
-		if board.can_merge(occupant, u):
-			board.merge(occupant, u, cell)
-			player_bench.remove_at(_selected)
-			_selected = -1
-			_after_board_change("Merged — rolled %s." % board.unit_at(cell).data.display_name)
-		else:
-			_status.text = "That tile is taken."
-		return
-
-	if not board.can_deploy(PLAYER_TEAM, cell):
-		_status.text = "You can only deploy in your own half — not the middle row."
-		return
-
-	board.place(u, cell)
-	player_bench.remove_at(_selected)
-	_selected = -1
-	_after_board_change("Placed.")
+	_status.text = "%s — %d hp, %d damage. Drag onto a twin to merge." % [
+		u.data.display_name,
+		roundi(u.stat(StatModifier.Stat.MAX_HP)),
+		roundi(u.stat(StatModifier.Stat.ATTACK_DAMAGE)),
+	]
 
 
 func _on_drag_dropped(from: Vector2i, to: Vector2i) -> void:
@@ -201,7 +196,6 @@ func _on_drag_dropped(from: Vector2i, to: Vector2i) -> void:
 
 func _after_board_change(message: String) -> void:
 	_board_view.rebuild()
-	_rebuild_bench()
 	_refresh_hud()
 	_status.text = message
 
@@ -235,7 +229,6 @@ func _start_battle() -> void:
 		_status.text = "Place at least one unit first."
 		return
 
-	_selected = -1
 	_board_view.interactive = false
 	MatchState.set_phase(MatchState.Phase.BATTLE)
 	_fight_btn.disabled = true
@@ -351,6 +344,13 @@ func _refresh_hud() -> void:
 	]
 	if MatchState.phase == MatchState.Phase.PREP:
 		_fight_btn.text = "Fight"
+
+
+## One place for setup failures: on screen where you'll see it, and in the
+## Output panel where you can copy it.
+func _fail(message: String) -> void:
+	_status.text = message
+	push_error(message)
 
 
 func _unhandled_key_input(event: InputEvent) -> void:

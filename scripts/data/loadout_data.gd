@@ -2,23 +2,36 @@
 class_name LoadoutData
 extends Resource
 
-const SIZE := 10
+## How many unit types the generator builds a roster from.
+##
+## This is the size of your ROSTER — how many different units exist to draw
+## from. It is NOT how many units you are dealt each turn; that knob is
+## MatchState.UNITS_PER_DRAW, and it is almost certainly the one you want.
+##
+## Changing this alone does nothing useful: the roster comes from UNIT_TABLE in
+## tools/generate_data.gd, so a bigger roster means adding entries there.
+const DEFAULT_SIZE := 5
 
 @export var id: StringName = &""
 @export var display_name: String = "Loadout"
-## Exactly five tier-1 units. Draw weights are parallel to this array.
+## The unit types this loadout draws from. Weights below are parallel to it.
 @export var units: Array[UnitData] = []
 ## Relative draw chance per slot. Leave empty for a uniform draw.
 @export var weights: Array[float] = []
 
 
+## Any non-empty roster with no holes in it is playable.
+##
+## The count is deliberately NOT pinned to a constant. It used to be, and that
+## turned a reasonable one-character edit into a game that refused to start with
+## no explanation of why. Roster size should change the game, not break it.
 func is_valid() -> bool:
-	if units.size() != SIZE:
+	if units.is_empty():
 		return false
 	for u in units:
 		if u == null:
 			return false
-	return weights.is_empty() or weights.size() == SIZE
+	return weights.is_empty() or weights.size() == units.size()
 
 
 func weight_at(i: int) -> float:

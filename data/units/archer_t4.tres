@@ -1,66 +1,11 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_nyiqf"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_0fx6j"]
-
-[sub_resource type="Resource" id="Resource_mnybr"]
-script = ExtResource("1_nyiqf")
-id = &"quickdraw"
-display_name = "Quickdraw"
-description = "Permanently quickens the draw. Stacks all battle."
-cast_time = 0.35
-haste_percent = 0.16
-haste_max_stacks = 6
-
-[sub_resource type="Resource" id="Resource_ybn42"]
-script = ExtResource("2_0fx6j")
-id = &"archer"
-display_name = "Archer VII"
-tier = 7
-max_hp = 3520.0
-attack_damage = 1216.0
-attack_cooldown = 0.95
-move_time = 0.5
-attack_range = 4
-sight_range = 5
-attack_type = 1
-ability = SubResource("Resource_mnybr")
-accent = Color(0.55, 0.62, 0.32, 1)
-
-[sub_resource type="Resource" id="Resource_q58ww"]
-script = ExtResource("2_0fx6j")
-id = &"archer"
-display_name = "Archer VI"
-tier = 6
-max_hp = 1760.0
-attack_damage = 608.0
-attack_cooldown = 0.95
-move_time = 0.5
-attack_range = 4
-sight_range = 5
-attack_type = 1
-ability = SubResource("Resource_mnybr")
-next_tier = SubResource("Resource_ybn42")
-accent = Color(0.55, 0.62, 0.32, 1)
-
-[sub_resource type="Resource" id="Resource_o147u"]
-script = ExtResource("2_0fx6j")
-id = &"archer"
-display_name = "Archer V"
-tier = 5
-max_hp = 880.0
-attack_damage = 304.0
-attack_cooldown = 0.95
-move_time = 0.5
-attack_range = 4
-sight_range = 5
-attack_type = 1
-ability = SubResource("Resource_mnybr")
-next_tier = SubResource("Resource_q58ww")
-accent = Color(0.55, 0.62, 0.32, 1)
+[ext_resource type="Resource" path="res://data/abilities/quickdraw.tres" id="1_0fx6j"]
+[ext_resource type="Resource" path="res://data/units/archer_t5.tres" id="2_o147u"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_rlxhf"]
 
 [resource]
-script = ExtResource("2_0fx6j")
+script = ExtResource("3_rlxhf")
 id = &"archer"
 display_name = "Archer IV"
 tier = 4
@@ -71,6 +16,6 @@ move_time = 0.5
 attack_range = 4
 sight_range = 5
 attack_type = 1
-ability = SubResource("Resource_mnybr")
-next_tier = SubResource("Resource_o147u")
+ability = ExtResource("1_0fx6j")
+next_tier = ExtResource("2_o147u")
 accent = Color(0.55, 0.62, 0.32, 1)

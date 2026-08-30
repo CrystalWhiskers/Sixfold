@@ -1,109 +1,11 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_ktep8"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_ydlhc"]
-
-[sub_resource type="Resource" id="Resource_wq736"]
-script = ExtResource("1_ktep8")
-id = &"blight"
-display_name = "Blight"
-description = "Poisons one enemy. Keeps working while the Vexer shoots someone else."
-kind = 2
-cast_time = 0.4
-dot_damage = 11.0
-dot_ticks = 6
-
-[sub_resource type="Resource" id="Resource_44rbg"]
-script = ExtResource("2_ydlhc")
-id = &"vexer"
-display_name = "Vexer VII"
-tier = 7
-max_hp = 5440.0
-attack_damage = 384.0
-attack_cooldown = 0.42
-attack_range = 2
-attack_type = 1
-ability = SubResource("Resource_wq736")
-mana_per_attack = 12.0
-accent = Color(0.45, 0.4, 0.66, 1)
-
-[sub_resource type="Resource" id="Resource_olpo3"]
-script = ExtResource("2_ydlhc")
-id = &"vexer"
-display_name = "Vexer VI"
-tier = 6
-max_hp = 2720.0
-attack_damage = 192.0
-attack_cooldown = 0.42
-attack_range = 2
-attack_type = 1
-ability = SubResource("Resource_wq736")
-mana_per_attack = 12.0
-next_tier = SubResource("Resource_44rbg")
-accent = Color(0.45, 0.4, 0.66, 1)
-
-[sub_resource type="Resource" id="Resource_olxwi"]
-script = ExtResource("2_ydlhc")
-id = &"vexer"
-display_name = "Vexer V"
-tier = 5
-max_hp = 1360.0
-attack_damage = 96.0
-attack_cooldown = 0.42
-attack_range = 2
-attack_type = 1
-ability = SubResource("Resource_wq736")
-mana_per_attack = 12.0
-next_tier = SubResource("Resource_olpo3")
-accent = Color(0.45, 0.4, 0.66, 1)
-
-[sub_resource type="Resource" id="Resource_qqjtb"]
-script = ExtResource("2_ydlhc")
-id = &"vexer"
-display_name = "Vexer IV"
-tier = 4
-max_hp = 680.0
-attack_damage = 48.0
-attack_cooldown = 0.42
-attack_range = 2
-attack_type = 1
-ability = SubResource("Resource_wq736")
-mana_per_attack = 12.0
-next_tier = SubResource("Resource_olxwi")
-accent = Color(0.45, 0.4, 0.66, 1)
-
-[sub_resource type="Resource" id="Resource_use1e"]
-script = ExtResource("2_ydlhc")
-id = &"vexer"
-display_name = "Vexer III"
-tier = 3
-max_hp = 340.0
-attack_damage = 24.0
-attack_cooldown = 0.42
-attack_range = 2
-attack_type = 1
-ability = SubResource("Resource_wq736")
-mana_per_attack = 12.0
-next_tier = SubResource("Resource_qqjtb")
-accent = Color(0.45, 0.4, 0.66, 1)
-
-[sub_resource type="Resource" id="Resource_lld7w"]
-script = ExtResource("2_ydlhc")
-id = &"vexer"
-display_name = "Vexer II"
-tier = 2
-max_hp = 170.0
-attack_damage = 12.0
-attack_cooldown = 0.42
-attack_range = 2
-attack_type = 1
-ability = SubResource("Resource_wq736")
-mana_per_attack = 12.0
-next_tier = SubResource("Resource_use1e")
-accent = Color(0.45, 0.4, 0.66, 1)
+[ext_resource type="Resource" path="res://data/abilities/blight.tres" id="1_ydlhc"]
+[ext_resource type="Resource" path="res://data/units/vexer_t2.tres" id="2_lld7w"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_8xjjg"]
 
 [resource]
-script = ExtResource("2_ydlhc")
+script = ExtResource("3_8xjjg")
 id = &"vexer"
 display_name = "Vexer"
 max_hp = 85.0
@@ -111,7 +13,7 @@ attack_damage = 6.0
 attack_cooldown = 0.42
 attack_range = 2
 attack_type = 1
-ability = SubResource("Resource_wq736")
+ability = ExtResource("1_ydlhc")
 mana_per_attack = 12.0
-next_tier = SubResource("Resource_lld7w")
+next_tier = ExtResource("2_lld7w")
 accent = Color(0.45, 0.4, 0.66, 1)

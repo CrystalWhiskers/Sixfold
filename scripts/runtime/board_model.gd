@@ -15,9 +15,18 @@ const NEUTRAL_ROW := HEIGHT / 2  ## Integer division -> 5.
 const TEAM_A := 0  ## Deploys rows 0..4 (top).
 const TEAM_B := 1  ## Deploys rows 6..10 (bottom).
 
-## Diagonals count as distance 1. Flip this and DIAGONAL_MOVEMENT together if you
-## want strict lanes instead — on a 6-wide board it changes the feel a lot.
-const DIAGONAL_MOVEMENT := true
+## Units step to one ORTHOGONALLY adjacent tile at a time. No diagonals.
+const DIAGONAL_MOVEMENT := false
+
+## Whether distance — and therefore every attack range — counts diagonals as 1.
+##
+## Kept separate from movement on purpose, because they answer different
+## questions. With both false the grid is strict: a melee unit cannot hit the
+## enemy standing diagonally beside it, because that tile is two steps away.
+## Setting this true while movement stays false gives units diagonal reach they
+## can't step into — common in roguelikes, and a real design choice rather than
+## an oversight. Changing it rescales every range in the game at once.
+const DIAGONAL_RANGE := false
 
 ## Whether a merged unit keeps the modifiers its two inputs were carrying.
 ## Balance decision, deliberately surfaced as a constant:
@@ -113,11 +122,11 @@ func count_of(team: int) -> int:
 	return units_of(team).size()
 
 
-## Chebyshev when diagonals are allowed, Manhattan otherwise.
-## Attack ranges are expressed in this same metric.
+## Chebyshev when diagonal range is allowed, Manhattan otherwise.
+## Every attack range in the game is expressed in this metric.
 static func tile_distance(a: Vector2i, b: Vector2i) -> int:
 	var d := (a - b).abs()
-	if DIAGONAL_MOVEMENT:
+	if DIAGONAL_RANGE:
 		return maxi(d.x, d.y)
 	return d.x + d.y
 
@@ -218,6 +227,37 @@ func swap_cells(a: Vector2i, b: Vector2i) -> bool:
 	ua.move_from = b
 	ub.move_from = a
 	return true
+
+
+## Forced movement: a shove, a pull, a leap. Returns how many tiles the unit
+## actually travelled.
+##
+## Deliberately separate from move_unit(): displacement is something done TO a
+## unit rather than a step it chose, so it ignores deploy zones and doesn't cost
+## the unit its move_time. It stops at the board edge or the first occupied tile,
+## so shoving someone into a wall of bodies moves them nothing.
+##
+## Nothing calls this yet — it's the primitive for displacement abilities.
+func push(u: UnitInstance, dir: Vector2i, tiles: int) -> int:
+	var step := Vector2i(signi(dir.x), signi(dir.y))
+	if step == Vector2i.ZERO or tiles <= 0:
+		return 0
+	var moved := 0
+	for i in tiles:
+		var next := u.cell + step
+		if not in_bounds(next) or not is_empty(next):
+			break
+		move_unit(u, next)
+		moved += 1
+	return moved
+
+
+## Drops a unit on an arbitrary tile, for a blink or a swap. Fails if the tile
+## is occupied or off the board — callers decide what to do about that.
+func teleport(u: UnitInstance, to: Vector2i) -> bool:
+	if not in_bounds(to) or not is_empty(to):
+		return false
+	return move_unit(u, to)
 
 
 # ---------------------------------------------------------------- merging

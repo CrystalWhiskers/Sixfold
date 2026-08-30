@@ -1,32 +1,7 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_3a5kw"]
+[ext_resource type="Resource" path="res://data/abilities/bulwark_shield.tres" id="1_3a5kw"]
 [ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_mf048"]
-
-[sub_resource type="Resource" id="Resource_7txwc"]
-script = ExtResource("1_3a5kw")
-id = &"bulwark_shield"
-display_name = "Bulwark"
-description = "Raises a shield that soaks damage before health and cannot be healed."
-kind = 1
-cast_time = 0.3
-shield_amount = 70.0
-shield_cap = 70.0
-
-[sub_resource type="Resource" id="Resource_462tp"]
-script = ExtResource("2_mf048")
-id = &"warden"
-display_name = "Warden VII"
-tier = 7
-max_hp = 11520.0
-attack_damage = 512.0
-attack_cooldown = 1.3
-move_time = 0.6
-sight_range = 3
-ability = SubResource("Resource_7txwc")
-mana_per_attack = 20.0
-casts_at_battle_start = true
-accent = Color(0.38, 0.47, 0.6, 1)
 
 [resource]
 script = ExtResource("2_mf048")
@@ -38,8 +13,7 @@ attack_damage = 256.0
 attack_cooldown = 1.3
 move_time = 0.6
 sight_range = 3
-ability = SubResource("Resource_7txwc")
+ability = ExtResource("1_3a5kw")
 mana_per_attack = 20.0
 casts_at_battle_start = true
-next_tier = SubResource("Resource_462tp")
 accent = Color(0.38, 0.47, 0.6, 1)

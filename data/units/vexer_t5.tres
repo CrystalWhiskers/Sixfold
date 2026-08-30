@@ -1,49 +1,11 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_1yhhw"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_kosli"]
-
-[sub_resource type="Resource" id="Resource_wq736"]
-script = ExtResource("1_1yhhw")
-id = &"blight"
-display_name = "Blight"
-description = "Poisons one enemy. Keeps working while the Vexer shoots someone else."
-kind = 2
-cast_time = 0.4
-dot_damage = 11.0
-dot_ticks = 6
-
-[sub_resource type="Resource" id="Resource_44rbg"]
-script = ExtResource("2_kosli")
-id = &"vexer"
-display_name = "Vexer VII"
-tier = 7
-max_hp = 5440.0
-attack_damage = 384.0
-attack_cooldown = 0.42
-attack_range = 2
-attack_type = 1
-ability = SubResource("Resource_wq736")
-mana_per_attack = 12.0
-accent = Color(0.45, 0.4, 0.66, 1)
-
-[sub_resource type="Resource" id="Resource_olpo3"]
-script = ExtResource("2_kosli")
-id = &"vexer"
-display_name = "Vexer VI"
-tier = 6
-max_hp = 2720.0
-attack_damage = 192.0
-attack_cooldown = 0.42
-attack_range = 2
-attack_type = 1
-ability = SubResource("Resource_wq736")
-mana_per_attack = 12.0
-next_tier = SubResource("Resource_44rbg")
-accent = Color(0.45, 0.4, 0.66, 1)
+[ext_resource type="Resource" path="res://data/abilities/blight.tres" id="1_kosli"]
+[ext_resource type="Resource" path="res://data/units/vexer_t6.tres" id="2_olpo3"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_bvkt2"]
 
 [resource]
-script = ExtResource("2_kosli")
+script = ExtResource("3_bvkt2")
 id = &"vexer"
 display_name = "Vexer V"
 tier = 5
@@ -52,7 +14,7 @@ attack_damage = 96.0
 attack_cooldown = 0.42
 attack_range = 2
 attack_type = 1
-ability = SubResource("Resource_wq736")
+ability = ExtResource("1_kosli")
 mana_per_attack = 12.0
-next_tier = SubResource("Resource_olpo3")
+next_tier = ExtResource("2_olpo3")
 accent = Color(0.45, 0.4, 0.66, 1)

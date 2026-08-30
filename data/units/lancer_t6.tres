@@ -1,28 +1,7 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_l2kxp"]
+[ext_resource type="Resource" path="res://data/abilities/impale.tres" id="1_l2kxp"]
 [ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_5gg1a"]
-
-[sub_resource type="Resource" id="Resource_wj1re"]
-script = ExtResource("1_l2kxp")
-id = &"impale"
-display_name = "Impale"
-description = "A driving thrust through up to three enemies."
-kind = 4
-pierce_damage_mult = 2.1
-
-[sub_resource type="Resource" id="Resource_34yn3"]
-script = ExtResource("2_5gg1a")
-id = &"lancer"
-display_name = "Lancer VII"
-tier = 7
-max_hp = 6080.0
-attack_damage = 1024.0
-attack_cooldown = 0.9
-move_time = 0.36
-ability = SubResource("Resource_wj1re")
-pierce_targets = 2
-accent = Color(0.72, 0.35, 0.28, 1)
 
 [resource]
 script = ExtResource("2_5gg1a")
@@ -33,7 +12,6 @@ max_hp = 3040.0
 attack_damage = 512.0
 attack_cooldown = 0.9
 move_time = 0.36
-ability = SubResource("Resource_wj1re")
+ability = ExtResource("1_l2kxp")
 pierce_targets = 2
-next_tier = SubResource("Resource_34yn3")
 accent = Color(0.72, 0.35, 0.28, 1)

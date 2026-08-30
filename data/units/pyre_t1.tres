@@ -1,115 +1,11 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_a7p5x"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_7v5ep"]
-
-[sub_resource type="Resource" id="Resource_txrw7"]
-script = ExtResource("1_a7p5x")
-id = &"cinder_lance"
-display_name = "Cinder Lance"
-description = "A lance of fire: heavy on the target, scorching everything beside it."
-kind = 3
-cast_time = 0.7
-burst_damage = 78.0
-splash_damage = 16.0
-
-[sub_resource type="Resource" id="Resource_itqcd"]
-script = ExtResource("2_7v5ep")
-id = &"pyre"
-display_name = "Pyre VII"
-tier = 7
-max_hp = 5760.0
-attack_damage = 448.0
-attack_cooldown = 1.4
-move_time = 0.55
-attack_range = 3
-attack_type = 2
-ability = SubResource("Resource_txrw7")
-mana_per_attack = 34.0
-accent = Color(0.78, 0.55, 0.22, 1)
-
-[sub_resource type="Resource" id="Resource_cu0go"]
-script = ExtResource("2_7v5ep")
-id = &"pyre"
-display_name = "Pyre VI"
-tier = 6
-max_hp = 2880.0
-attack_damage = 224.0
-attack_cooldown = 1.4
-move_time = 0.55
-attack_range = 3
-attack_type = 2
-ability = SubResource("Resource_txrw7")
-mana_per_attack = 34.0
-next_tier = SubResource("Resource_itqcd")
-accent = Color(0.78, 0.55, 0.22, 1)
-
-[sub_resource type="Resource" id="Resource_seq2m"]
-script = ExtResource("2_7v5ep")
-id = &"pyre"
-display_name = "Pyre V"
-tier = 5
-max_hp = 1440.0
-attack_damage = 112.0
-attack_cooldown = 1.4
-move_time = 0.55
-attack_range = 3
-attack_type = 2
-ability = SubResource("Resource_txrw7")
-mana_per_attack = 34.0
-next_tier = SubResource("Resource_cu0go")
-accent = Color(0.78, 0.55, 0.22, 1)
-
-[sub_resource type="Resource" id="Resource_qwp52"]
-script = ExtResource("2_7v5ep")
-id = &"pyre"
-display_name = "Pyre IV"
-tier = 4
-max_hp = 720.0
-attack_damage = 56.0
-attack_cooldown = 1.4
-move_time = 0.55
-attack_range = 3
-attack_type = 2
-ability = SubResource("Resource_txrw7")
-mana_per_attack = 34.0
-next_tier = SubResource("Resource_seq2m")
-accent = Color(0.78, 0.55, 0.22, 1)
-
-[sub_resource type="Resource" id="Resource_km38t"]
-script = ExtResource("2_7v5ep")
-id = &"pyre"
-display_name = "Pyre III"
-tier = 3
-max_hp = 360.0
-attack_damage = 28.0
-attack_cooldown = 1.4
-move_time = 0.55
-attack_range = 3
-attack_type = 2
-ability = SubResource("Resource_txrw7")
-mana_per_attack = 34.0
-next_tier = SubResource("Resource_qwp52")
-accent = Color(0.78, 0.55, 0.22, 1)
-
-[sub_resource type="Resource" id="Resource_x65dw"]
-script = ExtResource("2_7v5ep")
-id = &"pyre"
-display_name = "Pyre II"
-tier = 2
-max_hp = 180.0
-attack_damage = 14.0
-attack_cooldown = 1.4
-move_time = 0.55
-attack_range = 3
-attack_type = 2
-ability = SubResource("Resource_txrw7")
-mana_per_attack = 34.0
-next_tier = SubResource("Resource_km38t")
-accent = Color(0.78, 0.55, 0.22, 1)
+[ext_resource type="Resource" path="res://data/abilities/cinder_lance.tres" id="1_7v5ep"]
+[ext_resource type="Resource" path="res://data/units/pyre_t2.tres" id="2_x65dw"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_gl33p"]
 
 [resource]
-script = ExtResource("2_7v5ep")
+script = ExtResource("3_gl33p")
 id = &"pyre"
 display_name = "Pyre"
 max_hp = 90.0
@@ -118,7 +14,7 @@ attack_cooldown = 1.4
 move_time = 0.55
 attack_range = 3
 attack_type = 2
-ability = SubResource("Resource_txrw7")
+ability = ExtResource("1_7v5ep")
 mana_per_attack = 34.0
-next_tier = SubResource("Resource_x65dw")
+next_tier = ExtResource("2_x65dw")
 accent = Color(0.78, 0.55, 0.22, 1)

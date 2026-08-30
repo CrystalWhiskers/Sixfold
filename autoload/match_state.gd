@@ -7,7 +7,12 @@ extends Node
 enum Phase { BUFF_PICK, PREP, BATTLE, ROUND_END, MATCH_END }
 
 const WINS_NEEDED := 4      ## Each player effectively has 4 lives.
-const UNITS_PER_DRAW := 5   ## New units offered each prep phase.
+## How many units you are dealt at the start of each prep phase.
+##
+## This is the knob for pace: it sets how fast your board fills and therefore how
+## quickly you can reach the higher merge tiers. Raising it does NOT change how
+## many unit TYPES exist — that's the roster in tools/generate_data.gd.
+const UNITS_PER_DRAW := 5
 
 var round_index := 1
 var wins: Array[int] = [0, 0]

@@ -23,6 +23,7 @@ func _initialize() -> void:
 	_test_deploy_zones()
 	_test_mirror()
 	_test_placement_and_movement()
+	_test_data_is_linked_not_embedded()
 	_test_merging()
 	_test_merge_lottery()
 	_test_stat_modifiers()
@@ -30,6 +31,7 @@ func _initialize() -> void:
 	_test_combat_runs()
 	_test_combat_determinism()
 	_test_move_lockout()
+	_test_movement_rules()
 	_test_abilities()
 	_test_mirror_matchup_is_fair()
 
@@ -147,6 +149,50 @@ func _test_placement_and_movement() -> void:
 	_check("remove frees the tile", b.is_empty(Vector2i(1, 1)))
 
 
+## The loadout must REFERENCE the unit files, not carry private copies of them.
+##
+## When it embedded them, every stat edited in the inspector was silently
+## ignored — the game read the loadout's own inline copy instead. Nothing about
+## that failure is visible at runtime, which is exactly why it needs a test.
+func _test_data_is_linked_not_embedded() -> void:
+	_section("Data files link, not embed")
+
+	var first: UnitData = _loadout.units[0]
+	# Roster size is not pinned — a bigger or smaller loadout must still be valid.
+	var flexible := LoadoutData.new()
+	flexible.units = [_loadout.units[0], _loadout.units[1]] as Array[UnitData]
+	_check("a roster of any size is valid", flexible.is_valid(),
+		"pinning the count turns a one-character edit into an unexplained crash")
+	var holed := LoadoutData.new()
+	holed.units = [_loadout.units[0], null] as Array[UnitData]
+	_check("a roster with a hole in it is not", not holed.is_valid())
+	_check("an empty roster is not", LoadoutData.new().is_valid() == false)
+
+	_check("a loadout unit knows its own file",
+		not first.resource_path.is_empty(),
+		"resource_path is empty, so it was embedded")
+
+	# Same object, not a copy: editing the file changes what the game reads.
+	var from_disk := load(first.resource_path) as UnitData
+	_check("the loadout points at the file on disk, not a copy",
+		from_disk == first,
+		"%s loaded a different object" % first.resource_path)
+
+	# And the same for the merge chain inside a unit file.
+	_check("next_tier links to its own file",
+		first.next_tier != null and not first.next_tier.resource_path.is_empty(),
+		"tier 2 is embedded inside tier 1")
+	_check("the ability links to its own file",
+		first.ability != null and not first.ability.resource_path.is_empty(),
+		"the ability is embedded")
+
+	# Belt and braces: check the text on disk.
+	var text := FileAccess.get_file_as_string("res://data/loadouts/starter.tres")
+	_check("starter.tres embeds nothing", not text.contains("[sub_resource"),
+		"it still carries inline copies")
+	_check("starter.tres references the unit files", text.contains("data/units/"))
+
+
 func _test_merging() -> void:
 	_section("Merging")
 	var b := BoardModel.new()
@@ -170,7 +216,7 @@ func _test_merging() -> void:
 
 	# Walk the whole chain and confirm where it stops.
 	var chain := _loadout.units[0].chain_length()
-	_check("the merge chain is 7 tiers deep", chain == 7, "it is %d" % chain)
+	_check("the merge chain is 6 tiers deep", chain == 6, "it is %d" % chain)
 
 	var top := _loadout.units[0]
 	var tier := 1
@@ -190,9 +236,15 @@ func _test_merging() -> void:
 		_check("tier %d keeps its reach" % tier, top.attack_range == prev.attack_range)
 
 	_check("tier %d is the top" % tier, top.is_max_tier())
-	_check("a tier 7 is 64x a tier 1",
-		is_equal_approx(top.max_hp, _loadout.units[0].max_hp * 64.0),
-		"%.0f vs %.0f" % [top.max_hp, _loadout.units[0].max_hp * 64.0])
+	_check("a tier 6 is 32x a tier 1",
+		is_equal_approx(top.max_hp, _loadout.units[0].max_hp * 32.0),
+		"%.0f vs %.0f" % [top.max_hp, _loadout.units[0].max_hp * 32.0])
+
+	# The top tier must be arithmetically reachable, or it's dead content.
+	var cost := int(pow(2, chain - 1))
+	var dealt := MatchState.UNITS_PER_DRAW * (MatchState.WINS_NEEDED * 2 - 1)
+	_check("the top tier is reachable within a match", cost <= dealt,
+		"tier %d costs %d units, a match deals at most %d" % [chain, cost, dealt])
 
 	var b2 := BoardModel.new()
 	var maxed := _unit(0, BoardModel.TEAM_A)
@@ -412,6 +464,84 @@ func _run_crossing(move_pct: float) -> int:
 	var sim := CombatSim.new()
 	sim.setup(b, 5)
 	return sim.run()
+
+
+## Movement is orthogonal only, and distance is measured the same way.
+func _test_movement_rules() -> void:
+	_section("Movement and displacement")
+	_check("diagonal movement is off", not BoardModel.DIAGONAL_MOVEMENT)
+	_check("diagonal range is off", not BoardModel.DIAGONAL_RANGE)
+
+	# Manhattan: a diagonal neighbour is two steps away, not one.
+	_check("orthogonal neighbour is distance 1",
+		BoardModel.tile_distance(Vector2i(2, 2), Vector2i(2, 3)) == 1)
+	_check("diagonal neighbour is distance 2",
+		BoardModel.tile_distance(Vector2i(2, 2), Vector2i(3, 3)) == 2,
+		"melee range 1 therefore cannot reach diagonally")
+	_check("distance is Manhattan",
+		BoardModel.tile_distance(Vector2i(0, 0), Vector2i(3, 4)) == 7)
+
+	# A unit walks the board without ever cutting a corner.
+	var b := BoardModel.new()
+	var walker := _unit(1, BoardModel.TEAM_B)
+	var foe := _unit(0, BoardModel.TEAM_A)
+	b.place(walker, Vector2i(5, 10))
+	b.place(foe, Vector2i(0, 0))
+	var sim := CombatSim.new()
+	sim.setup(b, 4)
+	sim.run(40.0)
+	var diagonal_steps := 0
+	for e in sim.events:
+		if e.kind != "move":
+			continue
+		var d: Vector2i = e.to - e.from
+		if d.x != 0 and d.y != 0:
+			diagonal_steps += 1
+	_check("no unit ever steps diagonally", diagonal_steps == 0,
+		"%d diagonal steps in the log" % diagonal_steps)
+
+	_test_displacement()
+
+
+## The primitive for future knockback / pull / leap abilities.
+func _test_displacement() -> void:
+	var b := BoardModel.new()
+	var u := _unit(0, BoardModel.TEAM_B)
+	b.place(u, Vector2i(3, 8))
+
+	_check("a push moves the requested distance",
+		b.push(u, Vector2i(0, 1), 2) == 2 and u.cell == Vector2i(3, 10),
+		"ended at %s" % u.cell)
+	_check("a push stops at the board edge",
+		b.push(u, Vector2i(0, 1), 3) == 0 and u.cell == Vector2i(3, 10))
+
+	# A body in the way stops the shove dead.
+	var blocker := _unit(0, BoardModel.TEAM_B)
+	b.place(blocker, Vector2i(3, 9))
+	_check("a push stops at an occupied tile",
+		b.push(u, Vector2i(0, -1), 3) == 0 and u.cell == Vector2i(3, 10),
+		"ended at %s" % u.cell)
+
+	_check("a push ignores deploy zones",
+		b.push(u, Vector2i(-1, 0), 3) == 3 and u.cell == Vector2i(0, 10))
+	_check("teleport refuses an occupied tile", not b.teleport(u, Vector2i(3, 9)))
+	_check("teleport crosses the board freely", b.teleport(u, Vector2i(1, 2)))
+
+	# And through the sim, it emits an event the view can animate.
+	var b2 := BoardModel.new()
+	var a := _unit(0, BoardModel.TEAM_A)
+	var d := _unit(0, BoardModel.TEAM_B)
+	b2.place(a, Vector2i(2, 2))
+	b2.place(d, Vector2i(2, 8))
+	var sim2 := CombatSim.new()
+	sim2.setup(b2, 1)
+	sim2.step()
+	var moved := sim2.displace(d, Vector2i(0, 1), 2)
+	var found := false
+	for e in sim2.events:
+		if e.kind == "displace" and e.uid == d.uid:
+			found = true
+	_check("displacement emits an event for playback", moved == 2 and found)
 
 
 ## Every unit has a mana ability. These fights are deliberately tiny and lopsided

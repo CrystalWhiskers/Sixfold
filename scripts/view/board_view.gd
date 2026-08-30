@@ -58,6 +58,15 @@ const COL_FOG := Color(0.09, 0.10, 0.13)
 const COL_FOG_HATCH := Color(0.20, 0.23, 0.29, 0.55)
 
 
+## Bounds check that doesn't need a bound board.
+##
+## _draw() can run before main.gd has called bind() — and if the loadout fails
+## to load, main returns early and bind() never happens at all, so the view has
+## to survive a null board rather than assume it was set up.
+static func _on_board(c: Vector2i) -> bool:
+	return c.x >= 0 and c.x < BoardModel.WIDTH and c.y >= 0 and c.y < BoardModel.HEIGHT
+
+
 func board_size() -> Vector2:
 	return Vector2(BoardModel.WIDTH, BoardModel.HEIGHT) * tile_size
 
@@ -352,7 +361,7 @@ func _draw() -> void:
 			draw_rect(r, _tile_color(cell), true)
 
 	# Legal destinations, shown only while actually dragging.
-	if _drag_uid >= 0:
+	if _drag_uid >= 0 and board != null:
 		for c in board.deploy_cells(player_team):
 			draw_rect(Rect2(Vector2(c) * tile_size, Vector2(tile_size, tile_size)),
 				COL_LEGAL, true)
@@ -362,11 +371,11 @@ func _draw() -> void:
 		var col: Color = f.color
 		col.a *= fade
 		for c in f.cells:
-			if board.in_bounds(c):
-				draw_rect(Rect2(Vector2(c) * tile_size, Vector2(tile_size, tile_size)), 
+			if _on_board(c):
+				draw_rect(Rect2(Vector2(c) * tile_size, Vector2(tile_size, tile_size)),
 					col, true)
 
-	if board.in_bounds(_hover) and _drag_uid < 0:
+	if _on_board(_hover) and _drag_uid < 0:
 		draw_rect(Rect2(Vector2(_hover) * tile_size, Vector2(tile_size, tile_size)),
 			COL_HOVER, true)
 
@@ -383,7 +392,7 @@ func _draw() -> void:
 	_draw_dashed(Vector2(0, ny), Vector2(size.x, ny))
 	_draw_dashed(Vector2(0, ny + tile_size), Vector2(size.x, ny + tile_size))
 
-	if fog:
+	if fog and board != null:
 		_draw_fog()
 
 	_draw_shots()

@@ -5,6 +5,11 @@ A merge autobattler on a 6×11 board with a neutral centre row. Built for **Godo
 Open `project.godot` in Godot and press F5. You get a playable prep→battle→round loop
 against a stand-in opponent, with placeholder coloured blocks instead of art.
 
+Each prep phase your units are **summoned straight onto the board** — there's no
+tray to place them from. You rearrange by dragging: onto an empty tile to move,
+onto a twin to merge, onto another of your units to swap. Click one to read its
+stats.
+
 ---
 
 ## Where your three jobs plug in
@@ -30,15 +35,19 @@ Two options, and they don't mix well — pick one.
 stat blocks, `data/buffs/*.tres` the buff pool. This is the normal workflow once
 you're happy in the editor.
 
-**Or edit the tables** at the top of `tools/generate_data.gd` and regenerate:
+**Or edit the tables** at the top of `tools/data_builder.gd` and regenerate.
+Easiest way: open **`tools/regenerate_data.gd`** in the Script editor and press
+**File > Run** (Ctrl+Shift+X). No terminal, no PATH. There's a command-line
+entry point too, if you'd rather:
 
 ```
 godot --headless --script res://tools/generate_data.gd
 ```
 
-This is faster for sweeping changes, but **it overwrites everything in `data/`** —
-any hand-tweak in the inspector is lost. Once you start tuning by hand, stop
-running it.
+Both run the same code. This is faster for sweeping changes, but **it overwrites
+everything in `data/` and deletes any file the tables no longer produce** — any
+hand-tweak in the inspector is lost. Once you start tuning by hand, stop running
+it.
 
 Board-level knobs live in `scripts/runtime/board_model.gd`:
 
@@ -71,7 +80,7 @@ second during headless balance runs.
 ## Running things
 
 ```
-godot --headless --script res://tools/run_tests.gd     # 62 model + sim tests
+godot --headless --script res://tools/run_tests.gd     # 134 model + sim tests
 godot --headless res://tools/smoke_test.tscn           # boots the real scene, plays 6 rounds
 godot --headless --script res://tools/generate_data.gd # regenerate data/ from the tables
 ```
@@ -119,7 +128,7 @@ it edits the file on disk. All mutable state lives on `UnitInstance`.
 
 Milestones 1–13 of the build plan are done:
 
-- Data-driven units with a 7-tier merge chain, doubling per tier
+- Data-driven units with a 6-tier merge chain, doubling per tier
 - Board model with deploy zones, the neutral row, merging, mirror symmetry
 - Tile-based combat: melee, ranged, spells with AoE shapes, A* pathing
 - The movement lockout — a committed unit can't attack, and dies for it
@@ -129,6 +138,8 @@ Milestones 1–13 of the build plan are done:
 - Prep-phase fog of war, lifting at the moment the battle starts
 - The merge lottery, floating damage numbers, projectiles, and readable health
 - Mana, and one ability per unit: shield, haste, damage-over-time, burst, pierce
+- Orthogonal movement, plus tested displacement primitives for future abilities
+- A data generator that runs from the editor and prunes its own orphans
 
 Not built yet:
 
@@ -226,16 +237,59 @@ To add a sixth ability: add a `Kind`, add its fields to `AbilityData`, and handl
 it in `CombatSim._resolve_ability` — that match statement is the only place in
 the simulation that knows abilities have kinds.
 
-## Seven tiers, doubling
+## Movement is orthogonal
 
-Each merge doubles **health and damage**. Tier 7 is 64x a tier 1.
+Units step to one **orthogonally adjacent** tile at a time. No diagonals, ever.
+
+Two separate constants control this, and they answer different questions:
+
+| Constant | What it governs |
+|---|---|
+| `DIAGONAL_MOVEMENT` | Whether a unit can step diagonally. Now `false`. |
+| `DIAGONAL_RANGE` | Whether *distance* counts a diagonal as 1. Now `false`. |
+
+They're split on purpose. With both `false` the grid is strict — **a melee unit
+cannot hit the enemy standing diagonally beside it**, because that tile is two
+steps away. Setting `DIAGONAL_RANGE` back to `true` while movement stays
+orthogonal gives units diagonal reach they can't step into; that's a common
+roguelike setup and a real design choice, not an oversight.
+
+Be aware what the range metric change did to reach. Distance is Manhattan now,
+so an Archer's range of 4 covers a **diamond of 41 tiles** rather than the 9x9
+square of 81 it covered under Chebyshev. Every range in the game got roughly
+half its old footprint without a single number changing. Retune ranges before
+you retune anything else.
+
+Pathing also got harder: four-way movement means units can't slip diagonally
+past each other, so a crowded board congests more and battles run longer.
+
+## Displacement
+
+`BoardModel.push()` and `BoardModel.teleport()` are the primitives for forced
+movement — knockbacks, pulls, leaps. `CombatSim.displace()` wraps them and emits
+a `displace` event that playback animates.
+
+Displacement is deliberately **not** `_begin_move()`. It's something done *to* a
+unit, so it ignores deploy zones, costs no `move_time`, and doesn't lock the unit
+out of attacking. A unit caught mid-step is dropped back to `IDLE`, because its
+committed destination is meaningless once something has thrown it elsewhere.
+
+A push stops at the board edge or the first occupied tile, so shoving someone
+into a wall of bodies moves them nothing.
+
+Nothing calls it yet — it's tested plumbing. Adding a knockback ability is a new
+`AbilityData.Kind` and one case in `CombatSim._resolve_ability()`.
+
+## Six tiers, doubling
+
+Each merge doubles **health and damage**. Tier 6 is 32x a tier 1.
 
 Cooldown, move time and range deliberately do **not** scale:
 
 - Cooldown and move time are lower-is-better, so doubling them would make a
   merged unit worse. Halving them instead would compound with the damage
-  doubling and put tier 7 at 4096x the damage-per-second of a tier 1.
-- Doubling range would give a tier-7 Archer a reach of 256 tiles on a board 11
+  doubling and put tier 6 at over 1000x the damage-per-second of a tier 1.
+- Doubling range would give a tier-6 Archer a reach of 128 tiles on a board 11
   deep — it would hit anything, anywhere, from spawn.
 
 Power scales. Tempo and reach don't.
@@ -247,12 +301,17 @@ Power scales. Tempo and reach don't.
 | Tier | Units | Tier | Units |
 |---|---|---|---|
 | 2 | 2 | 5 | 16 |
-| 3 | 4 | 6 | 32 |
-| 4 | 8 | 7 | **64** |
+| 3 | 4 | 6 | **32** |
+| 4 | 8 | | |
 
 A whole match hands you 5 units a round over at most 7 rounds — **35 units**.
-So tier 7 is not merely rare, it is arithmetically impossible, and tier 6 needs
-32 of your 35 units to funnel perfectly into one type.
+Tier 6 therefore costs 32 of a possible 35: reachable only at full stretch, in
+the longest match, with the merge lottery cooperating. That's why the cap is 6
+and not 7 — tier 7 would cost 64 and could never appear at all.
+
+`run_tests.gd` asserts the top tier stays reachable, so if you change
+`UNITS_PER_DRAW`, `WINS_NEEDED` or `TIERS`, it'll tell you when the ceiling
+becomes dead content.
 
 The merge lottery makes it much worse than that. Two units only merge if they are
 *identical*, and each merge rolls a random type, so building toward one high-tier
@@ -268,9 +327,38 @@ Levers, if you want the top tiers to actually appear:
 - Or leave it, and treat tiers 5 to 7 as something that only happens in a long
   custom game. Dead content, but harmless.
 
-Also worth watching: a 64x spread means a high-tier unit is untouchable by
+Also worth watching: a 32x spread means a high-tier unit is untouchable by
 low-tier ones, and a mismatched fight will run to `DEFAULT_TIMEOUT` and be settled
 on remaining health rather than by anyone dying.
+
+## Data files link, they don't embed
+
+Every `.tres` under `data/` must **reference** the files it depends on, never
+carry inline copies of them. `run_tests.gd` asserts this, because when it broke
+nothing looked wrong at runtime — the loadout simply read its own private copies
+and every number tuned in the inspector was silently ignored.
+
+The trap, if you ever write your own generator: `ResourceSaver.save()` does not
+set `resource_path` on the object it just wrote, and `FLAG_CHANGE_PATH` doesn't
+either. Until an object knows its own path it still looks anonymous, so anything
+referencing it gets it embedded. `take_over_path()` after saving is what fixes it.
+
+You can spot the failure by eye — a healthy `starter.tres` is under a kilobyte
+and lists `ext_resource` lines pointing at `data/units/`. The broken one was
+14KB of inline copies.
+
+## When it won't start
+
+The status line under "Round N" names the specific failure:
+
+| Message | What to do |
+|---|---|
+| "Can't load … at all" | The file is missing, or its script failed to bind. Regenerate. |
+| "…loaded as X, not a LoadoutData" | Stale editor cache. Close Godot, delete the `.godot` folder, reopen. |
+| "Loadout is empty or has a null unit" | Regenerate. |
+
+If a script error mentions a nil board, that's `BoardView` drawing before it was
+bound — it shouldn't happen any more, and there's a test keeping it that way.
 
 ## Merging is a lottery
 
@@ -289,6 +377,20 @@ of two bodies for one stronger but *unpredictable* one. A board built around a
 plan can be knocked sideways by a bad roll. If that turns out to feel arbitrary
 rather than tense, the knob is the pool — weight it toward the units being merged
 rather than drawing uniformly.
+
+## The draw lands on the board
+
+Units arrive already placed, on random free tiles in your half. There is no
+holding area, deliberately: a tray lets you defer the decision, and the decision
+*is* the game.
+
+The consequence is that **a draw with nowhere to go is lost**. If your half is
+full, the units that don't fit are gone — not held over. The status line says so
+in as many words, because silently dropping them would read as a bug, and feeling
+that loss is the point of the space pressure.
+
+`_summon()` in `main.gd` does the placing, for both sides. The stand-in opponent
+runs the same path and then merges opportunistically.
 
 ## Rounds don't cost you units
 
