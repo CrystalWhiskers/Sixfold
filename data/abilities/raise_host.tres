@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_ukwt4"]
+
+[resource]
+script = ExtResource("1_ukwt4")
+id = &"raise_host"
+display_name = "Raise Host"
+description = "Pours everything it has gathered into two new units, drawn at random from your own roster at its own tier and placed as close to it as the board allows. Each arrives already casting its own ability. They are yours for the rest of the match, and raising them uses the Spire up. If your half has no room for both, nothing is raised at all."
+kind = 9
+cast_time = 1.4
+summon_max = 100
+summon_count = 2
+summon_random = true
+summon_cap_by_tier = false
+summon_persists = true
+consumes_caster = true
+summon_instacasts = true
+guards_caster = true

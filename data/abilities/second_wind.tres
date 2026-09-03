@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_x3ssn"]
+
+[resource]
+script = ExtResource("1_x3ssn")
+id = &"second_wind"
+display_name = "Second Wind"
+description = "A coin flip on every death: back up a second later at full health, as good as new."
+kind = 7
+cast_time = 0.3

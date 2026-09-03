@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_b4iie"]
+
+[resource]
+script = ExtResource("1_b4iie")
+id = &"overflow"
+display_name = "Overflow"
+description = "Floods the three-by-three around it. Allies standing inside gain extra mana every second, for the rest of the battle."
+kind = 10
+cast_time = 0.4

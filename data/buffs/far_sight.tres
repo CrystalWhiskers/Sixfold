@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_8hdj0"]
+
+[resource]
+script = ExtResource("1_8hdj0")
+id = &"far_sight"
+display_name = "Far Sight"
+exclusive_rarity = 2
+bronze = Vector2(1, 0)
+silver = Vector2(1, 0)
+gold = Vector2(1, 0)
+stat_a = 4
+flat = true

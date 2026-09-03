@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_rexxj"]
+
+[resource]
+script = ExtResource("1_rexxj")
+id = &"conscription"
+display_name = "Conscription"
+kind = 6
+bronze = Vector2(1, 0)
+silver = Vector2(2, 0)
+gold = Vector2(3, 0)

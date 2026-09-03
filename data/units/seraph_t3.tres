@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/abilities/benediction.tres" id="1_tfq03"]
+[ext_resource type="Resource" path="res://data/units/seraph_t4.tres" id="2_4hm5h"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_jj3bh"]
+
+[resource]
+script = ExtResource("3_jj3bh")
+id = &"seraph"
+display_name = "Seraph III"
+tier = 3
+max_hp = 380.0
+attack_damage = 32.0
+attack_speed = 0.95
+move_time = 0.48
+attack_range = 2
+attack_type = 1
+ability = ExtResource("1_tfq03")
+mana_per_attack = 34.0
+next_tier = ExtResource("2_4hm5h")
+note = "Fills its bar fast and dumps it all into whoever is closest to dying."
+accent = Color(0.55, 0.8, 0.75, 1)

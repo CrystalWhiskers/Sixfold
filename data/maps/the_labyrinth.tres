@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MapData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/map_data.gd" id="1_nmh2c"]
+
+[resource]
+script = ExtResource("1_nmh2c")
+id = &"the_labyrinth"
+display_name = "The Labyrinth"
+width = 9
+height = 25
+rows = PackedStringArray(".........", ".........", ".........", "#.###.###", "#.#.....#", "#.###.###", "#...#...#", "###.#.#.#", "#.#.#.#.#", "#.#.###.#", "#.......#", "#.###.###", "#.###.###", "#.###.###", "#.......#", "#.#.###.#", "#.#.#.#.#", "###.#.#.#", "#...#...#", "#.###.###", "#.#.....#", "#.###.###", ".........", ".........", ".........")
+note = "A real maze. Each side musters in the open ground at its own end, and everything between is one tile wide — dead ends, blind corners, and two ways through the middle. Nothing sees anything until it turns the corner into it."

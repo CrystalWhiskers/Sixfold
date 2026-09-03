@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MapData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/map_data.gd" id="1_k3g2w"]
+
+[resource]
+script = ExtResource("1_k3g2w")
+id = &"the_long_march"
+display_name = "The Long March"
+width = 5
+height = 15
+rows = PackedStringArray()
+note = "A deep corridor. Ranged units get to fire for a long time before anything arrives."

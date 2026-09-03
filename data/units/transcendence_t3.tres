@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/units/transcendence_t4.tres" id="1_g5vji"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_c6hn0"]
+
+[resource]
+script = ExtResource("2_c6hn0")
+id = &"transcendence"
+display_name = "Transcendence III"
+tier = 3
+max_hp = 660.0
+attack_damage = 88.0
+attack_speed = 0.7
+move_time = 0.62
+attack_range = 2
+attack_type = 1
+mana_per_attack = 0.0
+merge_magnet = true
+beam_attack = true
+next_tier = ExtResource("1_g5vji")
+note = "No ability, no tricks. Every merge it touches comes out Transcendence, and at tier 6 it fires a beam across the whole board that takes the rank behind the target with it."
+accent = Color(0.58, 0.56, 0.44, 1)

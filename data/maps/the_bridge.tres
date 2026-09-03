@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="MapData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/map_data.gd" id="1_cthir"]
+
+[resource]
+script = ExtResource("1_cthir")
+id = &"the_bridge"
+display_name = "The Bridge"
+width = 7
+rows = PackedStringArray(".......", ".......", ".^...^.", "XX...XX", "XX...XX", "XX...XX", "XX...XX", "XX...XX", ".^...^.", ".......", ".......")
+note = "Two shores joined by a three-wide crossing. Everything has to funnel over it, and the high ground on each bank overlooks the whole span."

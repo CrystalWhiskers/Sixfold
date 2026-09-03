@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="MapData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/map_data.gd" id="1_o6g42"]
+
+[resource]
+script = ExtResource("1_o6g42")
+id = &"the_warrens"
+display_name = "The Warrens"
+rows = PackedStringArray("......", ".####.", "......", "..##..", "......", "......", "......", "..##..", "......", ".####.", "......")
+note = "Blocks of stone break both halves into lanes. Nothing walks straight at anything."

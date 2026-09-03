@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="MapData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/map_data.gd" id="1_gt8aq"]
+
+[resource]
+script = ExtResource("1_gt8aq")
+id = &"broad_front"
+display_name = "Broad Front"
+width = 9
+rows = PackedStringArray()
+note = "Wide and divided. Room to spread out, and a long walk to the enemy."

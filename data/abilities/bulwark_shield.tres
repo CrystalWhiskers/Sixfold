@@ -6,8 +6,6 @@
 script = ExtResource("1_or6eb")
 id = &"bulwark_shield"
 display_name = "Bulwark"
-description = "Raises a shield that soaks damage before health and cannot be healed."
+description = "Raises a shield worth more than its own health. Soaks damage first, never healed."
 kind = 1
 cast_time = 0.3
-shield_amount = 70.0
-shield_cap = 70.0

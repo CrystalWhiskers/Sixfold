@@ -12,7 +12,7 @@ config_version=5
 
 config/name="Six by Eleven"
 config/description="Merge autobattler on a 6x11 board with a neutral centre row."
-run/main_scene="res://scenes/main.tscn"
+run/main_scene="res://scenes/menu.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
 
@@ -20,6 +20,7 @@ config/icon="res://icon.svg"
 
 EventBus="*res://autoload/event_bus.gd"
 MatchState="*res://autoload/match_state.gd"
+GameSetup="*res://autoload/game_setup.gd"
 
 [display]
 

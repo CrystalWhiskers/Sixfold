@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_r5inp"]
+
+[resource]
+script = ExtResource("1_r5inp")
+id = &"bloodletting"
+display_name = "Bloodletting"
+bronze = Vector2(0.2, 0)
+silver = Vector2(0.4, 0)
+gold = Vector2(0.6, 0)
+stat_a = 9
+flat = true

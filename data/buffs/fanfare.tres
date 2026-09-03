@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_xaw63"]
+
+[resource]
+script = ExtResource("1_xaw63")
+id = &"fanfare"
+display_name = "Fanfare"
+unit_id = &"herald"
+bronze = Vector2(0.2, 0.25)
+silver = Vector2(0.4, 0.5)
+gold = Vector2(0.8, 1)
+stat_b = 0
+uses_second_stat = true
+uses_third_stat = true
+third = Vector3(0.25, 0.5, 1)

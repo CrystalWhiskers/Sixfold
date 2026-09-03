@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MapData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/map_data.gd" id="1_hi6yk"]
+
+[resource]
+script = ExtResource("1_hi6yk")
+id = &"the_pit"
+display_name = "The Pit"
+width = 4
+height = 9
+rows = PackedStringArray()
+note = "Narrow and shallow. Sixteen tiles a side, so you merge or you drown."

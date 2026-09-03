@@ -1,0 +1,184 @@
+class_name MapData
+extends Resource
+
+## Terrain glyphs, one character per tile, top row first.
+const OPEN := "."
+const WALL := "#"
+const VOID := "X"
+const HIGH := "^"
+const GLYPHS := ".#X^"
+
+@export var id: StringName = &""
+@export var display_name: String = "Map"
+@export var width: int = 6
+@export var height: int = 11
+
+## A neutral row down the middle that nobody can deploy into. Only works on an
+## odd height — an even board splits evenly on its own and needs no divider.
+@export var has_neutral: bool = true
+
+## One string per row. Empty means a plain open rectangle.
+@export var rows: PackedStringArray = []
+
+## Walls that sit on the line between two tiles rather than on a tile: nothing
+## can step across, but both tiles stay usable. Packed as (ax, ay, bx, by).
+@export var lines: Array[Vector4i] = []
+
+@export_multiline var note: String = ""
+
+
+func half_rows() -> int:
+	return height / 2
+
+
+func tiles() -> int:
+	return width * height
+
+
+func glyph(c: Vector2i) -> String:
+	if c.y < 0 or c.y >= rows.size():
+		return OPEN
+	var row := rows[c.y]
+	if c.x < 0 or c.x >= row.length():
+		return OPEN
+	return row[c.x]
+
+
+func is_wall(c: Vector2i) -> bool:
+	return glyph(c) == WALL
+
+
+func is_void(c: Vector2i) -> bool:
+	return glyph(c) == VOID
+
+
+func is_high(c: Vector2i) -> bool:
+	return glyph(c) == HIGH
+
+
+func blocked(c: Vector2i) -> bool:
+	var g := glyph(c)
+	return g == WALL or g == VOID
+
+
+func mirror(c: Vector2i) -> Vector2i:
+	return Vector2i(c.x, height - 1 - c.y)
+
+
+static func edge_key(a: Vector2i, b: Vector2i) -> String:
+	# Order-free, so a wall reads the same from either side of it.
+	if b.y < a.y or (b.y == a.y and b.x < a.x):
+		return "%d,%d|%d,%d" % [b.x, b.y, a.x, a.y]
+	return "%d,%d|%d,%d" % [a.x, a.y, b.x, b.y]
+
+
+func edge_keys() -> Dictionary:
+	var out := {}
+	for e in lines:
+		out[edge_key(Vector2i(e.x, e.y), Vector2i(e.z, e.w))] = true
+	return out
+
+
+func playable_cells(first_row: int, last_row: int) -> int:
+	var n := 0
+	for y in range(first_row, last_row):
+		for x in width:
+			if not blocked(Vector2i(x, y)):
+				n += 1
+	return n
+
+
+func half_tiles() -> int:
+	# What a side can actually deploy onto, which is not width x rows once the
+	# map has holes in it.
+	return playable_cells(0, half_rows())
+
+
+func shape() -> String:
+	return "%d x %d" % [width, height]
+
+
+func has_terrain() -> bool:
+	return not rows.is_empty() or not lines.is_empty()
+
+
+func summary() -> String:
+	var parts: PackedStringArray = [shape()]
+	parts.append("divided" if has_neutral else "no divider")
+	parts.append("%d tiles a side" % half_tiles())
+	return "  ·  ".join(parts)
+
+
+func terrain_note() -> String:
+	var counts := {WALL: 0, VOID: 0, HIGH: 0}
+	for y in height:
+		for x in width:
+			var g := glyph(Vector2i(x, y))
+			if counts.has(g):
+				counts[g] += 1
+	var parts: PackedStringArray = []
+	if counts[VOID] > 0:
+		parts.append("%d tiles missing" % counts[VOID])
+	if counts[WALL] > 0:
+		parts.append("%d walls" % counts[WALL])
+	if not lines.is_empty():
+		parts.append("%d barriers" % lines.size())
+	if counts[HIGH] > 0:
+		parts.append("%d high ground" % counts[HIGH])
+	return ", ".join(parts)
+
+
+func invalid_reason() -> String:
+	if width < 2 or height < 4:
+		return "%s is too small to play on" % shape()
+	# The divider is what makes an odd board fair, and its absence is what makes
+	# an even one fair. Any other combination hands one side an extra row.
+	if has_neutral != (height % 2 == 1):
+		return "a %s board %s a divider gives one side an extra row" % [
+			"odd" if height % 2 == 1 else "even",
+			"with" if has_neutral else "without"]
+
+	if not rows.is_empty():
+		if rows.size() != height:
+			return "%d terrain rows for a board %d tall" % [rows.size(), height]
+		for y in height:
+			if rows[y].length() != width:
+				return "row %d is %d wide, the board is %d" % [
+					y, rows[y].length(), width]
+			for x in width:
+				if not GLYPHS.contains(rows[y][x]):
+					return "row %d uses '%s', which is not terrain" % [y, rows[y][x]]
+
+	# Both halves must be the same board upside down, or one side is handed a
+	# better position before a single unit is placed.
+	for y in height:
+		for x in width:
+			var c := Vector2i(x, y)
+			if glyph(c) != glyph(mirror(c)):
+				return "%s and %s do not match — the halves are not mirrors" % [
+					c, mirror(c)]
+
+	var keys := edge_keys()
+	for e in lines:
+		var a := Vector2i(e.x, e.y)
+		var b := Vector2i(e.z, e.w)
+		if not _on_board(a) or not _on_board(b):
+			return "a barrier runs off the board at %s-%s" % [a, b]
+		if (absi(a.x - b.x) + absi(a.y - b.y)) != 1:
+			return "%s and %s are not neighbours, so nothing sits between them" % [a, b]
+		if blocked(a) and blocked(b):
+			return "a barrier at %s-%s sits between two tiles nobody can reach" % [a, b]
+		if not keys.has(edge_key(mirror(a), mirror(b))):
+			return "the barrier at %s-%s has no mirror on the other half" % [a, b]
+
+	if half_tiles() < 8:
+		return "only %d usable tiles a side" % half_tiles()
+	return ""
+
+
+func is_valid() -> bool:
+	return invalid_reason().is_empty()
+
+
+func _on_board(c: Vector2i) -> bool:
+	return c.x >= 0 and c.x < width and c.y >= 0 and c.y < height

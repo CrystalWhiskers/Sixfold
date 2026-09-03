@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MapData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/map_data.gd" id="1_8ln4o"]
+
+[resource]
+script = ExtResource("1_8ln4o")
+id = &"the_compound"
+display_name = "The Compound"
+width = 12
+height = 21
+rows = PackedStringArray("..#..#...#..", "^....#.....^", "..#..#...#..", ".###.##.###.", "..#......#..", "..#..#.^.#..", ".....#......", "#.#.####.#.#", "..#......#..", "#.##.##.##.#", "............", "#.##.##.##.#", "..#......#..", "#.#.####.#.#", ".....#......", "..#..#.^.#..", "..#......#..", ".###.##.###.", "..#..#...#..", "^....#.....^", "..#..#...#..")
+note = "The biggest board there is: 81 tiles a side, cut into a warren of two- and three-tile rooms. Four gates cross the middle, so a fight here is never one fight — it is six little ones in separate rooms that cannot see each other."

@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_c60i3"]
+
+[resource]
+script = ExtResource("1_c60i3")
+id = &"full_muster"
+display_name = "Full Muster"
+kind = 5
+bronze = Vector2(0.3, 0.3)
+silver = Vector2(0.6, 0.6)
+gold = Vector2(1.2, 1.2)
+stat_a = 0
+uses_second_stat = true

@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/units/amalgam_t4.tres" id="1_hs18g"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_ky60s"]
+
+[resource]
+script = ExtResource("2_ky60s")
+id = &"amalgam"
+display_name = "Amalgam III"
+tier = 3
+max_hp = 760.0
+attack_damage = 60.0
+attack_speed = 0.8
+move_time = 0.5
+mana_per_attack = 0.0
+wild_merge = true
+next_tier = ExtResource("1_hs18g")
+note = "Merges with anything you own, whatever it is. Thick, steady, and never quite the same twice."
+accent = Color(0.46, 0.52, 0.38, 1)

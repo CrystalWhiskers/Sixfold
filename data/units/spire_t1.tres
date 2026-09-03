@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/abilities/raise_host.tres" id="1_3mgah"]
+[ext_resource type="Resource" path="res://data/units/spire_t2.tres" id="2_6pxya"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_4tgb6"]
+
+[resource]
+script = ExtResource("3_4tgb6")
+id = &"spire"
+display_name = "Spire"
+max_hp = 200.0
+attack_damage = 0.0
+attack_speed = 0.5
+move_time = 0.6
+sight_range = 3
+ability = ExtResource("1_3mgah")
+mana_per_attack = 0.0
+mana_per_charge = 8.0
+keeps_mana = true
+can_move = false
+can_attack = false
+next_tier = ExtResource("2_6pxya")
+note = "Cannot move, cannot swing, and never loses the progress it made last round. When it finally raises its host, that is the end of it."
+accent = Color(0.66, 0.6, 0.5, 1)

@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_55vgv"]
+
+[resource]
+script = ExtResource("1_55vgv")
+id = &"covenant"
+display_name = "Covenant"
+unit_id = &"conjurer"
+also_units = Array[StringName]([&"wisp"])
+bronze = Vector2(0.5, 0.3)
+silver = Vector2(1, 0.6)
+gold = Vector2(2, 1.2)
+stat_a = 0
+uses_second_stat = true

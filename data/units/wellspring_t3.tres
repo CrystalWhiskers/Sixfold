@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/abilities/overflow.tres" id="1_70kdk"]
+[ext_resource type="Resource" path="res://data/units/wellspring_t4.tres" id="2_qlcxm"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_s8c8l"]
+
+[resource]
+script = ExtResource("3_s8c8l")
+id = &"wellspring"
+display_name = "Wellspring III"
+tier = 3
+max_hp = 480.0
+attack_damage = 36.0
+attack_speed = 0.75
+move_time = 0.52
+attack_range = 2
+attack_type = 2
+ability = ExtResource("1_70kdk")
+mana_per_attack = 0.0
+mana_per_charge = 6.0
+casts_at_battle_start = true
+next_tier = ExtResource("2_qlcxm")
+note = "Opens a pool of mana around itself on the first beat. Everyone standing in it casts sooner."
+accent = Color(0.4, 0.68, 0.72, 1)

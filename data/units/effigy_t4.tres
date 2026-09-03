@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/units/effigy_t5.tres" id="1_f0rfk"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_baw2u"]
+
+[resource]
+script = ExtResource("2_baw2u")
+id = &"effigy"
+display_name = "Effigy IV"
+tier = 4
+max_hp = 1320.0
+attack_damage = 176.0
+attack_speed = 0.7
+move_time = 0.62
+attack_range = 2
+attack_type = 1
+mana_per_attack = 0.0
+merge_magnet = true
+next_tier = ExtResource("1_f0rfk")
+accent = Color(0.58, 0.56, 0.44, 1)

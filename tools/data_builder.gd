@@ -1,16 +1,3 @@
-## Builds every .tres in res://data/ from the tables below.
-##
-## Two ways to run it:
-##   * In the editor — open tools/regenerate_data.gd and hit File > Run
-##     (Ctrl+Shift+X). This is the easy one; no terminal needed.
-##   * From a terminal — godot --headless --script res://tools/generate_data.gd
-##
-## Numbers are yours to own. Tune a table here and regenerate, rather than
-## clicking through 30 inspector panels.
-##
-## WARNING: this OVERWRITES everything in res://data/, and deletes any file the
-## tables no longer produce. Anything you tweaked by hand in the inspector is
-## lost. Change the tables here instead, or stop running it.
 class_name DataBuilder
 extends RefCounted
 
@@ -18,68 +5,301 @@ const UNITS_DIR := "res://data/units"
 const ABILITY_DIR := "res://data/abilities"
 const LOADOUT_DIR := "res://data/loadouts"
 const BUFF_DIR := "res://data/buffs"
+const MAP_DIR := "res://data/maps"
 
 const TIERS := 6
-## Every tier doubles health and damage. Tier 6 is 2^5 = 32x a tier 1.
-##
-## Six is the highest tier a match can actually produce. A tier N costs 2^(N-1)
-## tier-1 units; at 5 a round over a maximum of 7 rounds you are dealt 35, so
-## tier 6 (32) is reachable at full stretch and tier 7 (64) never was.
-##
-## Cooldown, move_time and range deliberately do NOT scale. Two of those are
-## lower-is-better, so doubling them would make a merged unit worse; halving them
-## instead would stack with the damage doubling and put tier 7 at 4096x the DPS
-## of a tier 1. Range doubling would give a tier-7 Archer reach of 256 tiles on a
-## board 11 deep. Power scales, tempo and reach do not.
 const HP_SCALE := 2.0
 const DMG_SCALE := 2.0
 
-## Every unit has one mana ability. The bar is 100 for all of them; mana_per_attack
-## is the only thing that differs, so a rate of 25 casts every 4th attack.
-const UNIT_TABLE := [
+# A map is fair when the halves match: an odd board needs the neutral divider,
+# an even one splits on its own and must not have it.
+const MAP_TABLE := [
 	{
-		id = &"warden", name = "Warden", hp = 180.0, dmg = 8.0, cd = 1.3,
-		move = 0.60, range = 1, sight = 3, type = "MELEE",
-		accent = Color(0.38, 0.47, 0.60),
-		ability = &"bulwark_shield", mana = 20.0, opens = true,
-		note = "Opens with its shield already up, then rebuilds it slowly.",
+		id = &"standard", name = "Standard", w = 6, h = 11, neutral = true,
+		note = "The default. Five rows each with a no-man's row between them.",
 	},
 	{
-		id = &"lancer", name = "Lancer", hp = 95.0, dmg = 16.0, cd = 0.9,
-		move = 0.36, range = 1, sight = 4, type = "MELEE",
+		id = &"skirmish", name = "Skirmish", w = 6, h = 8, neutral = false,
+		note = "Short and undivided — the two front ranks start in each other's faces.",
+	},
+	{
+		id = &"the_pit", name = "The Pit", w = 4, h = 9, neutral = true,
+		note = "Narrow and shallow. Sixteen tiles a side, so you merge or you drown.",
+	},
+	{
+		id = &"broad_front", name = "Broad Front", w = 9, h = 11, neutral = true,
+		note = "Wide and divided. Room to spread out, and a long walk to the enemy.",
+	},
+	{
+		id = &"the_crush", name = "The Crush", w = 8, h = 6, neutral = false,
+		note = "Wide, shallow, no divider. Everything is in range of everything almost at once.",
+	},
+	{
+		id = &"the_long_march", name = "The Long March", w = 5, h = 15, neutral = true,
+		note = "A deep corridor. Ranged units get to fire for a long time before anything arrives.",
+	},
+	{
+		id = &"the_bridge", name = "The Bridge", w = 7, h = 11, neutral = true,
+		rows = [
+			".......",
+			".......",
+			".^...^.",
+			"XX...XX",
+			"XX...XX",
+			"XX...XX",
+			"XX...XX",
+			"XX...XX",
+			".^...^.",
+			".......",
+			".......",
+		],
+		note = "Two shores joined by a three-wide crossing. Everything has to funnel over it, and the high ground on each bank overlooks the whole span.",
+	},
+	{
+		id = &"the_warrens", name = "The Warrens", w = 6, h = 11, neutral = true,
+		rows = [
+			"......",
+			".####.",
+			"......",
+			"..##..",
+			"......",
+			"......",
+			"......",
+			"..##..",
+			"......",
+			".####.",
+			"......",
+		],
+		note = "Blocks of stone break both halves into lanes. Nothing walks straight at anything.",
+	},
+	{
+		id = &"ramparts", name = "Ramparts", w = 7, h = 11, neutral = true,
+		rows = [
+			".^^^^^.",
+			".......",
+			".......",
+			".......",
+			".......",
+			".......",
+			".......",
+			".......",
+			".......",
+			".......",
+			".^^^^^.",
+		],
+		lines = [
+			[0, 4, 0, 5], [1, 4, 1, 5], [5, 4, 5, 5], [6, 4, 6, 5],
+			[0, 6, 0, 5], [1, 6, 1, 5], [5, 6, 5, 5], [6, 6, 6, 5],
+		],
+		note = "Barriers with no thickness pinch the middle to three columns. The back rank of each side is a firing step.",
+	},
+	{
+		id = &"the_highlands", name = "The Highlands", w = 6, h = 8, neutral = false,
+		rows = [
+			".^^^^.",
+			"......",
+			"..##..",
+			"......",
+			"......",
+			"..##..",
+			"......",
+			".^^^^.",
+		],
+		note = "No divider, a boulder in each half, and a long ridge at the back of both. Short, high and mean.",
+	},
+	{
+		id = &"the_hourglass", name = "The Hourglass", w = 9, h = 11, neutral = true,
+		rows = [
+			".........",
+			".........",
+			"X.......X",
+			"XX..^..XX",
+			"XXX...XXX",
+			"XXX...XXX",
+			"XXX...XXX",
+			"XX..^..XX",
+			"X.......X",
+			".........",
+			".........",
+		],
+		note = "Wide at both ends and three tiles across in the middle, with the pinch overlooked from either side.",
+	},
+	{
+		id = &"the_labyrinth", name = "The Labyrinth", w = 9, h = 25, neutral = true,
+		rows = [
+			".........",
+			".........",
+			".........",
+			"#.###.###",
+			"#.#.....#",
+			"#.###.###",
+			"#...#...#",
+			"###.#.#.#",
+			"#.#.#.#.#",
+			"#.#.###.#",
+			"#.......#",
+			"#.###.###",
+			"#.###.###",
+			"#.###.###",
+			"#.......#",
+			"#.#.###.#",
+			"#.#.#.#.#",
+			"###.#.#.#",
+			"#...#...#",
+			"#.###.###",
+			"#.#.....#",
+			"#.###.###",
+			".........",
+			".........",
+			".........",
+		],
+		note = "A real maze. Each side musters in the open ground at its own end, and everything between is one tile wide — dead ends, blind corners, and two ways through the middle. Nothing sees anything until it turns the corner into it.",
+	},
+	{
+		id = &"the_compound", name = "The Compound", w = 12, h = 21, neutral = true,
+		rows = [
+			"..#..#...#..",
+			"^....#.....^",
+			"..#..#...#..",
+			".###.##.###.",
+			"..#......#..",
+			"..#..#.^.#..",
+			".....#......",
+			"#.#.####.#.#",
+			"..#......#..",
+			"#.##.##.##.#",
+			"............",
+			"#.##.##.##.#",
+			"..#......#..",
+			"#.#.####.#.#",
+			".....#......",
+			"..#..#.^.#..",
+			"..#......#..",
+			".###.##.###.",
+			"..#..#...#..",
+			"^....#.....^",
+			"..#..#...#..",
+		],
+		note = "The biggest board there is: 81 tiles a side, cut into a warren of two- and three-tile rooms. Four gates cross the middle, so a fight here is never one fight — it is six little ones in separate rooms that cannot see each other.",
+	},
+]
+
+const UNIT_TABLE := [
+	{
+		id = &"warden", name = "Warden", hp = 220.0, dmg = 34.0, spd = 0.35,
+		move = 0.85, range = "MELEE", sight = 3, type = "MELEE",
+		accent = Color(0.38, 0.47, 0.60),
+		ability = &"bulwark_shield", mana = 20.0, opens = true,
+		note = "Slow to swing and slower to walk, but hits like a truck behind a shield bigger than itself.",
+	},
+	{
+		id = &"lancer", name = "Lancer", hp = 95.0, dmg = 16.0, spd = 1.1,
+		move = 0.36, range = "MELEE", sight = 4, type = "MELEE",
 		accent = Color(0.72, 0.35, 0.28),
 		ability = &"impale", mana = 25.0, pierce = 2,
 		note = "Every swing already cuts through two. The ability makes it three, harder.",
 	},
 	{
-		id = &"archer", name = "Archer", hp = 55.0, dmg = 19.0, cd = 0.95,
-		move = 0.50, range = 4, sight = 5, type = "RANGED",
+		id = &"archer", name = "Archer", hp = 55.0, dmg = 19.0, spd = 1.05,
+		move = 0.50, range = "LONG", sight = 5, type = "RANGED",
 		accent = Color(0.55, 0.62, 0.32),
 		ability = &"quickdraw", mana = 25.0,
 		note = "Charges fastest of anyone and never stops speeding up. Fold if reached.",
 	},
 	{
-		id = &"vexer", name = "Vexer", hp = 85.0, dmg = 6.0, cd = 0.42,
-		move = 0.45, range = 2, sight = 4, type = "RANGED",
+		id = &"vexer", name = "Vexer", hp = 85.0, dmg = 6.0, spd = 2.4,
+		move = 0.45, range = "MEDIUM", sight = 4, type = "RANGED",
 		accent = Color(0.45, 0.40, 0.66),
 		ability = &"blight", mana = 12.0,
 		note = "Weak hits, but the fastest attack rate means the bar fills constantly.",
 	},
 	{
-		id = &"pyre", name = "Pyre", hp = 90.0, dmg = 7.0, cd = 1.4,
-		move = 0.55, range = 3, sight = 4, type = "SPELL",
+		id = &"pyre", name = "Pyre", hp = 90.0, dmg = 7.0, spd = 0.7,
+		move = 0.55, range = "MEDIUM", sight = 4, type = "SPELL",
 		accent = Color(0.78, 0.55, 0.22),
 		ability = &"cinder_lance", mana = 34.0,
 		note = "Ordinary attacks are feeble. Everything rides on landing the burst.",
 	},
+	{
+		id = &"assassin", name = "Assassin", hp = 60.0, dmg = 12.0, spd = 1.2,
+		move = 0.34, range = "MELEE", sight = 6, type = "MELEE",
+		accent = Color(0.42, 0.30, 0.48),
+		ability = &"shadowstep", mana = 25.0, opens = true,
+		note = "Opens behind someone, hits once for a fortune, then nobody can find it.",
+	},
+	{
+		id = &"herald", name = "Herald", hp = 110.0, dmg = 7.0, spd = 0.8,
+		move = 0.52, range = "MELEE", sight = 4, type = "RANGED",
+		accent = Color(0.85, 0.78, 0.42),
+		ability = &"war_horn", mana = 30.0, opens = true,
+		note = "Weak alone. Its whole value is who you park it next to.",
+	},
+	{
+		id = &"revenant", name = "Revenant", hp = 105.0, dmg = 13.0, spd = 0.85,
+		move = 0.46, range = "MELEE", sight = 4, type = "MELEE",
+		accent = Color(0.50, 0.55, 0.50),
+		ability = &"second_wind", mana = 25.0,
+		note = "A coin flip on every death, and it comes back whole. Kill it twice, or thrice.",
+	},
+	{
+		id = &"seraph", name = "Seraph", hp = 95.0, dmg = 8.0, spd = 0.95,
+		move = 0.48, range = "MEDIUM", sight = 4, type = "RANGED",
+		accent = Color(0.55, 0.80, 0.75),
+		ability = &"benediction", mana = 34.0,
+		note = "Fills its bar fast and dumps it all into whoever is closest to dying.",
+	},
+	{
+		id = &"conjurer", name = "Conjurer", hp = 150.0, dmg = 5.0, spd = 0.6,
+		move = 0.50, range = "MEDIUM", sight = 4, type = "SPELL",
+		accent = Color(0.62, 0.48, 0.78),
+		ability = &"call_wisp", mana = 26.0, opens = true,
+		note = "Tanky and feeble on its own. Its wisps match its tier and do the work.",
+	},
+	{
+		id = &"transcendence", name = "Transcendence", hp = 165.0, dmg = 22.0, spd = 0.7,
+		move = 0.62, range = "MEDIUM", sight = 4, type = "RANGED",
+		accent = Color(0.58, 0.56, 0.44),
+		mana = 0.0, magnet = true, beam = true,
+		apex = {hp = 4.0, dmg = 4.0, range = "UNLIMITED", pierce = 100,
+			endless = true, wash = 0.5},
+		note = "No ability, no tricks. Every merge it touches comes out Transcendence, and at tier 6 it fires a beam across the whole board that takes the rank behind the target with it.",
+	},
+	{
+		id = &"amalgam", name = "Amalgam", hp = 190.0, dmg = 15.0, spd = 0.8,
+		move = 0.50, range = "MELEE", sight = 4, type = "MELEE",
+		accent = Color(0.46, 0.52, 0.38),
+		mana = 0.0, wild = true,
+		note = "Merges with anything you own, whatever it is. Thick, steady, and never quite the same twice.",
+	},
+	{
+		id = &"spire", name = "Spire", hp = 200.0, dmg = 0.0, spd = 0.5,
+		move = 0.60, range = "MELEE", sight = 3, type = "MELEE",
+		accent = Color(0.66, 0.60, 0.50),
+		ability = &"raise_host", mana = 0.0, regen = 8.0, banks = true,
+		rooted = true,
+		note = "Cannot move, cannot swing, and never loses the progress it made last round. When it finally raises its host, that is the end of it.",
+	},
+	{
+		id = &"wellspring", name = "Wellspring", hp = 120.0, dmg = 9.0, spd = 0.75,
+		move = 0.52, range = "MEDIUM", sight = 4, type = "SPELL",
+		accent = Color(0.40, 0.68, 0.72),
+		ability = &"overflow", mana = 0.0, regen = 6.0, opens = true,
+		note = "Opens a pool of mana around itself on the first beat. Everyone standing in it casts sooner.",
+	},
+	{
+		id = &"wisp", name = "Wisp", hp = 34.0, dmg = 7.0, spd = 1.3,
+		move = 0.40, range = "MELEE", sight = 3, type = "MELEE",
+		accent = Color(0.70, 0.62, 0.86),
+		mana = 0.0, hidden = true,
+		note = "Summoned only. Never drawn, never merged, gone when the round ends.",
+	},
 ]
 
-## kind decides which fields matter — see AbilityData.
 const ABILITY_TABLE := [
 	{
 		id = &"bulwark_shield", name = "Bulwark", kind = "SHIELD", cast_time = 0.3,
-		desc = "Raises a shield that soaks damage before health and cannot be healed.",
-		shield_amount = 70.0, shield_cap = 70.0,
+		desc = "Raises a shield worth more than its own health. Soaks damage first, never healed.",
+		shield_percent = 1.25, shield_cap_percent = 1.25,
 	},
 	{
 		id = &"impale", name = "Impale", kind = "PIERCE", cast_time = 0.5,
@@ -101,54 +321,175 @@ const ABILITY_TABLE := [
 		desc = "A lance of fire: heavy on the target, scorching everything beside it.",
 		burst_damage = 78.0, splash_damage = 16.0, splash_radius = 1,
 	},
+	{
+		id = &"shadowstep", name = "Shadowstep", kind = "BLINK_STRIKE", cast_time = 0.35,
+		desc = "Blinks behind a target, strikes for damage that doubles every tier, then cannot be found.",
+		blink_base_damage = 46.0, stealth_time = 3.5,
+	},
+	{
+		id = &"war_horn", name = "War Horn", kind = "SPEED_AURA", cast_time = 0.3,
+		desc = "The four units directly beside the Herald swing faster for the whole battle.",
+		aura_percent_per_tier = 0.12, aura_radius = 1,
+	},
+	{
+		id = &"second_wind", name = "Second Wind", kind = "REVIVE", cast_time = 0.3,
+		desc = "A coin flip on every death: back up a second later at full health, as good as new.",
+		revive_chance = 0.5, revive_delay = 1.0, revive_hp_percent = 1.0,
+	},
+	{
+		id = &"benediction", name = "Benediction", kind = "BURST_HEAL", cast_time = 0.28,
+		desc = "A heavy burst of healing on whoever nearby is hurt worst. Bigger every tier.",
+		heal_percent = 0.45, heal_percent_per_tier = 0.20, heal_radius = 3,
+	},
+	{
+		id = &"call_wisp", name = "Call Wisp", kind = "SUMMON", cast_time = 0.5,
+		desc = "Calls a wisp to the tile beside it. Higher tiers hold more at once.",
+		summon = &"wisp", summon_max = 3,
+	},
+	{
+		id = &"raise_host", name = "Raise Host", kind = "SUMMON", cast_time = 1.4,
+		desc = "Pours everything it has gathered into two new units, drawn at random from your own roster at its own tier and placed as close to it as the board allows. Each arrives already casting its own ability. They are yours for the rest of the match, and raising them uses the Spire up. If your half has no room for both, nothing is raised at all.",
+		summon_count = 2, summon_random = true, summon_cap_by_tier = false,
+		summon_max = 100, summon_persists = true, consumes_caster = true,
+		guards_caster = true, summon_instacasts = true,
+	},
+	{
+		id = &"overflow", name = "Overflow", kind = "MANA_AURA", cast_time = 0.4,
+		desc = "Floods the three-by-three around it. Allies standing inside gain extra mana every second, for the rest of the battle.",
+		mana_aura_radius = 1,
+	},
 ]
 
-## Between-rounds buffs. Scope SINGLE_UNIT lets the player pick who gets it.
 const BUFF_TABLE = [
-	{id = &"sharpen", name = "Sharpen", scope = "SINGLE_UNIT", weight = 1.0,
-		mods = [["ATTACK_DAMAGE", "PERCENT", 0.35]]},
-	{id = &"whetstone", name = "Whetstone", scope = "ALL_UNITS", weight = 1.0,
-		mods = [["ATTACK_DAMAGE", "PERCENT", 0.12]]},
-	{id = &"bulwark", name = "Bulwark", scope = "SINGLE_UNIT", weight = 1.0,
-		mods = [["MAX_HP", "PERCENT", 0.45]]},
-	{id = &"rations", name = "Rations", scope = "ALL_UNITS", weight = 1.0,
-		mods = [["MAX_HP", "PERCENT", 0.15]]},
-	{id = &"quickstep", name = "Quickstep", scope = "SINGLE_UNIT", weight = 1.0,
-		mods = [["MOVE_TIME", "PERCENT", -0.30]]},
-	{id = &"forced_march", name = "Forced March", scope = "ALL_UNITS", weight = 0.8,
-		mods = [["MOVE_TIME", "PERCENT", -0.12]]},
-	{id = &"frenzy", name = "Frenzy", scope = "SINGLE_UNIT", weight = 0.9,
-		mods = [["ATTACK_COOLDOWN", "PERCENT", -0.28]]},
-	{id = &"longshot", name = "Longshot", scope = "SINGLE_UNIT", weight = 0.5,
-		mods = [["ATTACK_RANGE", "FLAT", 1.0]]},
-	{id = &"glass_edge", name = "Glass Edge", scope = "ALL_UNITS", weight = 0.6,
-		mods = [["ATTACK_DAMAGE", "PERCENT", 0.30], ["MAX_HP", "PERCENT", -0.15]]},
+	{id = &"mending_wind", name = "Mending Wind", kind = "REGEN", weight = 1.0,
+		b = Vector2(0.01, 0.0), s = Vector2(0.02, 0.0), g = Vector2(0.04, 0.0)},
+	{id = &"rupture", name = "Rupture", kind = "PERCENT_HP_DAMAGE", weight = 1.0,
+		b = Vector2(0.01, 0.0), s = Vector2(0.02, 0.0), g = Vector2(0.04, 0.0)},
+	{id = &"windfall", name = "Windfall", kind = "MERGE_EXTRA_UNIT", weight = 1.0,
+		b = Vector2(0.10, 0.0), s = Vector2(0.20, 0.0), g = Vector2(0.40, 0.0)},
+	{id = &"promotion", name = "Promotion", kind = "MERGE_EXTRA_TIER", weight = 1.0,
+		b = Vector2(0.04, 0.0), s = Vector2(0.08, 0.0), g = Vector2(0.16, 0.0)},
+	{id = &"full_muster", name = "Full Muster", kind = "FULL_ROSTER", weight = 1.0,
+		stat_a = "MAX_HP", stat_b = "ATTACK_DAMAGE", two = true,
+		b = Vector2(0.30, 0.30), s = Vector2(0.60, 0.60), g = Vector2(1.20, 1.20)},
+	{id = &"war_drums", name = "War Drums", kind = "STAT", weight = 1.0,
+		stat_a = "ATTACK_SPEED",
+		b = Vector2(0.15, 0.0), s = Vector2(0.30, 0.0), g = Vector2(0.60, 0.0)},
+
+	{id = &"ironwall", name = "Ironwall", kind = "STAT", weight = 1.0,
+		unit = &"warden", stat_a = "MAX_HP",
+		b = Vector2(0.50, 0.0), s = Vector2(1.00, 0.0), g = Vector2(2.00, 0.0)},
+	{id = &"marksmanship", name = "Marksmanship", kind = "STAT", weight = 1.0,
+		unit = &"archer", stat_a = "ATTACK_DAMAGE", stat_b = "ATTACK_SPEED", two = true,
+		b = Vector2(0.25, 0.15), s = Vector2(0.50, 0.30), g = Vector2(1.00, 0.60)},
+	{id = &"vigor", name = "Vigor", kind = "STAT", weight = 1.0,
+		unit = &"lancer", stat_a = "MAX_HP", stat_b = "ATTACK_DAMAGE", two = true,
+		b = Vector2(0.30, 0.20), s = Vector2(0.60, 0.40), g = Vector2(1.20, 0.80)},
+	{id = &"conflagration", name = "Conflagration", kind = "STAT", weight = 1.0,
+		unit = &"pyre", stat_a = "ATTACK_DAMAGE", stat_b = "ATTACK_SPEED", two = true,
+		b = Vector2(0.40, 0.10), s = Vector2(0.80, 0.20), g = Vector2(1.60, 0.40)},
+	{id = &"swarm", name = "Swarm", kind = "STAT", weight = 1.0,
+		unit = &"vexer", stat_a = "ATTACK_SPEED",
+		b = Vector2(0.50, 0.0), s = Vector2(1.00, 0.0), g = Vector2(2.00, 0.0)},
+
+	{id = &"shadowcraft", name = "Shadowcraft", kind = "STAT", weight = 1.0,
+		unit = &"assassin", stat_a = "ATTACK_SPEED", stat_b = "ATTACK_DAMAGE", two = true,
+		b = Vector2(0.10, 0.15), s = Vector2(0.20, 0.30), g = Vector2(0.40, 0.60)},
+	{id = &"fanfare", name = "Fanfare", kind = "STAT", weight = 1.0,
+		unit = &"herald", stat_a = "ATTACK_DAMAGE", stat_b = "MAX_HP", two = true,
+		stat_c = "AURA_POWER", three = Vector3(0.25, 0.50, 1.00),
+		b = Vector2(0.20, 0.25), s = Vector2(0.40, 0.50), g = Vector2(0.80, 1.00)},
+	{id = &"undying", name = "Undying", kind = "STAT", weight = 1.0,
+		unit = &"revenant", stat_a = "MAX_HP", stat_b = "ATTACK_DAMAGE", two = true,
+		b = Vector2(0.50, 0.50), s = Vector2(1.00, 1.00), g = Vector2(2.00, 2.00)},
+	{id = &"grace", name = "Grace", kind = "STAT", weight = 1.0,
+		unit = &"seraph", stat_a = "MAX_HP", stat_b = "HEAL_POWER", two = true,
+		b = Vector2(0.35, 0.10), s = Vector2(0.70, 0.20), g = Vector2(1.40, 0.40)},
+	{id = &"covenant", name = "Covenant", kind = "STAT", weight = 1.0,
+		unit = &"conjurer", also = [&"wisp"],
+		stat_a = "MAX_HP", stat_b = "ATTACK_DAMAGE", two = true,
+		b = Vector2(0.50, 0.30), s = Vector2(1.00, 0.60), g = Vector2(2.00, 1.20)},
+	{id = &"cohesion", name = "Cohesion", kind = "STAT", weight = 1.0,
+		unit = &"amalgam", stat_a = "MAX_HP",
+		b = Vector2(1.00, 0.0), s = Vector2(2.00, 0.0), g = Vector2(3.00, 0.0)},
+	{id = &"incubation", name = "Incubation", kind = "STAT", weight = 1.0,
+		unit = &"spire", stat_a = "MANA_REGEN", stat_b = "MAX_HP", two = true,
+		flat = true,
+		b = Vector2(3.0, 0.50), s = Vector2(6.0, 1.00), g = Vector2(9.0, 2.00)},
+	{id = &"confluence", name = "Confluence", kind = "STAT", weight = 1.0,
+		unit = &"wellspring", stat_a = "MANA_REGEN", stat_b = "MAX_HP", two = true,
+		flat = true,
+		b = Vector2(3.0, 0.30), s = Vector2(6.0, 0.60), g = Vector2(9.0, 0.90)},
+	{id = &"ascension", name = "Ascension", kind = "STAT", weight = 1.0,
+		unit = &"transcendence", stat_a = "MAX_HP", stat_b = "ATTACK_DAMAGE", two = true,
+		b = Vector2(0.50, 0.50), s = Vector2(1.00, 1.00), g = Vector2(1.50, 1.50)},
+
+	{id = &"far_sight", name = "Far Sight", kind = "STAT", weight = 1.0,
+		only = "GOLD", stat_a = "ATTACK_RANGE", flat = true,
+		b = Vector2(1.0, 0.0), s = Vector2(1.0, 0.0), g = Vector2(1.0, 0.0)},
+	{id = &"levy", name = "Levy", kind = "BOARD_FILL", weight = 0.8,
+		only = "GOLD",
+		b = Vector2(1.0, 0.0), s = Vector2(1.0, 0.0), g = Vector2(1.0, 0.0)},
+	{id = &"alchemy", name = "Alchemy", kind = "WILD_MERGE", weight = 0.9,
+		only = "GOLD",
+		b = Vector2(1.0, 0.0), s = Vector2(1.0, 0.0), g = Vector2(1.0, 0.0)},
+	{id = &"conscription", name = "Conscription", kind = "EXTRA_DRAW", weight = 1.0,
+		b = Vector2(1.0, 0.0), s = Vector2(2.0, 0.0), g = Vector2(3.0, 0.0)},
+	{id = &"reckless", name = "Reckless", kind = "STAT", weight = 1.0,
+		stat_a = "ATTACK_DAMAGE", stat_b = "DAMAGE_TAKEN", two = true,
+		b = Vector2(0.60, 0.20), s = Vector2(0.90, 0.15), g = Vector2(1.20, 0.10)},
+	{id = &"bloodletting", name = "Bloodletting", kind = "STAT", weight = 1.0,
+		stat_a = "LIFESTEAL", flat = true,
+		b = Vector2(0.20, 0.0), s = Vector2(0.40, 0.0), g = Vector2(0.60, 0.0)},
+	{id = &"conclave", name = "Conclave", kind = "TIER_GIFT", weight = 0.9,
+		only = "SILVER",
+		b = Vector2(3.0, 3.0), s = Vector2(3.0, 3.0), g = Vector2(3.0, 3.0)},
+	{id = &"oblation", name = "Oblation", kind = "SACRIFICE", weight = 0.9,
+		only = "SILVER",
+		b = Vector2(1.0, 0.0), s = Vector2(1.0, 0.0), g = Vector2(1.0, 0.0)},
 ]
 
 
-## Regenerates everything under res://data/. Returns a one-line summary.
 func build() -> String:
 	print("Generating data for Six by Eleven...")
 	_prune_stale()
+	_make_maps()
 	var abilities := _make_abilities()
 	var loadout := _make_units(abilities)
+	_link_summons(abilities)
 	_make_buffs()
 	if not loadout.is_valid():
 		push_error("Generated loadout is invalid.")
 		return "FAILED — the generated loadout is invalid."
-	return "Done. %d units, %d abilities, %d buffs." % [
-		UNIT_TABLE.size() * TIERS, ABILITY_TABLE.size(), BUFF_TABLE.size()]
+	return "Done. %d units (%d types x %d tiers), %d abilities, %d buffs, %d maps." % [
+		UNIT_TABLE.size() * TIERS, UNIT_TABLE.size(), TIERS,
+		ABILITY_TABLE.size(), BUFF_TABLE.size(), MAP_TABLE.size()]
 
 
-## Deletes anything in res://data/ that the tables no longer produce.
-##
-## Lowering TIERS, renaming an ability or dropping a buff would otherwise leave
-## orphans on disk that nothing references but everything still lists — quietly
-## confusing the next person to open the folder, which will be you in a month.
 func _prune_stale() -> void:
 	_prune_tiers()
+	_prune_retired_units()
 	_prune_by_id(ABILITY_DIR, ABILITY_TABLE)
 	_prune_by_id(BUFF_DIR, BUFF_TABLE)
+	_prune_by_id(MAP_DIR, MAP_TABLE)
+
+
+func _prune_retired_units() -> void:
+	var live := {}
+	for row in UNIT_TABLE:
+		live[String(row.id)] = true
+	var dir := DirAccess.open(UNITS_DIR)
+	if dir == null:
+		return
+	for file_name in dir.get_files():
+		if not file_name.ends_with(".tres"):
+			continue
+		var marker := file_name.rfind("_t")
+		if marker < 0:
+			continue
+		if not live.has(file_name.substr(0, marker)):
+			dir.remove(file_name)
+			print("  pruned retired unit: ", file_name)
 
 
 func _prune_tiers() -> void:
@@ -167,7 +508,6 @@ func _prune_tiers() -> void:
 			print("  pruned stale tier: ", file_name)
 
 
-## Removes .tres files whose id is no longer in the table that owns that folder.
 func _prune_by_id(folder: String, table: Array) -> void:
 	var keep := {}
 	for row in table:
@@ -183,16 +523,6 @@ func _prune_by_id(folder: String, table: Array) -> void:
 			print("  pruned orphan: %s/%s" % [folder, file_name])
 
 
-## The take_over_path() call is load-bearing, not tidiness.
-##
-## ResourceSaver.save() does NOT set resource_path on the object it just wrote,
-## and FLAG_CHANGE_PATH doesn't either — measured, not assumed. Until an object
-## knows its own path it still looks anonymous, so anything referencing it gets
-## it EMBEDDED as a sub_resource instead of linked.
-##
-## That is what produced a starter.tres carrying 40 inline copies and referencing
-## none of the 35 unit files: every number tuned in the inspector was silently
-## ignored, because the loadout was reading its own private copy.
 func _save(res: Resource, path: String) -> void:
 	var err := ResourceSaver.save(res, path)
 	res.take_over_path(path)
@@ -200,6 +530,29 @@ func _save(res: Resource, path: String) -> void:
 		push_error("Failed to save %s (error %d)" % [path, err])
 	else:
 		print("  ", path)
+
+
+func _make_maps() -> void:
+	for row in MAP_TABLE:
+		var m := MapData.new()
+		m.id = row.id
+		m.display_name = row.name
+		m.width = row.w
+		m.height = row.h
+		m.has_neutral = row.neutral
+		m.note = row.get("note", "")
+		var shape: PackedStringArray = []
+		for line in row.get("rows", []):
+			shape.append(line)
+		m.rows = shape
+		var barriers: Array[Vector4i] = []
+		for e in row.get("lines", []):
+			barriers.append(Vector4i(e[0], e[1], e[2], e[3]))
+		m.lines = barriers
+		var why := m.invalid_reason()
+		if not why.is_empty():
+			push_error("Map '%s' is unusable: %s" % [row.id, why])
+		_save(m, "%s/%s.tres" % [MAP_DIR, row.id])
 
 
 func _make_abilities() -> Dictionary:
@@ -211,7 +564,14 @@ func _make_abilities() -> Dictionary:
 		a.description = row.desc
 		a.kind = AbilityData.Kind[row.kind]
 		a.cast_time = row.cast_time
-		for key in ["haste_percent", "haste_max_stacks", "shield_amount", "shield_cap",
+		for key in ["haste_percent", "haste_max_stacks",
+			"shield_percent", "shield_cap_percent",
+			"blink_base_damage", "stealth_time", "aura_percent_per_tier",
+			"aura_radius", "revive_chance", "revive_delay", "revive_hp_percent",
+			"heal_percent", "heal_percent_per_tier", "heal_radius", "summon_max",
+				"summon_count", "summon_random", "summon_cap_by_tier", "mana_aura_radius",
+				"summon_persists", "consumes_caster", "summon_adjacent",
+				"guards_caster", "summon_instacasts",
 				"dot_damage", "dot_ticks", "dot_interval", "burst_damage",
 				"splash_damage", "splash_radius", "pierce_targets", "pierce_damage_mult"]:
 			if row.has(key):
@@ -221,15 +581,33 @@ func _make_abilities() -> Dictionary:
 	return out
 
 
+var _tier_ones: Dictionary = {}
+
+
+func _link_summons(abilities: Dictionary) -> void:
+	for row in ABILITY_TABLE:
+		if not row.has("summon"):
+			continue
+		var a: AbilityData = abilities[row.id]
+		a.summon_unit = _tier_ones.get(row.summon, null)
+		if a.summon_unit == null:
+			push_error("Ability %s wants to summon '%s', which no unit row builds." % [
+				row.id, row.summon])
+		_save(a, "%s/%s.tres" % [ABILITY_DIR, row.id])
+
+
 func _make_units(abilities: Dictionary) -> LoadoutData:
 	var loadout := LoadoutData.new()
 	loadout.id = &"starter"
 	loadout.display_name = "Starter Five"
+	var roster := LoadoutData.new()
+	roster.id = &"roster"
+	roster.display_name = "Full Roster"
 	var tier_ones: Array[UnitData] = []
+	var all_playable: Array[UnitData] = []
+	_tier_ones.clear()
 
 	for row in UNIT_TABLE:
-		# Build top tier first: next_tier must already have a resource_path,
-		# or the reference gets embedded instead of linked.
 		var built: Array[UnitData] = []
 		for t in range(TIERS, 0, -1):
 			var u := UnitData.new()
@@ -240,27 +618,52 @@ func _make_units(abilities: Dictionary) -> LoadoutData:
 			u.tier = t
 			u.max_hp = snappedf(row.hp * mult_hp, 1.0)
 			u.attack_damage = snappedf(row.dmg * mult_dmg, 0.5)
-			u.attack_cooldown = row.cd
+			u.attack_speed = row.spd
 			u.move_time = row.move
-			u.attack_range = row.range
+			u.attack_range = UnitData.RangeBand[row.range]
 			u.sight_range = row.sight
 			u.attack_type = UnitData.AttackType[row.type]
 			u.accent = row.accent
+			u.note = row.get("note", "")
 			u.mana_per_attack = row.get("mana", 25.0)
+			u.mana_per_charge = row.get("regen", 0.0)
+			u.mana_charge_time = row.get("charge", 1.0)
+			u.keeps_mana = row.get("banks", false)
 			u.casts_at_battle_start = row.get("opens", false)
 			u.pierce_targets = row.get("pierce", 1)
+			u.merge_magnet = row.get("magnet", false)
+			u.beam_attack = row.get("beam", false)
+			u.wild_merge = row.get("wild", false)
+			u.can_move = not row.get("rooted", false)
+			u.can_attack = not row.get("rooted", false)
+			if t == TIERS and row.has("apex"):
+				var apex: Dictionary = row.apex
+				u.max_hp = snappedf(u.max_hp * float(apex.get("hp", 1.0)), 1.0)
+				u.attack_damage = snappedf(
+					u.attack_damage * float(apex.get("dmg", 1.0)), 0.5)
+				u.pierce_targets = apex.get("pierce", u.pierce_targets)
+				u.beam_endless = apex.get("endless", false)
+				u.beam_splash = apex.get("wash", 0.0)
+				if apex.has("range"):
+					u.attack_range = UnitData.RangeBand[apex.range]
 			if row.has("ability"):
 				u.ability = abilities[row.ability]
 			u.next_tier = built[0] if not built.is_empty() else null
 			_save(u, "%s/%s_t%d.tres" % [UNITS_DIR, row.id, t])
 			built.push_front(u)
-		tier_ones.append(built[0])
+		_tier_ones[row.id] = built[0]
+		if not row.get("hidden", false):
+			all_playable.append(built[0])
+			if tier_ones.size() < LoadoutData.DEFAULT_SIZE:
+				tier_ones.append(built[0])
 		if built[0].chain_length() != TIERS:
 			push_error("Merge chain for %s is %d long, expected %d" % [
 				row.id, built[0].chain_length(), TIERS])
 
 	loadout.units = tier_ones
 	_save(loadout, "%s/starter.tres" % LOADOUT_DIR)
+	roster.units = all_playable
+	_save(roster, "%s/roster.tres" % LOADOUT_DIR)
 	return loadout
 
 
@@ -269,13 +672,30 @@ func _make_buffs() -> void:
 		var b := BuffData.new()
 		b.id = row.id
 		b.display_name = row.name
-		b.scope = BuffData.Scope[row.scope]
+		b.kind = BuffData.Kind[row.kind]
+		b.unit_id = row.get("unit", &"")
+		var extra: Array[StringName] = []
+		for id in row.get("also", []):
+			extra.append(id)
+		b.also_units = extra
 		b.weight = row.weight
-		var mods: Array[StatModifier] = []
-		for m in row.mods:
-			mods.append(StatModifier.make(
-				StatModifier.Stat[m[0]], StatModifier.Mode[m[1]], m[2]))
-		b.modifiers = mods
+		b.bronze = row.b
+		b.silver = row.s
+		b.gold = row.g
+		if row.has("stat_a"):
+			b.stat_a = StatModifier.Stat[row.stat_a]
+		if row.has("stat_b"):
+			b.stat_b = StatModifier.Stat[row.stat_b]
+		b.uses_second_stat = row.get("two", false)
+		b.flat = row.get("flat", false)
+		b.flat_b = row.get("flat_b", false)
+		if row.has("only"):
+			b.exclusive_rarity = int(BuffData.Rarity[row.only])
+		if row.has("stat_c"):
+			b.stat_c = StatModifier.Stat[row.stat_c]
+		if row.has("three"):
+			b.third = row.three
+			b.uses_third_stat = true
 		_save(b, "%s/%s.tres" % [BUFF_DIR, row.id])
 
 

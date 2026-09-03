@@ -1,44 +1,106 @@
-## Wires the prep phase and the battle together into a playable round loop.
-##
-## This is the only script that knows about both the model and the screen. It
-## holds no rules of its own — every legality question goes to BoardModel, and
-## every combat question is already answered by the time playback starts.
-##
-## Interaction: your units arrive on the board already. Drag one to move it, drop
-## it on a twin to merge, or on another of yours to swap.
 extends Node2D
 
 const LOADOUT_PATH := "res://data/loadouts/starter.tres"
+const MENU_SCENE := "res://scenes/menu.tscn"
 const PLAYER_TEAM := BoardModel.TEAM_B
 const AI_TEAM := BoardModel.TEAM_A
+const BAR_HEIGHT := 26.0
+const BAR_GAP := 8.0
+# Every map is drawn into this slot, so the HUD around it never has to move.
+const BOARD_AREA := Rect2(108.0, 132.0, 504.0, 924.0)
+const FORCE_WIDTH := 74.0
+const FORCE_GAP := 16.0
+const ROSTER_HEIGHT := 24.0
+const ROUND_END_HOLD := 1.8
+const BATTLE_START_HOLD := 1.3
 
 @onready var _board_view: BoardView = $BoardView
 @onready var _hud: Label = $UI/Root/Hud
 @onready var _status: Label = $UI/Root/Status
 @onready var _fight_btn: Button = $UI/Root/Buttons/Fight
 @onready var _speed_btn: Button = $UI/Root/Buttons/Speed
+@onready var _menu_btn: Button = $UI/Root/Buttons/Menu
 
 var board := BoardModel.new()
 var loadout: LoadoutData
 var _player_rng := RandomNumberGenerator.new()
 var _ai_rng := RandomNumberGenerator.new()
-## The full pre-battle roster: [{unit, cell}, ...]. Everyone on it is restored
-## afterwards, dead included.
 var _roster: Array[Dictionary] = []
 var _player: BattlePlayer
 var _speeds: Array[float] = [1.0, 2.0, 4.0]
 var _speed_idx := 1
+var _buffs: BuffPool = BuffPool.new()
+var _team_buffs: Dictionary = {}
+var _buff_rng := RandomNumberGenerator.new()
+var _picker: BuffPicker = null
+var _bars: Dictionary = {}
+var _force: ForceBar = null
+var _rosters: Dictionary = {}
+var _mask: BoardMask = null
+var _last_formation: Dictionary = {}
+var _inspector: UnitInspector = null
+var _banner: Label = null
+var _handover: HandoverScreen = null
+var _loadouts: Dictionary = {}
+var _active_team := PLAYER_TEAM
+var _prep_queue: Array[int] = []
+var _pick_queue: Array[int] = []
+var _pick_rarity: BuffData.Rarity = BuffData.Rarity.BRONZE
+var _after_blind: Callable = Callable()
+var round_end_hold := ROUND_END_HOLD
+var battle_start_hold := BATTLE_START_HOLD
+var battle_running := false
+var _kept_recruits := 0
+var _spent_casters := 0
+
+
+func _pvp() -> bool:
+	return GameSetup.mode == GameSetup.Mode.LOCAL_PVP
+
+
+func _human_teams() -> Array[int]:
+	if _pvp():
+		return GameSetup.turn_order()
+	return [PLAYER_TEAM]
+
+
+func _rng_for(team: int) -> RandomNumberGenerator:
+	return _player_rng if team == PLAYER_TEAM else _ai_rng
+
+
+func _loadout_for(team: int) -> LoadoutData:
+	return _loadouts[team]
+
+
+func _blind_then(next_team: int, action: Callable) -> void:
+	if not _pvp() or _handover == null:
+		action.call()
+		return
+	_board_view.interactive = false
+	_fight_btn.disabled = true
+	_after_blind = action
+	_handover.blind(next_team)
+
+
+func _on_handover_ready() -> void:
+	var action := _after_blind
+	_after_blind = Callable()
+	_fight_btn.disabled = false
+	if action.is_valid():
+		action.call()
 
 
 func _ready() -> void:
-	# Bind the view FIRST. Every early return below leaves the board unbound
-	# otherwise, and BoardView._draw() then throws on every single frame — which
-	# buries the one message that actually explains what went wrong.
+	# The map decides the board's shape, so it has to be chosen before anything
+	# asks the board how big it is.
+	if GameSetup.maps.is_empty():
+		GameSetup.reload_maps()
+	GameSetup.apply_map()
 	_board_view.player_team = PLAYER_TEAM
+	_board_view.fit_to(BOARD_AREA)
 	_board_view.bind(board)
+	_build_board_mask()
 
-	# Say WHICH way it failed. "Missing or invalid" covers three very different
-	# problems with three different fixes, and guessing between them wastes time.
 	var raw := load(LOADOUT_PATH)
 	if raw == null:
 		_fail("Can't load %s at all — the file is missing, or its script failed to bind."
@@ -54,73 +116,303 @@ func _ready() -> void:
 			% LOADOUT_PATH)
 		return
 
+	if GameSetup.catalogue.is_empty():
+		GameSetup.reload_catalogue()
+	_loadouts = {
+		BoardModel.TEAM_A: GameSetup.loadout_for(BoardModel.TEAM_A),
+		BoardModel.TEAM_B: GameSetup.loadout_for(BoardModel.TEAM_B),
+	}
+	if not _loadout_for(PLAYER_TEAM).is_valid():
+		_fail("The chosen loadout is empty. Go back to the menu and pick units.")
+		return
+
 	_player = BattlePlayer.new()
 	add_child(_player)
 	_player.finished.connect(_on_playback_finished)
+	_player.counts_changed.connect(_on_counts_changed)
 	_board_view.cell_pressed.connect(_on_cell_pressed)
 	_board_view.drag_dropped.connect(_on_drag_dropped)
 
 	_fight_btn.pressed.connect(_on_fight_pressed)
 	_speed_btn.pressed.connect(_cycle_speed)
+	_menu_btn.pressed.connect(_on_menu_pressed)
 	_update_speed_label()
 
-	var seed_value := int(Time.get_unix_time_from_system())
-	# Merging is a lottery: two identical units produce a RANDOM type one tier up.
-	# Two Wardens can hand you an Archer II.
-	board.configure_merges(loadout.units, seed_value + 4242)
-	MatchState.start_match(seed_value, [loadout, loadout] as Array[LoadoutData])
+	_team_buffs = {
+		BoardModel.TEAM_A: TeamBuffs.new(),
+		BoardModel.TEAM_B: TeamBuffs.new(),
+	}
+	board.team_buffs = _team_buffs
+	if _buffs.load_all() == 0:
+		push_warning("No buffs in %s — buff picks will be skipped." % BuffPool.BUFF_DIR)
+
+	_build_buff_bars()
+
+	_picker = BuffPicker.new()
+	_picker.picked.connect(_on_buff_picked)
+	$UI/Root.add_child(_picker)
+
+	_handover = HandoverScreen.new()
+	_handover.ready_pressed.connect(_on_handover_ready)
+	$UI/Root.add_child(_handover)
+
+	var seed_value := (GameSetup.debug_seed if GameSetup.debug_seed != 0
+		else int(Time.get_unix_time_from_system()))
+	board.configure_merges(_loadout_for(PLAYER_TEAM).units, seed_value + 4242)
+	board.set_team_pool(BoardModel.TEAM_A, GameSetup.units_for(BoardModel.TEAM_A))
+	board.set_team_pool(BoardModel.TEAM_B, GameSetup.units_for(BoardModel.TEAM_B))
+	MatchState.start_match(seed_value, [
+		_loadout_for(BoardModel.TEAM_A), _loadout_for(BoardModel.TEAM_B),
+	] as Array[LoadoutData])
 	_player_rng.seed = seed_value
 	_ai_rng.seed = seed_value + 9001
+	_buff_rng.seed = seed_value + 77
 	_begin_prep()
 
 
-# ---------------------------------------------------------------- prep phase
+func _build_board_mask() -> void:
+	# First child of the HUD layer, so it paints over the board and under
+	# everything else the HUD draws.
+	_mask = BoardMask.new()
+	_mask.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_mask.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_mask.set_window(BOARD_AREA)
+	$UI/Root.add_child(_mask)
+	$UI/Root.move_child(_mask, 0)
+
+
+func _look_at_half(team: int) -> void:
+	if not _board_view.overflows():
+		return
+	var cells := board.deploy_cells(team)
+	if cells.is_empty():
+		return
+	var mid := 0
+	for c in cells:
+		mid += c.y
+	_board_view.centre_on(Vector2i(BoardModel.WIDTH / 2, mid / cells.size()))
+
+
+func _build_buff_bars() -> void:
+	var origin := _board_view.position
+	var span := _board_view.board_size()
+	var board_w := span.x
+	var board_h := span.y
+
+	var theirs := BuffBar.new()
+	theirs.heading = GameSetup.short_name(AI_TEAM) if _pvp() else "Theirs"
+	theirs.accent = Color(0.83, 0.63, 0.39)
+	theirs.position = Vector2(origin.x, origin.y - BAR_HEIGHT - BAR_GAP)
+	theirs.size = Vector2(board_w, BAR_HEIGHT)
+	theirs.mouse_filter = Control.MOUSE_FILTER_PASS
+	$UI/Root.add_child(theirs)
+
+	var mine := BuffBar.new()
+	mine.heading = GameSetup.short_name(PLAYER_TEAM) if _pvp() else "Yours"
+	mine.accent = Color(0.38, 0.66, 0.69)
+	mine.position = Vector2(origin.x, origin.y + board_h + BAR_GAP)
+	mine.size = Vector2(board_w, BAR_HEIGHT)
+	mine.mouse_filter = Control.MOUSE_FILTER_PASS
+	$UI/Root.add_child(mine)
+
+	_bars = {AI_TEAM: theirs, PLAYER_TEAM: mine}
+	_refresh_buff_bars()
+
+	# The force bar stands beside the board so the two horizontal slots above and
+	# below it belong to the rosters. Vertical also reads the way the board does.
+	_force = ForceBar.new()
+	_force.vertical = true
+	_force.mine_name = GameSetup.short_name(PLAYER_TEAM)
+	_force.theirs_name = GameSetup.short_name(AI_TEAM)
+	_force.position = Vector2(origin.x + board_w + FORCE_GAP, origin.y)
+	_force.size = Vector2(FORCE_WIDTH, board_h)
+	_force.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_force.visible = false
+	$UI/Root.add_child(_force)
+
+	var their_roster := RosterBar.new()
+	their_roster.heading = "%s draws" % GameSetup.short_name(AI_TEAM)
+	their_roster.accent = Color(0.83, 0.63, 0.39)
+	their_roster.position = Vector2(origin.x,
+		origin.y - BAR_HEIGHT - BAR_GAP - ROSTER_HEIGHT - 4.0)
+	their_roster.size = Vector2(board_w, ROSTER_HEIGHT)
+	their_roster.mouse_filter = Control.MOUSE_FILTER_PASS
+	$UI/Root.add_child(their_roster)
+
+	var my_roster := RosterBar.new()
+	my_roster.heading = "%s draws" % GameSetup.short_name(PLAYER_TEAM)
+	my_roster.accent = Color(0.38, 0.66, 0.69)
+	my_roster.position = Vector2(origin.x,
+		origin.y + board_h + BAR_GAP + BAR_HEIGHT + 4.0)
+	my_roster.size = Vector2(board_w, ROSTER_HEIGHT)
+	my_roster.mouse_filter = Control.MOUSE_FILTER_PASS
+	$UI/Root.add_child(my_roster)
+
+	_rosters = {AI_TEAM: their_roster, PLAYER_TEAM: my_roster}
+	_refresh_rosters()
+
+	_inspector = UnitInspector.new()
+	_inspector.bind(_board_view)
+	_inspector.unit_pressed.connect(_on_unit_inspected)
+	$UI/Root.add_child(_inspector)
+
+	_banner = Label.new()
+	_banner.position = Vector2(origin.x, origin.y + board_h * 0.5 - 34.0)
+	_banner.size = Vector2(board_w, 68.0)
+	_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_banner.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_banner.add_theme_font_size_override("font_size", 34)
+	_banner.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
+	_banner.add_theme_constant_override("shadow_offset_x", 2)
+	_banner.add_theme_constant_override("shadow_offset_y", 2)
+	_banner.visible = false
+	$UI/Root.add_child(_banner)
+
+
+func _on_counts_changed(team_a: int, team_b: int) -> void:
+	if _force == null:
+		return
+	_force.set_counts(
+		team_b if PLAYER_TEAM == BoardModel.TEAM_B else team_a,
+		team_a if PLAYER_TEAM == BoardModel.TEAM_B else team_b)
+	_refresh_hud()
+
+
+func _seed_force_bar() -> void:
+	if _force == null:
+		return
+	_force.set_counts(board.living_units_of(PLAYER_TEAM).size(),
+		board.living_units_of(AI_TEAM).size())
+	_force.visible = true
+
+
+func _hide_force_bar() -> void:
+	if _force != null:
+		_force.visible = false
+
+
+func live_count(team: int) -> int:
+	# During playback the board holds end-of-battle state, so the running tally
+	# has to come from the player, not the model.
+	if battle_running and _player != null:
+		return _player.living(team)
+	return board.living_units_of(team).size()
+
+
+func _on_unit_inspected(u: UnitInstance) -> void:
+	if u == null:
+		return
+	_status.text = UnitCodex.one_line_of(u)
+	if MatchState.phase == MatchState.Phase.PREP and u.team == _active_team:
+		_status.text += " Drag onto a twin to merge."
+
+
+func _refresh_rosters() -> void:
+	for team in _rosters:
+		var bar: RosterBar = _rosters[team]
+		bar.set_units(GameSetup.units_for(team))
+
+
+func _refresh_buff_bars() -> void:
+	var taking_turn := _pvp() and (MatchState.phase == MatchState.Phase.PREP
+		or MatchState.phase == MatchState.Phase.BUFF_PICK)
+	for team in _bars:
+		var bar: BuffBar = _bars[team]
+		bar.set_picks(_buffs_for(team).picks, _types_on_board(team))
+		bar.set_active(taking_turn and team == _active_team)
+
+
+func _types_on_board(team: int) -> Dictionary:
+	var present := {}
+	for u in board.units_of(team):
+		present[u.data.id] = true
+	return present
+
 
 func _begin_prep() -> void:
 	MatchState.set_phase(MatchState.Phase.PREP)
+	_resync_buffs()
 
-	# New units each round, summoned straight onto the board. The board filling
-	# up is the pressure that makes merging worth the loss of bodies.
-	var summoned := _summon(PLAYER_TEAM, _player_rng)
+	var placed := {}
+	for team in [BoardModel.TEAM_B, BoardModel.TEAM_A]:
+		placed[team] = _summon(team, _rng_for(team))
+	if not _pvp():
+		_ai_merge_pass()
 
-	_deploy_ai()
-	# Fog goes up for prep and comes down when the fight starts. You commit to an
-	# arrangement without seeing theirs; after that everything is visible.
-	#
-	# Worth knowing: at the end of every round you saw their whole board, so from
-	# round 2 on the fog only conceals what they CHANGED — their new draw and any
-	# merges. The intel decays on its own, which is a nicer pressure than a
-	# blackout would be.
+	_prep_queue = _human_teams()
+	_open_prep_turn(_prep_queue[0], int(placed[_prep_queue[0]]))
+
+
+func _resync_buffs() -> void:
+	for u in board.all_units():
+		_buffs_for(u.team).resync(u)
+	for team in [BoardModel.TEAM_A, BoardModel.TEAM_B]:
+		board.set_wild_merge(team, _buffs_for(team).wild_merge())
+
+
+func _open_prep_turn(team: int, placed := -1) -> void:
+	_hide_force_bar()
+	_look_at_half(team)
+	_active_team = team
+	_board_view.player_team = team
+	_board_view.set_ghosts(_last_formation.get(BoardModel.enemy_of(team), []))
 	_board_view.set_fog(true)
 	_board_view.interactive = true
+	_board_view.rebuild()
 	_board_view.sync_positions()
+	_fight_btn.disabled = false
+	_fight_btn.text = "Fight" if _prep_queue.size() <= 1 else "Done"
 	_refresh_hud()
-	_report_summon(summoned)
+	_refresh_buff_bars()
+	if placed >= 0:
+		_report_summon(placed)
+	else:
+		_status.text = "%s — arrange your half, then press %s." % [
+			GameSetup.team_name(team), _fight_btn.text]
 
 
-## Drops this round's draw onto free tiles in `team`'s half, at random.
-##
-## Returns how many actually landed. A full half takes fewer than it drew, and
-## the difference is the player's problem to solve by merging — see
-## _report_summon().
+func _finish_prep_turn() -> void:
+	if board.living_units_of(_active_team).is_empty():
+		_status.text = "Place at least one unit first."
+		return
+	_prep_queue.pop_front()
+	if _prep_queue.is_empty():
+		_start_battle()
+		return
+	var next: int = _prep_queue[0]
+	_blind_then(next, _open_prep_turn.bind(next, -1))
+
+
+func _draw_size(team: int) -> int:
+	var tb := _buffs_for(team)
+	if tb.skip_draws > 0:
+		tb.skip_draws -= 1
+		return 0
+	return maxi(MatchState.UNITS_PER_DRAW + tb.extra_draw(), 0)
+
+
 func _summon(team: int, rng: RandomNumberGenerator) -> int:
-	var drawn := loadout.draw(rng, MatchState.UNITS_PER_DRAW)
+	var drawn := _loadout_for(team).draw(rng, _draw_size(team))
 	var placed := 0
 	for d in drawn:
 		var free := board.free_deploy_cells(team)
 		if free.is_empty():
 			break
 		var cell: Vector2i = free[rng.randi_range(0, free.size() - 1)]
-		if board.place(UnitInstance.create(d, team), cell):
+		var u := UnitInstance.create(d, team)
+		_buffs_for(team).apply_to(u)
+		if board.place(u, cell):
 			placed += 1
 	return placed
 
 
-## Units that couldn't fit are LOST, not held over. Saying so plainly matters —
-## silently dropping them would read as a bug, and the whole point of the
-## pressure is that you feel it.
 func _report_summon(placed: int) -> void:
-	var wanted := MatchState.UNITS_PER_DRAW
+	var wanted := maxi(MatchState.UNITS_PER_DRAW
+		+ _buffs_for(_active_team).extra_draw(), 0)
+	if placed == 0 and wanted > 0 and board.units_of(_active_team).size() > 0:
+		_status.text = "No draw this round — you took the tier 3 gift. Arrange what you have."
+		return
 	if placed == wanted:
 		_status.text = "%d units arrived. Arrange them, then Fight." % placed
 	elif placed > 0:
@@ -130,17 +422,12 @@ func _report_summon(placed: int) -> void:
 		_status.text = "Your half is full, so this round's draw was lost entirely. Merge."
 
 
-## Stand-in opponent so there's something to play against. Replace this with a
-## real second player or a proper AI once you've decided PvP vs PvE.
-func _deploy_ai() -> void:
-	_summon(AI_TEAM, _ai_rng)
-	# Then merge opportunistically, so the AI board escalates the way yours would.
+func _ai_merge_pass() -> void:
 	for i in MatchState.UNITS_PER_DRAW:
 		if not _ai_merge_once():
 			break
 
 
-## Merges the first matching pair it finds. Returns false when none is left.
 func _ai_merge_once() -> bool:
 	var mine := board.units_of(AI_TEAM)
 	for a in mine:
@@ -151,19 +438,13 @@ func _ai_merge_once() -> bool:
 	return false
 
 
-## Nothing is placed by clicking any more — units arrive on the board and are
-## rearranged by dragging. A tap just reads out what's on the tile.
 func _on_cell_pressed(cell: Vector2i) -> void:
 	if MatchState.phase != MatchState.Phase.PREP:
 		return
 	var u := board.unit_at(cell)
-	if u == null or u.team != PLAYER_TEAM:
+	if u == null or u.team != _active_team:
 		return
-	_status.text = "%s — %d hp, %d damage. Drag onto a twin to merge." % [
-		u.data.display_name,
-		roundi(u.stat(StatModifier.Stat.MAX_HP)),
-		roundi(u.stat(StatModifier.Stat.ATTACK_DAMAGE)),
-	]
+	_status.text = "%s Drag onto a twin to merge." % UnitCodex.one_line_of(u)
 
 
 func _on_drag_dropped(from: Vector2i, to: Vector2i) -> void:
@@ -172,12 +453,12 @@ func _on_drag_dropped(from: Vector2i, to: Vector2i) -> void:
 		return
 	var mover := board.unit_at(from)
 	var target := board.unit_at(to)
-	if mover == null or mover.team != PLAYER_TEAM:
+	if mover == null or mover.team != _active_team:
 		_board_view.sync_positions()
 		return
 
 	if target == null:
-		if board.can_deploy(PLAYER_TEAM, to):
+		if board.can_deploy(_active_team, to):
 			board.move_unit(mover, to)
 			_after_board_change("Moved.")
 		else:
@@ -186,131 +467,414 @@ func _on_drag_dropped(from: Vector2i, to: Vector2i) -> void:
 
 	if board.can_merge(mover, target):
 		board.merge(mover, target, to)
-		_after_board_change("Merged — rolled %s." % board.unit_at(to).data.display_name)
-	elif target.team == PLAYER_TEAM:
+		var note := _proc_note()
+		_after_board_change("Merged — rolled %s.%s" % [
+			board.unit_at(to).data.display_name, note])
+		_celebrate_merge(to)
+		_show_merge_procs(to)
+	elif target.team == _active_team:
 		board.swap_cells(from, to)
 		_after_board_change("Swapped.")
 	else:
 		_after_board_change("That's not your unit.")
 
 
+func _proc_note() -> String:
+	var procs := board.last_merge_procs
+	var parts: PackedStringArray = []
+	if procs.get("extra_tier", false):
+		parts.append("Promotion pushed it up a tier!")
+	if procs.get("extra_unit", null) != null:
+		var extra: UnitInstance = procs.extra_unit
+		parts.append("Windfall summoned a %s!" % extra.data.display_name)
+	if parts.is_empty():
+		return ""
+	return " " + " ".join(parts)
+
+
+func _celebrate_merge(at: Vector2i) -> void:
+	# Must run after _after_board_change: that rebuilds every view, which would
+	# throw away a pop set on the old one.
+	var made := board.unit_at(at)
+	if made == null:
+		return
+	var pos := _board_view.cell_to_pos(at)
+	_board_view.flash_cells([at], Color(1.0, 0.88, 0.52, 0.55), 0.45)
+	_board_view.spawn_label(pos, "T%d" % made.data.tier, Color(1.0, 0.92, 0.62))
+	var v := _board_view.view_for(made.uid)
+	if v != null:
+		v.merge_pop()
+
+
+func _show_merge_procs(at: Vector2i) -> void:
+	var procs := board.last_merge_procs
+	if procs.get("extra_tier", false):
+		_board_view.flash_cells([at], Color(1.0, 0.84, 0.35, 0.65), 0.9)
+		_board_view.spawn_label(_board_view.cell_to_pos(at), "PROMOTION!",
+			Color(1.0, 0.86, 0.40))
+	if procs.get("extra_unit", null) != null:
+		var extra: UnitInstance = procs.extra_unit
+		_board_view.flash_cells([extra.cell], Color(0.55, 0.88, 0.62, 0.65), 0.9)
+		_board_view.spawn_label(_board_view.cell_to_pos(extra.cell), "WINDFALL!",
+			Color(0.58, 0.92, 0.66))
+
+
 func _after_board_change(message: String) -> void:
 	_board_view.rebuild()
 	_refresh_hud()
+	_refresh_buff_bars()
 	_status.text = message
 
-
-# ---------------------------------------------------------------- battle
 
 func _on_fight_pressed() -> void:
 	match MatchState.phase:
 		MatchState.Phase.PREP:
-			_start_battle()
+			_finish_prep_turn()
 		MatchState.Phase.ROUND_END, MatchState.Phase.BUFF_PICK:
 			_next_round()
 		MatchState.Phase.MATCH_END:
-			get_tree().reload_current_scene()
+			get_tree().change_scene_to_file(MENU_SCENE)
 		_:
 			pass
 
 
 func _next_round() -> void:
 	MatchState.advance_round()
-	if MatchState.phase == MatchState.Phase.BUFF_PICK:
-		# Milestone 15 lands here: offer three weighted picks from res://data/buffs
-		# and call apply_modifiers() on the chosen unit or the whole roster.
-		# Until then the phase is real but passes straight through.
-		_status.text = "A buff pick is due this round — not built yet, skipping."
+	if MatchState.phase == MatchState.Phase.BUFF_PICK and not _buffs.buffs.is_empty():
+		_open_buff_pick()
+		return
 	_begin_prep()
 
 
-func _start_battle() -> void:
-	if board.living_units_of(PLAYER_TEAM).is_empty():
-		_status.text = "Place at least one unit first."
-		return
+func _buffs_for(team: int) -> TeamBuffs:
+	return _team_buffs[team]
 
+
+func _open_buff_pick() -> void:
+	_pick_rarity = MatchState.roll_rarity(_buff_rng)
+	_pick_queue = _human_teams()
+	_show_picker_for(_pick_queue[0])
+
+
+func _show_picker_for(team: int) -> void:
+	var options := _buffs.offer(_buff_rng, BuffPool.OPTIONS, _taken_ids(team),
+		_fielded_ids(team), _pick_rarity)
+	if options.is_empty():
+		_finish_buff_pick()
+		return
+	_active_team = team
 	_board_view.interactive = false
+	_fight_btn.disabled = true
+	_status.text = "%s buff — %s picks one." % [
+		BuffData.rarity_name(_pick_rarity), GameSetup.team_name(team)]
+	_refresh_hud()
+	_refresh_buff_bars()
+	_picker.open(options, _pick_rarity, MatchState.round_index,
+		_odds_note(_pick_rarity), GameSetup.team_name(team) if _pvp() else "")
+
+
+func _finish_buff_pick() -> void:
+	if not _pick_queue.is_empty():
+		var next: int = _pick_queue[0]
+		_blind_then(next, _show_picker_for.bind(next))
+		return
+	if not _pvp():
+		_ai_pick_buff(_pick_rarity)
+	_fight_btn.disabled = false
+	_begin_prep()
+
+
+func _odds_note(_rolled: BuffData.Rarity) -> String:
+	return "Odds this round —  %s" % RarityTable.describe(MatchState.buff_pick_number())
+
+
+func _fielded_ids(team: int) -> Dictionary:
+	var out := {}
+	for u in GameSetup.units_for(team):
+		out[u.id] = true
+	return out
+
+
+func _taken_ids(team: int) -> Array:
+	var out: Array = []
+	for p in _buffs_for(team).picks:
+		out.append(p.buff.id)
+	return out
+
+
+func _on_buff_picked(buff: BuffData, rarity: int) -> void:
+	var team: int = _pick_queue.pop_front() if not _pick_queue.is_empty() else PLAYER_TEAM
+	_grant(team, buff, rarity as BuffData.Rarity)
+	var taker := GameSetup.team_name(team)
+	_finish_buff_pick()
+	_status.text = "%s took %s %s. %s" % [
+		taker, BuffData.rarity_name(rarity as BuffData.Rarity), buff.display_name,
+		buff.describe(rarity as BuffData.Rarity)]
+
+
+func _ai_pick_buff(rarity: BuffData.Rarity) -> void:
+	var options := _buffs.offer(_buff_rng, BuffPool.OPTIONS, _taken_ids(AI_TEAM),
+		_fielded_ids(AI_TEAM), rarity)
+	if options.is_empty():
+		return
+	_grant(AI_TEAM, options[_buff_rng.randi_range(0, options.size() - 1)], rarity)
+
+
+func _grant(team: int, buff: BuffData, rarity: BuffData.Rarity) -> void:
+	var tb := _buffs_for(team)
+	tb.add(buff, rarity)
+	for u in board.units_of(team):
+		tb.apply_last_to(u)
+	board.set_wild_merge(team, tb.wild_merge())
+	_fire_one_shot(team, buff, rarity)
+	_refresh_buff_bars()
+
+
+func _fire_one_shot(team: int, buff: BuffData, rarity: BuffData.Rarity) -> void:
+	match buff.kind:
+		BuffData.Kind.BOARD_FILL:
+			_fill_half(team)
+		BuffData.Kind.TIER_GIFT:
+			_gift_units(team, buff.magnitude(rarity))
+			_buffs_for(team).skip_draws += 1
+		BuffData.Kind.SACRIFICE:
+			_sacrifice_highest(team)
+
+
+func _fill_half(team: int) -> int:
+	var made := 0
+	var rng := _rng_for(team)
+	while true:
+		var free := board.free_deploy_cells(team)
+		if free.is_empty():
+			break
+		var pick := _loadout_for(team).draw_one(rng)
+		if pick == null:
+			break
+		var u := UnitInstance.create(pick, team)
+		_buffs_for(team).apply_to(u)
+		if not board.place(u, free[rng.randi_range(0, free.size() - 1)]):
+			break
+		made += 1
+	_board_view.rebuild()
+	return made
+
+
+func _gift_units(team: int, spec: Vector2) -> int:
+	var count := roundi(spec.x)
+	var tier := maxi(roundi(spec.y), 1)
+	var rng := _rng_for(team)
+	var made := 0
+	for i in count:
+		var free := board.free_deploy_cells(team)
+		if free.is_empty():
+			break
+		var base := _loadout_for(team).draw_one(rng)
+		if base == null:
+			break
+		var shape := BoardModel.at_tier(base, tier)
+		if shape == null:
+			shape = base
+		var u := UnitInstance.create(shape, team)
+		_buffs_for(team).apply_to(u)
+		if board.place(u, free[rng.randi_range(0, free.size() - 1)]):
+			made += 1
+	_board_view.rebuild()
+	return made
+
+
+static func sacrifice_yield(tier: int) -> int:
+	return clampi((tier + 1) / 2, 1, 3)
+
+
+func _sacrifice_highest(team: int) -> int:
+	var best: UnitInstance = null
+	for u in board.units_of(team):
+		if best == null or u.data.tier > best.data.tier:
+			best = u
+	if best == null:
+		return 0
+	var steps := sacrifice_yield(best.data.tier)
+	var altar := best.cell
+	board.remove(best)
+	for u in board.units_of(team):
+		for i in steps:
+			if u.data.is_max_tier():
+				break
+			u.promote_to(u.data.next_tier, [] as Array[StatModifier])
+		_buffs_for(team).resync(u)
+	_board_view.rebuild()
+	_board_view.flash_cells([altar], Color(0.92, 0.72, 0.35, 0.7), 1.0)
+	_board_view.spawn_label(_board_view.cell_to_pos(altar), "SACRIFICE",
+		Color(0.95, 0.78, 0.42))
+	return steps
+
+
+func _start_battle() -> void:
+	_board_view.interactive = false
+	_board_view.player_team = PLAYER_TEAM
+	battle_running = false
+	_resync_buffs()
 	MatchState.set_phase(MatchState.Phase.BATTLE)
 	_fight_btn.disabled = true
 
-	# Everyone who is about to fight, and where they stood. The whole roster comes
-	# back after the battle — see _restore_roster().
 	_roster.clear()
 	for u in board.all_units():
 		_roster.append({unit = u, cell = u.cell})
 
 	_last_sim = CombatSim.new()
+	_last_sim.team_buffs = _team_buffs
 	_last_sim.setup(board, MatchState.round_seed())
 	EventBus.battle_started.emit(MatchState.round_seed())
 
-	# Order matters here. setup() has reset everyone but killed nobody, so the
-	# board still holds the FULL starting roster — build the views now.
-	#
-	# Rebuilding after run() instead would only ever create views for the
-	# survivors, and every unit that died would simply never appear. The reveal
-	# is also the moment the fog comes down.
 	_board_view.set_fog(false)
 	_board_view.rebuild()
 	_board_view.flash_cells(board.deploy_cells(AI_TEAM),
 		Color(0.55, 0.68, 0.80, 0.45), 0.55)
+	_fight_btn.text = "Fight"
 
 	_pending_winner = _last_sim.run()
+	_absorb_recruits()
 	_pending_duration = _last_sim.duration()
 	_player.speed = _speeds[_speed_idx]
-	_player.play(_board_view, _last_sim.events)
+	_seed_force_bar()
 	_refresh_hud()
+	_show_ready_banner()
+	_status.text = "Both sides are set. Steady..."
+	await get_tree().create_timer(maxf(battle_start_hold, 0.01)).timeout
+	if not is_inside_tree() or MatchState.phase != MatchState.Phase.BATTLE:
+		return
+	if _banner != null:
+		_banner.visible = false
+	battle_running = true
+	_player.play(_board_view, _last_sim.events, _last_sim.unit_map())
 	_status.text = "Fighting..."
 
 
-## Held for the whole of playback: it owns the UnitInstances of the fallen,
-## which the event log still refers to after the board has dropped them.
+func _show_ready_banner() -> void:
+	if _banner == null:
+		return
+	_banner.text = "READY..."
+	_banner.add_theme_color_override("font_color", Color(0.88, 0.90, 0.95))
+	_banner.visible = true
+
+
 var _last_sim: CombatSim = null
 var _pending_winner := CombatSim.RESULT_DRAW
 var _pending_duration := 0.0
 
 
 func _on_playback_finished(_winner: int) -> void:
+	battle_running = false
+	_show_banner()
+	_status.text = "%s Holding the board..." % _outcome_line()
+	await get_tree().create_timer(maxf(round_end_hold, 0.01)).timeout
+	if not is_inside_tree():
+		return
+	_conclude_round()
+
+
+func _outcome_line() -> String:
+	if _pending_winner < 0:
+		return "Both sides wiped out. Draw."
+	var loser := BoardModel.enemy_of(_pending_winner)
+	return "%s's last unit falls — %s takes the round." % [
+		GameSetup.team_name(loser), GameSetup.team_name(_pending_winner)]
+
+
+func _show_banner() -> void:
+	if _banner == null:
+		return
+	if _pending_winner >= 0 and _pvp():
+		_banner.text = "%s WINS" % GameSetup.team_name(_pending_winner).to_upper()
+		_banner.add_theme_color_override("font_color",
+			HandoverScreen.team_tint(_pending_winner))
+	elif _pending_winner == PLAYER_TEAM:
+		_banner.text = "ROUND WON"
+		_banner.add_theme_color_override("font_color", Color(0.52, 0.84, 0.56))
+	elif _pending_winner == AI_TEAM:
+		_banner.text = "ROUND LOST"
+		_banner.add_theme_color_override("font_color", Color(0.88, 0.42, 0.38))
+	else:
+		_banner.text = "DRAW"
+		_banner.add_theme_color_override("font_color", Color(0.82, 0.80, 0.62))
+	_banner.visible = true
+
+
+func _conclude_round() -> void:
+	if _banner != null:
+		_banner.visible = false
 	_restore_roster()
+	_record_formations()
 	EventBus.battle_finished.emit(_pending_winner, _pending_duration)
 
 	var label := "Draw."
-	if _pending_winner == PLAYER_TEAM:
-		label = "You won the round."
-	elif _pending_winner == AI_TEAM:
-		label = "You lost the round."
+	if _pending_winner >= 0:
+		label = "%s won the round." % GameSetup.team_name(_pending_winner)
 	MatchState.record_round(_pending_winner)
 
 	_board_view.rebuild()
 	_refresh_hud()
+	_refresh_buff_bars()
 	_fight_btn.disabled = false
 
 	if MatchState.is_match_over():
-		var champ := "You win the match." if MatchState.match_winner() == PLAYER_TEAM else "You lose the match."
-		_status.text = "%s %s Click Restart." % [label, champ]
-		_fight_btn.text = "Restart"
+		var champ := "%s wins the match." % GameSetup.team_name(MatchState.match_winner())
+		_status.text = "%s %s Back to the menu?" % [label, champ]
+		_fight_btn.text = "Menu"
 		MatchState.set_phase(MatchState.Phase.MATCH_END)
 	else:
-		_status.text = "%s Click Next Round." % label
+		_status.text = "%s%s Click Next Round." % [label, _recruit_note()]
 		_fight_btn.text = "Next Round"
 
 
-## Restores the ENTIRE pre-battle roster — the fallen included — healed and back
-## on their own tiles.
-##
-## Losing a round therefore costs a life and nothing else. Letting the dead stay
-## dead compounds: the side that loses round one fields fewer units in round two,
-## loses harder, and the match is decided long before anyone runs out of lives.
-## Every round now starts as a fresh test of the arrangement.
+func _recruit_note() -> String:
+	var n: int = _last_sim.recruits().size() if _last_sim != null else 0
+	if n <= 0:
+		return ""
+	return " Your Spires spent themselves and raised %d unit%s — yours from now on." % [
+		n, "" if n == 1 else "s"]
+
+
+func _absorb_recruits() -> void:
+	# A Spire's host joins the roster for good. Their battle cell is meaningless
+	# next round — they get a fresh place in their own half, which persist_room()
+	# already guaranteed exists. The Spire that raised them is spent, so it drops
+	# out of the roster in the same pass.
+	var kept: Array[Dictionary] = []
+	var spent := 0
+	for entry in _roster:
+		var u: UnitInstance = entry.unit
+		if u.consumed:
+			spent += 1
+			continue
+		kept.append(entry)
+	for entry in _last_sim.recruits():
+		var u: UnitInstance = entry.unit
+		kept.append({unit = u, cell = Vector2i(-1, -1)})
+	_roster = kept
+	_kept_recruits += _last_sim.recruits().size()
+	_spent_casters += spent
+
+
+func _record_formations() -> void:
+	# Taken after the roster is restored, so a Spire that spent itself is already
+	# gone and the units it raised are already in. This is what the other player
+	# sees through the fog next round.
+	for team in [BoardModel.TEAM_A, BoardModel.TEAM_B]:
+		var seen: Array[Dictionary] = []
+		for u in board.units_of(team):
+			seen.append({data = u.data, cell = u.cell})
+		_last_formation[team] = seen
+
+
 func _restore_roster() -> void:
 	board.clear()
 	for entry in _roster:
 		var u: UnitInstance = entry.unit
-		u.state = UnitInstance.State.IDLE
-		u.state_timer = 0.0
-		u.target = null
-		u.heal_to_full()
+		u.reset_for_battle()
 		var home: Vector2i = entry.cell
-		if board.in_bounds(home) and board.is_empty(home):
+		if board.in_bounds(home) and board.is_empty(home) and board.can_deploy(u.team, home):
 			board.force_place(u, home)
 		else:
 			var free := board.free_deploy_cells(u.team)
@@ -318,7 +882,9 @@ func _restore_roster() -> void:
 				board.force_place(u, free[0])
 
 
-# ---------------------------------------------------------------- chrome
+func _on_menu_pressed() -> void:
+	get_tree().change_scene_to_file(MENU_SCENE)
+
 
 func _cycle_speed() -> void:
 	_speed_idx = (_speed_idx + 1) % _speeds.size()
@@ -331,30 +897,30 @@ func _update_speed_label() -> void:
 
 
 func _refresh_hud() -> void:
-	var you: int = MatchState.wins[PLAYER_TEAM]
-	var them: int = MatchState.wins[AI_TEAM]
-	# The enemy count is the one thing the fog is allowed to leak, and only when
-	# FOG_SHOWS_COUNT says so. Everything else about their half stays unknown.
-	var theirs := "?"
-	if not _board_view.fog or BoardView.FOG_SHOWS_COUNT:
-		theirs = str(board.living_units_of(AI_TEAM).size())
-	_hud.text = "Round %d  ·  %s  ·  You %d – %d Opponent  ·  board %d v %s" % [
-		MatchState.round_index, MatchState.phase_name(), you, them,
-		board.living_units_of(PLAYER_TEAM).size(), theirs,
+	var first := BoardModel.TEAM_B
+	var second := BoardModel.TEAM_A
+	var counts := {}
+	for team: int in [first, second]:
+		var hidden: bool = _board_view.fog and team != _board_view.player_team
+		counts[team] = ("?" if hidden and not BoardView.FOG_SHOWS_COUNT
+			else str(live_count(team)))
+
+	_hud.text = "%s  ·  Round %d  ·  %s\n%s %d – %d %s   ·   board %s v %s" % [
+		GameSetup.mode_name(), MatchState.round_index, MatchState.phase_name(),
+		GameSetup.team_name(first), MatchState.wins[first],
+		MatchState.wins[second], GameSetup.team_name(second),
+		counts[first], counts[second],
 	]
-	if MatchState.phase == MatchState.Phase.PREP:
-		_fight_btn.text = "Fight"
+	if _pvp() and MatchState.phase == MatchState.Phase.PREP:
+		_hud.text += "   ·   %s is arranging" % GameSetup.team_name(_active_team)
 
 
-## One place for setup failures: on screen where you'll see it, and in the
-## Output panel where you can copy it.
+
 func _fail(message: String) -> void:
 	_status.text = message
 	push_error(message)
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
-	# Handy while testing: dump the board to the Output panel and trust it over
-	# the screen. If the two disagree, the screen is the one that's wrong.
 	if event is InputEventKey and event.pressed and event.keycode == KEY_F1:
 		print(board.to_ascii())

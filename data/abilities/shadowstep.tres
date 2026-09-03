@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_bdsac"]
+
+[resource]
+script = ExtResource("1_bdsac")
+id = &"shadowstep"
+display_name = "Shadowstep"
+description = "Blinks behind a target, strikes for damage that doubles every tier, then cannot be found."
+kind = 5
+cast_time = 0.35

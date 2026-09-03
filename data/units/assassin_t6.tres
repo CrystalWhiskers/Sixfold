@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/abilities/shadowstep.tres" id="1_np3av"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_bp8y7"]
+
+[resource]
+script = ExtResource("2_bp8y7")
+id = &"assassin"
+display_name = "Assassin VI"
+tier = 6
+max_hp = 1920.0
+attack_damage = 384.0
+attack_speed = 1.2
+move_time = 0.34
+sight_range = 6
+ability = ExtResource("1_np3av")
+casts_at_battle_start = true
+note = "Opens behind someone, hits once for a fortune, then nobody can find it."
+accent = Color(0.42, 0.3, 0.48, 1)

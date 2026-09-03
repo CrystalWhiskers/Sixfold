@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_ns81n"]
+
+[resource]
+script = ExtResource("1_ns81n")
+id = &"conflagration"
+display_name = "Conflagration"
+unit_id = &"pyre"
+bronze = Vector2(0.4, 0.1)
+silver = Vector2(0.8, 0.2)
+gold = Vector2(1.6, 0.4)
+stat_b = 2
+uses_second_stat = true

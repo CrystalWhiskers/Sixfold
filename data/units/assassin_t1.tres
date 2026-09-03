@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/abilities/shadowstep.tres" id="1_5bpp1"]
+[ext_resource type="Resource" path="res://data/units/assassin_t2.tres" id="2_bhlag"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_t8h8s"]
+
+[resource]
+script = ExtResource("3_t8h8s")
+id = &"assassin"
+display_name = "Assassin"
+max_hp = 60.0
+attack_damage = 12.0
+attack_speed = 1.2
+move_time = 0.34
+sight_range = 6
+ability = ExtResource("1_5bpp1")
+casts_at_battle_start = true
+next_tier = ExtResource("2_bhlag")
+note = "Opens behind someone, hits once for a fortune, then nobody can find it."
+accent = Color(0.42, 0.3, 0.48, 1)

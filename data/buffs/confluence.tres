@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_2hgd0"]
+
+[resource]
+script = ExtResource("1_2hgd0")
+id = &"confluence"
+display_name = "Confluence"
+unit_id = &"wellspring"
+bronze = Vector2(3, 0.3)
+silver = Vector2(6, 0.6)
+gold = Vector2(9, 0.9)
+stat_a = 10
+stat_b = 0
+uses_second_stat = true
+flat = true

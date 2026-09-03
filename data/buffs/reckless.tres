@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_cp0mu"]
+
+[resource]
+script = ExtResource("1_cp0mu")
+id = &"reckless"
+display_name = "Reckless"
+bronze = Vector2(0.6, 0.2)
+silver = Vector2(0.9, 0.15)
+gold = Vector2(1.2, 0.1)
+stat_b = 8
+uses_second_stat = true

@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_iry0p"]
+
+[resource]
+script = ExtResource("1_iry0p")
+id = &"shadowcraft"
+display_name = "Shadowcraft"
+unit_id = &"assassin"
+bronze = Vector2(0.1, 0.15)
+silver = Vector2(0.2, 0.3)
+gold = Vector2(0.4, 0.6)
+stat_a = 2
+uses_second_stat = true

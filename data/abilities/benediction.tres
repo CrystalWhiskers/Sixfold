@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_hfp08"]
+
+[resource]
+script = ExtResource("1_hfp08")
+id = &"benediction"
+display_name = "Benediction"
+description = "A heavy burst of healing on whoever nearby is hurt worst. Bigger every tier."
+kind = 8
+cast_time = 0.28

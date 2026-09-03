@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="1_e5xbs"]
+
+[resource]
+script = ExtResource("1_e5xbs")
+id = &"effigy"
+display_name = "Effigy VI"
+tier = 6
+max_hp = 21120.0
+attack_damage = 2816.0
+attack_speed = 0.7
+move_time = 0.62
+attack_range = 5
+attack_type = 1
+mana_per_attack = 0.0
+pierce_targets = 99
+merge_magnet = true
+accent = Color(0.58, 0.56, 0.44, 1)

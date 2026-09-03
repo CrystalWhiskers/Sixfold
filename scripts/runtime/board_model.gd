@@ -1,65 +1,175 @@
-## The 6x11 grid as pure data. No nodes, no drawing, no engine dependencies
-## beyond Vector2i — which is why the whole game can be simulated headless.
-##
-## Row 5 is neutral: nobody deploys there, everybody has to cross it.
-## Because HEIGHT is odd, mirror() maps that row to itself, so a mirror matchup
-## is exactly symmetric. That makes it a reliable balance canary — if a mirror
-## matchup doesn't sit near 50%, you have a bug, not a tuning problem.
 class_name BoardModel
 extends RefCounted
 
-const WIDTH := 6
-const HEIGHT := 11
-const NEUTRAL_ROW := HEIGHT / 2  ## Integer division -> 5.
+# The board's shape is chosen per match, so these are static rather than const.
+# One board is live at a time; use_map() sets them and reset_map() puts the
+# default back, which is what every test starts from.
+const DEFAULT_WIDTH := 6
+const DEFAULT_HEIGHT := 11
 
-const TEAM_A := 0  ## Deploys rows 0..4 (top).
-const TEAM_B := 1  ## Deploys rows 6..10 (bottom).
+static var WIDTH := DEFAULT_WIDTH
+static var HEIGHT := DEFAULT_HEIGHT
+static var NEUTRAL_ROW := DEFAULT_HEIGHT / 2
+static var HAS_NEUTRAL := true
+static var map_name := "Standard"
 
-## Units step to one ORTHOGONALLY adjacent tile at a time. No diagonals.
+# Terrain follows the dimensions: one board is live, so one set of tables.
+static var _walls: Dictionary = {}
+static var _voids: Dictionary = {}
+static var _high: Dictionary = {}
+static var _edges: Dictionary = {}
+
+const TEAM_A := 0
+const TEAM_B := 1
+
 const DIAGONAL_MOVEMENT := false
 
-## Whether distance — and therefore every attack range — counts diagonals as 1.
-##
-## Kept separate from movement on purpose, because they answer different
-## questions. With both false the grid is strict: a melee unit cannot hit the
-## enemy standing diagonally beside it, because that tile is two steps away.
-## Setting this true while movement stays false gives units diagonal reach they
-## can't step into — common in roguelikes, and a real design choice rather than
-## an oversight. Changing it rescales every range in the game at once.
 const DIAGONAL_RANGE := false
 
-## Whether a merged unit keeps the modifiers its two inputs were carrying.
-## Balance decision, deliberately surfaced as a constant:
-##   false — merging is a clean reset; buffs are a reason NOT to merge.
-##   true  — merging compounds; buffed units snowball.
 const MERGE_INHERITS_BUFFS := false
 
-var _cells: Dictionary = {}  ## Vector2i -> UnitInstance
-var _sorted: Array[UnitInstance] = []  ## all_units() cache, uid order.
+var _cells: Dictionary = {}
+var _sorted: Array[UnitInstance] = []
 var _sorted_dirty := true
 
-## The merge lottery. Two identical units still merge, but WHAT comes out is
-## drawn at random from this pool at one tier up — two Wardens can hand you an
-## Archer II. Set it to the loadout's tier-1 units via configure_merges().
-##
-## Leave it empty and merging falls back to deterministic promotion along
-## next_tier, which is what the tests for the merge chain rely on.
 var merge_pool: Array[UnitData] = []
+var team_merge_pools: Dictionary = {}
+var wild_merge_teams: Dictionary = {}
+var team_buffs: Dictionary = {}
+var last_merge_procs: Dictionary = {}
 var merge_rng := RandomNumberGenerator.new()
 
 
-# ---------------------------------------------------------------- queries
+static func use_map(m: MapData) -> void:
+	if m == null or not m.is_valid():
+		reset_map()
+		return
+	WIDTH = m.width
+	HEIGHT = m.height
+	HAS_NEUTRAL = m.has_neutral
+	NEUTRAL_ROW = HEIGHT / 2
+	map_name = m.display_name
+	_walls = {}
+	_voids = {}
+	_high = {}
+	_edges = m.edge_keys()
+	for y in HEIGHT:
+		for x in WIDTH:
+			var c := Vector2i(x, y)
+			if m.is_wall(c):
+				_walls[c] = true
+			elif m.is_void(c):
+				_voids[c] = true
+			elif m.is_high(c):
+				_high[c] = true
+
+
+static func reset_map() -> void:
+	WIDTH = DEFAULT_WIDTH
+	HEIGHT = DEFAULT_HEIGHT
+	HAS_NEUTRAL = true
+	NEUTRAL_ROW = DEFAULT_HEIGHT / 2
+	map_name = "Standard"
+	_walls = {}
+	_voids = {}
+	_high = {}
+	_edges = {}
+
+
+static func first_row(team: int) -> int:
+	if team == TEAM_A:
+		return 0
+	return NEUTRAL_ROW + (1 if HAS_NEUTRAL else 0)
+
+
+static func last_row(team: int) -> int:
+	return NEUTRAL_ROW if team == TEAM_A else HEIGHT
+
 
 func in_bounds(c: Vector2i) -> bool:
 	return c.x >= 0 and c.x < WIDTH and c.y >= 0 and c.y < HEIGHT
 
 
+static func is_wall(c: Vector2i) -> bool:
+	return _walls.has(c)
+
+
+static func is_void(c: Vector2i) -> bool:
+	return _voids.has(c)
+
+
+static func is_high(c: Vector2i) -> bool:
+	return _high.has(c)
+
+
+static func is_blocked(c: Vector2i) -> bool:
+	return _walls.has(c) or _voids.has(c)
+
+
+static func is_playable(c: Vector2i) -> bool:
+	return (c.x >= 0 and c.x < WIDTH and c.y >= 0 and c.y < HEIGHT
+		and not is_blocked(c))
+
+
+static func blocks_sight(c: Vector2i) -> bool:
+	# Solid walls stop a shot. Holes in the board do not — you can fire across a
+	# gap, you just cannot stand in it. Barriers are waist-high: they stop bodies
+	# and nothing else.
+	return _walls.has(c)
+
+
+static func line_of_fire(from: Vector2i, to: Vector2i) -> bool:
+	if from == to or _walls.is_empty():
+		return true
+	# Walk the line from a fixed end, so "A can shoot B" and "B can shoot A" can
+	# never disagree over a tie.
+	var a := from
+	var b := to
+	if b.y < a.y or (b.y == a.y and b.x < a.x):
+		a = to
+		b = from
+
+	var dx := absi(b.x - a.x)
+	var dy := absi(b.y - a.y)
+	var sx := signi(b.x - a.x)
+	var sy := signi(b.y - a.y)
+	var x := a.x
+	var y := a.y
+	var err := dx - dy
+	while true:
+		var c := Vector2i(x, y)
+		if c != a and c != b and blocks_sight(c):
+			return false
+		if c == b:
+			return true
+		var e2 := err * 2
+		if e2 > -dy:
+			err -= dy
+			x += sx
+		if e2 < dx:
+			err += dx
+			y += sy
+	# Unreachable: the walk always lands on b. GDScript needs it spelled out.
+	return true
+
+
+static func blocks_between(a: Vector2i, b: Vector2i) -> bool:
+	# A barrier sits on the line between two tiles: both stay usable, but
+	# nothing crosses. Range is unaffected — it stops movement, not sight.
+	return _edges.has(MapData.edge_key(a, b))
+
+
+static func has_terrain() -> bool:
+	return not (_walls.is_empty() and _voids.is_empty()
+		and _high.is_empty() and _edges.is_empty())
+
+
 func is_neutral(c: Vector2i) -> bool:
-	return c.y == NEUTRAL_ROW
+	return HAS_NEUTRAL and c.y == NEUTRAL_ROW
 
 
 func is_empty(c: Vector2i) -> bool:
-	return in_bounds(c) and not _cells.has(c)
+	return in_bounds(c) and not is_blocked(c) and not _cells.has(c)
 
 
 func unit_at(c: Vector2i) -> UnitInstance:
@@ -76,24 +186,16 @@ func _ensure_sorted() -> void:
 	_sorted_dirty = false
 
 
-## A SNAPSHOT, safe to hold while the board changes underneath you.
-##
-## The sort is cached, so this is cheap; the duplicate() is what makes it safe.
-## Returning the cache itself was a real bug: the sim held the array, units died,
-## the cache rebuilt shorter, and the sim's indices ran off the end.
 func all_units() -> Array[UnitInstance]:
 	_ensure_sorted()
 	return _sorted.duplicate()
 
 
-## The LIVE cache, for hot read-only loops inside one tick.
-## Never hold the result across anything that adds or removes a unit.
 func units_view() -> Array[UnitInstance]:
 	_ensure_sorted()
 	return _sorted
 
 
-## Counts without allocating. _check_over() runs every tick.
 func living_count_of(team: int) -> int:
 	var n := 0
 	for u in units_view():
@@ -122,8 +224,6 @@ func count_of(team: int) -> int:
 	return units_of(team).size()
 
 
-## Chebyshev when diagonal range is allowed, Manhattan otherwise.
-## Every attack range in the game is expressed in this metric.
 static func tile_distance(a: Vector2i, b: Vector2i) -> int:
 	var d := (a - b).abs()
 	if DIAGONAL_RANGE:
@@ -131,7 +231,6 @@ static func tile_distance(a: Vector2i, b: Vector2i) -> int:
 	return d.x + d.y
 
 
-## Exact, because HEIGHT is odd: the neutral row maps onto itself.
 static func mirror(c: Vector2i) -> Vector2i:
 	return Vector2i(c.x, HEIGHT - 1 - c.y)
 
@@ -140,20 +239,59 @@ static func enemy_of(team: int) -> int:
 	return TEAM_B if team == TEAM_A else TEAM_A
 
 
-# ---------------------------------------------------------------- deployment
-
 func can_deploy(team: int, c: Vector2i) -> bool:
-	if not in_bounds(c) or is_neutral(c):
+	if not in_bounds(c) or is_neutral(c) or is_blocked(c):
 		return false
 	return (c.y < NEUTRAL_ROW) == (team == TEAM_A)
 
 
 func deploy_cells(team: int) -> Array[Vector2i]:
 	var out: Array[Vector2i] = []
-	var rows := range(0, NEUTRAL_ROW) if team == TEAM_A else range(NEUTRAL_ROW + 1, HEIGHT)
+	var rows := range(first_row(team), last_row(team))
 	for y in rows:
 		for x in WIDTH:
-			out.append(Vector2i(x, y))
+			var c := Vector2i(x, y)
+			if not is_blocked(c):
+				out.append(c)
+	return out
+
+
+func free_cells() -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for y in HEIGHT:
+		for x in WIDTH:
+			var c := Vector2i(x, y)
+			if is_empty(c):
+				out.append(c)
+	return out
+
+
+func playable_cells() -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for y in HEIGHT:
+		for x in WIDTH:
+			var c := Vector2i(x, y)
+			if not is_blocked(c):
+				out.append(c)
+	return out
+
+
+func half_capacity(team: int) -> int:
+	# Counted from the deploy list, so a map with holes in it reports the tiles
+	# a side really has rather than width times rows.
+	return deploy_cells(team).size()
+
+
+static func by_distance_to(cells: Array[Vector2i], centre: Vector2i) -> Array[Vector2i]:
+	var out: Array[Vector2i] = cells.duplicate()
+	out.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+		var da := tile_distance(a, centre)
+		var db := tile_distance(b, centre)
+		if da != db:
+			return da < db
+		if a.y != b.y:
+			return a.y < b.y
+		return a.x < b.x)
 	return out
 
 
@@ -165,14 +303,11 @@ func free_deploy_cells(team: int) -> Array[Vector2i]:
 	return out
 
 
-# ---------------------------------------------------------------- mutation
-
 func clear() -> void:
 	_cells.clear()
 	_sorted_dirty = true
 
 
-## Prep-phase placement. Enforces deploy zones.
 func place(u: UnitInstance, c: Vector2i) -> bool:
 	if not can_deploy(u.team, c) or not is_empty(c):
 		return false
@@ -183,7 +318,6 @@ func place(u: UnitInstance, c: Vector2i) -> bool:
 	return true
 
 
-## Combat placement. Ignores deploy zones — units cross the neutral row.
 func force_place(u: UnitInstance, c: Vector2i) -> bool:
 	if not is_empty(c):
 		return false
@@ -199,7 +333,6 @@ func remove(u: UnitInstance) -> void:
 		_sorted_dirty = true
 
 
-## Moves a unit to an empty tile. Used by both drag-and-drop and the sim.
 func move_unit(u: UnitInstance, to: Vector2i) -> bool:
 	if not in_bounds(to) or not is_empty(to):
 		return false
@@ -210,7 +343,6 @@ func move_unit(u: UnitInstance, to: Vector2i) -> bool:
 	return true
 
 
-## Prep-phase drag onto an occupied tile: the two units trade places.
 func swap_cells(a: Vector2i, b: Vector2i) -> bool:
 	if not in_bounds(a) or not in_bounds(b):
 		return false
@@ -229,15 +361,6 @@ func swap_cells(a: Vector2i, b: Vector2i) -> bool:
 	return true
 
 
-## Forced movement: a shove, a pull, a leap. Returns how many tiles the unit
-## actually travelled.
-##
-## Deliberately separate from move_unit(): displacement is something done TO a
-## unit rather than a step it chose, so it ignores deploy zones and doesn't cost
-## the unit its move_time. It stops at the board edge or the first occupied tile,
-## so shoving someone into a wall of bodies moves them nothing.
-##
-## Nothing calls this yet — it's the primitive for displacement abilities.
 func push(u: UnitInstance, dir: Vector2i, tiles: int) -> int:
 	var step := Vector2i(signi(dir.x), signi(dir.y))
 	if step == Vector2i.ZERO or tiles <= 0:
@@ -252,24 +375,27 @@ func push(u: UnitInstance, dir: Vector2i, tiles: int) -> int:
 	return moved
 
 
-## Drops a unit on an arbitrary tile, for a blink or a swap. Fails if the tile
-## is occupied or off the board — callers decide what to do about that.
 func teleport(u: UnitInstance, to: Vector2i) -> bool:
 	if not in_bounds(to) or not is_empty(to):
 		return false
 	return move_unit(u, to)
 
 
-# ---------------------------------------------------------------- merging
-
-## Turns on the merge lottery. `pool` should be the tier-1 units of the loadout.
 func configure_merges(pool: Array[UnitData], seed_value: int) -> void:
 	merge_pool = pool
+	team_merge_pools.clear()
 	merge_rng.seed = seed_value
 
 
-## The UnitData in `base`'s chain at the given tier, or null if it doesn't go
-## that far.
+func set_team_pool(team: int, pool: Array[UnitData]) -> void:
+	team_merge_pools[team] = pool
+
+
+func pool_for(team: int) -> Array[UnitData]:
+	var own: Array[UnitData] = team_merge_pools.get(team, [] as Array[UnitData])
+	return own if not own.is_empty() else merge_pool
+
+
 static func at_tier(base: UnitData, tier: int) -> UnitData:
 	var cur := base
 	while cur != null and cur.tier < tier:
@@ -277,32 +403,44 @@ static func at_tier(base: UnitData, tier: int) -> UnitData:
 	return cur if cur != null and cur.tier == tier else null
 
 
-## Rolls the merge outcome. CONSUMES rng, so call it exactly once per merge —
-## never from can_merge(), or the check would change the result.
-##
-## Assumes every unit in the pool has a chain at least as long as the merging
-## unit's; falls back to straight promotion if the roll can't reach the tier.
-func roll_merge_result(from: UnitData) -> UnitData:
+func roll_merge_result(from: UnitData, team: int = -1) -> UnitData:
 	var target := from.tier + 1
-	if merge_pool.is_empty():
+	var pool := pool_for(team)
+	if pool.is_empty():
 		return from.next_tier
-	var pick: UnitData = merge_pool[merge_rng.randi_range(0, merge_pool.size() - 1)]
+	var pick: UnitData = pool[merge_rng.randi_range(0, pool.size() - 1)]
 	var out := at_tier(pick, target)
 	return out if out != null else from.next_tier
+
+
+func set_wild_merge(team: int, enabled: bool) -> void:
+	wild_merge_teams[team] = enabled
+
+
+func wild_merge_for(team: int) -> bool:
+	return bool(wild_merge_teams.get(team, false))
 
 
 func can_merge(a: UnitInstance, b: UnitInstance) -> bool:
 	if a == null or b == null or a == b:
 		return false
-	if a.team != b.team:
+	if a.team != b.team or a.data.is_max_tier():
 		return false
-	return a.data == b.data and not a.data.is_max_tier()
+	if a.data == b.data:
+		return true
+	if a.data.tier != b.data.tier:
+		return false
+	return (wild_merge_for(a.team) or a.data.wild_merge or b.data.wild_merge)
 
 
-## Consumes both inputs, returns the merged unit standing on `at`.
-## `at` should be the tile the player dropped onto.
-##
-## What comes out is a roll, not a promotion — see roll_merge_result().
+static func magnet_of(a: UnitInstance, b: UnitInstance) -> UnitInstance:
+	if a != null and a.data.merge_magnet:
+		return a
+	if b != null and b.data.merge_magnet:
+		return b
+	return null
+
+
 func merge(a: UnitInstance, b: UnitInstance, at: Vector2i) -> UnitInstance:
 	if not can_merge(a, b):
 		return null
@@ -310,7 +448,9 @@ func merge(a: UnitInstance, b: UnitInstance, at: Vector2i) -> UnitInstance:
 	if MERGE_INHERITS_BUFFS:
 		inherited.append_array(a.modifiers)
 		inherited.append_array(b.modifiers)
-	var next := roll_merge_result(a.data)
+	var magnet := magnet_of(a, b)
+	var next := (magnet.data.next_tier if magnet != null
+		else roll_merge_result(a.data, a.team))
 	if next == null:
 		return null
 	remove(a)
@@ -320,12 +460,55 @@ func merge(a: UnitInstance, b: UnitInstance, at: Vector2i) -> UnitInstance:
 	a.cell = at
 	a.move_from = at
 	_sorted_dirty = true
+	_roll_merge_procs(a)
 	return a
 
 
-# ---------------------------------------------------------------- range queries
+func _roll_merge_procs(merged: UnitInstance) -> void:
+	last_merge_procs = {extra_tier = false, extra_unit = null}
+	var tb: TeamBuffs = team_buffs.get(merged.team, null)
+	if tb == null:
+		return
+	var tier_chance := tb.merge_extra_tier_chance()
+	if tier_chance > 0.0 and merge_rng.randf() < tier_chance \
+			and not merged.data.is_max_tier():
+		merged.promote_to(merged.data.next_tier, [] as Array[StatModifier])
+		last_merge_procs.extra_tier = true
+	tb.apply_to(merged)
+	var unit_chance := tb.merge_extra_unit_chance()
+	if unit_chance > 0.0 and merge_rng.randf() < unit_chance:
+		last_merge_procs.extra_unit = _summon_extra(merged.team, tb)
 
-## Living units within `r` tiles of `from`. Pass team = -1 for either side.
+
+func _summon_extra(team: int, tb: TeamBuffs) -> UnitInstance:
+	var pool := pool_for(team)
+	if pool.is_empty():
+		return null
+	var free := free_deploy_cells(team)
+	if free.is_empty():
+		return null
+	var pick: UnitData = pool[merge_rng.randi_range(0, pool.size() - 1)]
+	var u := UnitInstance.create(pick, team)
+	tb.apply_to(u)
+	var cell: Vector2i = free[merge_rng.randi_range(0, free.size() - 1)]
+	if not place(u, cell):
+		return null
+	return u
+
+
+func units_in_box(from: Vector2i, r: int, team: int = -1) -> Array[UnitInstance]:
+	var out: Array[UnitInstance] = []
+	for u in units_view():
+		if not u.is_alive():
+			continue
+		if team >= 0 and u.team != team:
+			continue
+		var d := u.cell - from
+		if absi(d.x) <= r and absi(d.y) <= r:
+			out.append(u)
+	return out
+
+
 func units_in_range(from: Vector2i, r: int, team: int = -1) -> Array[UnitInstance]:
 	var out: Array[UnitInstance] = []
 	for u in units_view():
@@ -338,13 +521,11 @@ func units_in_range(from: Vector2i, r: int, team: int = -1) -> Array[UnitInstanc
 	return out
 
 
-## Nearest living enemy. Ties break on uid so the sim stays deterministic —
-## never resolve a tie with rng unless the rng is seeded.
 func nearest_enemy(u: UnitInstance) -> UnitInstance:
 	var best: UnitInstance = null
 	var best_d := 1 << 30
 	for other in units_view():
-		if not other.is_alive() or other.team == u.team:
+		if not other.is_alive() or other.team == u.team or other.is_hidden():
 			continue
 		var d := tile_distance(u.cell, other.cell)
 		if d < best_d or (d == best_d and best != null and other.uid < best.uid):
@@ -353,10 +534,16 @@ func nearest_enemy(u: UnitInstance) -> UnitInstance:
 	return best
 
 
-# ---------------------------------------------------------------- debugging
+func _ascii_terrain(c: Vector2i) -> String:
+	if is_void(c):
+		return " "
+	if is_wall(c):
+		return "#"
+	if is_high(c):
+		return "^"
+	return "~" if is_neutral(c) else "."
 
-## Dump the board to the Output panel. Build this early and trust it over the
-## screen — if the ASCII and the visuals disagree, the visuals are wrong.
+
 func to_ascii() -> String:
 	var lines: PackedStringArray = []
 	lines.append("   " + " ".join(PackedStringArray(range(WIDTH).map(func(x: int) -> String: return str(x)))))
@@ -365,10 +552,10 @@ func to_ascii() -> String:
 		for x in WIDTH:
 			var u := unit_at(Vector2i(x, y))
 			if u == null:
-				row.append("~" if y == NEUTRAL_ROW else ".")
+				row.append(_ascii_terrain(Vector2i(x, y)))
 			else:
 				var glyph := String(u.data.id).substr(0, 1)
 				row.append(glyph.to_upper() if u.team == TEAM_A else glyph.to_lower())
-		var marker := "-" if y == NEUTRAL_ROW else " "
+		var marker := "-" if is_neutral(Vector2i(0, y)) else " "
 		lines.append("%s%2d %s" % [marker, y, " ".join(row)])
 	return "\n".join(lines)

@@ -1,66 +1,82 @@
-## A unit's mana ability.
-##
-## Every unit charges the same 100-point bar; only the gain rate differs
-## (UnitData.mana_per_attack). Mana comes from LANDING ATTACKS, so a unit that
-## can't reach anything never casts — that's deliberate, it makes protecting your
-## damage dealers matter.
-##
-## Casting locks the unit in CASTING for cast_time: it can't attack or move. Same
-## exposure rule as committing to a step. An ability that fires for free would
-## undercut the whole positioning game.
-##
-## This is one resource with a `kind` switch and a field group per kind rather
-## than a subclass per ability. With five abilities that's the honest trade —
-## everything is visible in one inspector panel, and the sim switches on `kind`
-## in exactly one place (CombatSim._resolve_ability).
 class_name AbilityData
 extends Resource
 
 enum Kind {
-	HASTE,        ## Permanent stacking attack-speed buff. (Archer)
-	SHIELD,       ## Temporary hit points that healing can't restore. (Warden)
-	DOT,          ## Damage over time on a single enemy. (Vexer)
-	FOCUS_BURST,  ## Big damage to the main target, a little to its neighbours. (Pyre)
-	PIERCE,       ## A strong strike through several enemies in a line. (Lancer)
+	HASTE,
+	SHIELD,
+	DOT,
+	FOCUS_BURST,
+	PIERCE,
+	BLINK_STRIKE,
+	SPEED_AURA,
+	REVIVE,
+	BURST_HEAL,
+	SUMMON,
+	MANA_AURA,
 }
 
 @export var id: StringName = &""
 @export var display_name: String = "Ability"
 @export_multiline var description: String = ""
 @export var kind: Kind = Kind.HASTE
-## Locked, unable to attack or move, for this long while casting.
 @export var cast_time: float = 0.5
 
 @export_group("Haste")
-## Attack-cooldown reduction per stack, as a fraction. 0.18 = 18% faster.
 @export var haste_percent: float = 0.18
-## Hard cap. Stacking is permanent for the battle, so without this a protected
-## Archer's fire rate would run away entirely.
 @export var haste_max_stacks: int = 5
 
 @export_group("Shield")
-@export var shield_amount: float = 55.0
-## Recasting tops the shield back up to this, it doesn't stack past it.
-@export var shield_cap: float = 55.0
+@export var shield_percent: float = 1.25
+@export var shield_cap_percent: float = 1.25
 
 @export_group("Damage over time")
-@export var dot_damage: float = 9.0     ## Per tick.
+@export var dot_damage: float = 9.0
 @export var dot_ticks: int = 5
 @export var dot_interval: float = 0.5
 
 @export_group("Focus burst")
-@export var burst_damage: float = 58.0  ## To the main target.
-@export var splash_damage: float = 12.0 ## To everything else in radius.
+@export var burst_damage: float = 58.0
+@export var splash_damage: float = 12.0
 @export var splash_radius: int = 1
 
 @export_group("Pierce")
-## How many enemies the empowered strike passes through.
 @export var pierce_targets: int = 3
-## Multiplier on the caster's attack damage.
 @export var pierce_damage_mult: float = 2.0
 
+@export_group("Blink strike")
+@export var blink_base_damage: float = 46.0
+@export var stealth_time: float = 3.5
 
-## Tooltip text, generated from the numbers so it can't drift out of sync.
+@export_group("Attack speed aura")
+@export var aura_percent_per_tier: float = 0.12
+@export var aura_radius: int = 1
+
+@export_group("Revive")
+@export var revive_chance: float = 0.5
+@export var revive_delay: float = 1.0
+@export var revive_hp_percent: float = 1.0
+
+@export_group("Burst heal")
+@export var heal_percent: float = 0.45
+@export var heal_percent_per_tier: float = 0.20
+@export var heal_radius: int = 3
+
+@export_group("Summon")
+@export var summon_unit: UnitData = null
+@export var summon_max: int = 3
+@export var summon_count: int = 1
+@export var summon_random: bool = false
+@export var summon_cap_by_tier: bool = true
+@export var summon_persists: bool = false
+@export var consumes_caster: bool = false
+@export var summon_adjacent: bool = true
+@export var summon_instacasts: bool = false
+@export var guards_caster: bool = false
+
+@export_group("Mana aura")
+@export var mana_aura_radius: int = 1
+
+
 func describe() -> String:
 	if not description.is_empty():
 		return description
@@ -69,8 +85,8 @@ func describe() -> String:
 			return "Attacks %d%% faster. Stacks up to %d times." % [
 				roundi(haste_percent * 100.0), haste_max_stacks]
 		Kind.SHIELD:
-			return "Gains %d shield. Shield absorbs damage first and cannot be healed." % [
-				roundi(shield_amount)]
+			return "Gains a shield worth %d%% of max health. It absorbs damage first and cannot be healed." % [
+				roundi(shield_percent * 100.0)]
 		Kind.DOT:
 			return "Poisons one enemy for %d damage every %.1fs, %d times." % [
 				roundi(dot_damage), dot_interval, dot_ticks]
@@ -80,4 +96,31 @@ func describe() -> String:
 		Kind.PIERCE:
 			return "A strike through up to %d enemies for %.0f%% damage." % [
 				pierce_targets, pierce_damage_mult * 100.0]
+		Kind.BLINK_STRIKE:
+			return "Blinks behind a target for %d damage, doubling every tier, then vanishes for %.1fs." % [
+				roundi(blink_base_damage), stealth_time]
+		Kind.SPEED_AURA:
+			return "Allies within %d tile(s) gain %d%% attack speed per tier." % [
+				aura_radius, roundi(aura_percent_per_tier * 100.0)]
+		Kind.REVIVE:
+			return "%d%% chance to get back up %.1fs after every death, at %d%% health." % [
+				roundi(revive_chance * 100.0), revive_delay,
+				roundi(revive_hp_percent * 100.0)]
+		Kind.BURST_HEAL:
+			return "Heals the worst-hurt ally within %d tiles for %d%% of their max health, +%d%% of that per tier." % [
+				heal_radius, roundi(heal_percent * 100.0),
+				roundi(heal_percent_per_tier * 100.0)]
+		Kind.SUMMON:
+			if summon_random:
+				var tail := (" They stay with you for the rest of the match."
+					if summon_persists else "")
+				if summon_instacasts:
+					tail += " They arrive mid-cast: each one uses its own ability the moment it lands."
+				if consumes_caster:
+					tail += " Raising them uses the caster up: it dies on the spot and does not come back."
+				return "Summons %d random units at its own tier, right beside itself — or none at all, if there is no room for the whole set.%s" % [
+					summon_count, tail]
+			return "Summons a minion, up to %d at the highest tiers." % summon_max
+		Kind.MANA_AURA:
+			return "Opens a zone %d tile(s) around it. Allies inside gain extra mana every second." % mana_aura_radius
 	return ""

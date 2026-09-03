@@ -1,78 +1,100 @@
-## A unit's stat block. Authored in the inspector, saved as a .tres, and NEVER
-## mutated at runtime.
-##
-## Two units of the same type share one UnitData object. Writing to it at runtime
-## changes every unit of that type at once, and in the editor it edits the file on
-## disk. All per-unit state lives on UnitInstance instead.
 class_name UnitData
 extends Resource
 
 enum AttackType {
-	MELEE,   ## Short range, usually 1.
-	RANGED,  ## Attacks from a distance, fragile up close.
-	SPELL,   ## Attacks normally but leans on its ability.
+	MELEE,
+	RANGED,
+	SPELL,
 }
+
+enum RangeBand {
+	MELEE = 1,
+	MEDIUM = 2,
+	LONG = 3,
+	SNIPER = 4,
+	UNLIMITED = 5,
+}
+
+const RANGE_NAMES := {
+	RangeBand.MELEE: "Melee",
+	RangeBand.MEDIUM: "Medium",
+	RangeBand.LONG: "Long",
+	RangeBand.SNIPER: "Sniper",
+	RangeBand.UNLIMITED: "Unlimited",
+}
+
+const UNLIMITED_TILES := 100
 
 @export var id: StringName = &""
 @export var display_name: String = "Unit"
-## 1 = base. Two tier-1s merge into a tier-2, and so on.
 @export var tier: int = 1
 
 @export_group("Combat")
 @export var max_hp: float = 100.0
 @export var attack_damage: float = 10.0
-## Seconds between attacks. Lower is faster.
-@export var attack_cooldown: float = 1.0
-## Seconds to cross ONE tile. Lower is faster.
-##
-## Stored as time-per-tile rather than tiles-per-second on purpose: a unit that
-## commits to a move is locked for exactly this long and cannot attack during it.
-## That single fact is the whole "died because it was caught walking" mechanic.
+@export var attack_speed: float = 1.0
 @export var move_time: float = 0.45
-## In tiles, Chebyshev distance (diagonals count as 1).
-@export var attack_range: int = 1
-## Unused by the current fog rules, which conceal the opponent's whole half
-## during prep and lift entirely once the battle starts — there is no
-## per-unit vision to compute.
-##
-## Kept because it's the natural hook for a scout: a unit that reveals part of
-## the enemy half during prep. Delete it if you decide against that.
+@export_range(1, 5) var attack_range: int = RangeBand.MELEE
 @export var sight_range: int = 4
 @export var attack_type: AttackType = AttackType.MELEE
 
 @export_group("Ability")
 @export var ability: AbilityData = null
-## Mana gained per attack LANDED. The bar is 100 for everyone
-## (UnitInstance.MANA_MAX); only this rate differs, so 25 means every 4th attack
-## casts and 50 means every 2nd.
 @export var mana_per_attack: float = 25.0
-## Fires the ability once for free on the first tick of the battle, before any
-## mana has been earned. Warden opens with its shield up.
+@export var mana_per_charge: float = 0.0
+@export var mana_charge_time: float = 1.0
+@export var keeps_mana: bool = false
 @export var casts_at_battle_start: bool = false
 
 @export_group("Passive")
-## How many enemies an ORDINARY attack passes through. 1 is a normal single
-## target; Lancer's 2 is its passive. The ability can raise this for one strike.
 @export var pierce_targets: int = 1
+@export var merge_magnet: bool = false
+@export var beam_attack: bool = false
+@export var beam_splash: float = 0.0
+@export var beam_endless: bool = false
+@export var wild_merge: bool = false
+@export var can_move: bool = true
+@export var can_attack: bool = true
 
 @export_group("Progression")
-## What two of these merge into. Leave null to mark the top of the chain.
 @export var next_tier: UnitData = null
 
 @export_group("Presentation")
-## Drop your sprite here. UnitView falls back to a coloured block if it's null.
+@export_multiline var note: String = ""
 @export var sprite: Texture2D = null
-## Optional: a whole scene per unit, if you want animation or particles.
 @export var view_scene: PackedScene = null
-## Used for the fallback block and for team-neutral UI accents.
 @export var accent: Color = Color(0.62, 0.45, 0.22)
+
+
+static func clamp_band(band: int) -> RangeBand:
+	return clampi(band, RangeBand.MELEE, RangeBand.UNLIMITED) as RangeBand
+
+
+static func band_tiles(band: int) -> int:
+	var b := clamp_band(band)
+	return UNLIMITED_TILES if b == RangeBand.UNLIMITED else int(b)
+
+
+static func band_name(band: int) -> String:
+	return RANGE_NAMES[clamp_band(band)]
+
+
+func range_band() -> RangeBand:
+	return clamp_band(attack_range)
+
+
+func range_name() -> String:
+	return band_name(attack_range)
+
+
+func reach_tiles() -> int:
+	return band_tiles(attack_range)
 
 
 func is_max_tier() -> bool:
 	return next_tier == null
 
 
-## Walks the merge chain. Useful for tooltips and for the data generator's checks.
 func chain_length() -> int:
 	var n := 1
 	var cur: UnitData = self

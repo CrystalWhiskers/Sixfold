@@ -1,18 +1,9 @@
-## Round counter, lives, and the phase machine.
-##
-## Order per round is BUFF_PICK (when due) -> PREP -> BATTLE -> ROUND_END.
-## First side to WINS_NEEDED round wins takes the match.
 extends Node
 
 enum Phase { BUFF_PICK, PREP, BATTLE, ROUND_END, MATCH_END }
 
-const WINS_NEEDED := 4      ## Each player effectively has 4 lives.
-## How many units you are dealt at the start of each prep phase.
-##
-## This is the knob for pace: it sets how fast your board fills and therefore how
-## quickly you can reach the higher merge tiers. Raising it does NOT change how
-## many unit TYPES exist — that's the roster in tools/generate_data.gd.
-const UNITS_PER_DRAW := 5
+const WINS_NEEDED := 4
+const UNITS_PER_DRAW := 6
 
 var round_index := 1
 var wins: Array[int] = [0, 0]
@@ -33,11 +24,24 @@ func start_match(p_seed: int, p_loadouts: Array[LoadoutData]) -> void:
 	EventBus.round_started.emit(round_index)
 
 
-## Buff picks open rounds 2, 4, 6, 8 — i.e. after rounds 1, 3, 5.
-## This is the cadence knob you'll turn most while playtesting; it lives here
-## and nowhere else on purpose.
 func buff_pick_due() -> bool:
 	return round_index > 1 and round_index % 2 == 0
+
+
+func buff_pick_number() -> int:
+	return round_index / 2
+
+
+func rarity_odds(pick: int = -1) -> Array:
+	return RarityTable.odds_for(buff_pick_number() if pick < 0 else pick)
+
+
+func rarity_chance(rarity: BuffData.Rarity, pick: int = -1) -> float:
+	return RarityTable.chance(rarity, buff_pick_number() if pick < 0 else pick)
+
+
+func roll_rarity(rng: RandomNumberGenerator) -> BuffData.Rarity:
+	return RarityTable.roll(rng, buff_pick_number())
 
 
 func set_phase(p: Phase) -> void:
@@ -49,17 +53,10 @@ func phase_name() -> String:
 	return String(Phase.keys()[phase]).capitalize()
 
 
-## Per-round seed, derived from the match seed. Keeps every round reproducible
-## while still differing from each other.
 func round_seed(salt: int = 0) -> int:
 	return match_seed + round_index * 1013 + salt
 
 
-## Banks the result and STOPS at ROUND_END.
-##
-## Deliberately does not roll straight into the next round: the player has to be
-## able to see who won before anything moves. advance_round() is the separate
-## step the "Next Round" button drives.
 func record_round(winner: int) -> void:
 	if winner >= 0:
 		wins[winner] += 1
@@ -71,7 +68,6 @@ func record_round(winner: int) -> void:
 		set_phase(Phase.ROUND_END)
 
 
-## Moves on to the next round. Opens with a buff pick when one is due.
 func advance_round() -> void:
 	if is_match_over():
 		return

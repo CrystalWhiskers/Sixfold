@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_4wrh4"]
+
+[resource]
+script = ExtResource("1_4wrh4")
+id = &"swarm"
+display_name = "Swarm"
+unit_id = &"vexer"
+bronze = Vector2(0.5, 0)
+silver = Vector2(1, 0)
+gold = Vector2(2, 0)
+stat_a = 2

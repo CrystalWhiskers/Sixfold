@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="1_j0w3d"]
+
+[resource]
+script = ExtResource("1_j0w3d")
+id = &"amalgam"
+display_name = "Amalgam VI"
+tier = 6
+max_hp = 6080.0
+attack_damage = 480.0
+attack_speed = 0.8
+move_time = 0.5
+mana_per_attack = 0.0
+wild_merge = true
+note = "Merges with anything you own, whatever it is. Thick, steady, and never quite the same twice."
+accent = Color(0.46, 0.52, 0.38, 1)

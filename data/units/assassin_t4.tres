@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/abilities/shadowstep.tres" id="1_5x6ya"]
+[ext_resource type="Resource" path="res://data/units/assassin_t5.tres" id="2_3souv"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_nji78"]
+
+[resource]
+script = ExtResource("3_nji78")
+id = &"assassin"
+display_name = "Assassin IV"
+tier = 4
+max_hp = 480.0
+attack_damage = 96.0
+attack_speed = 1.2
+move_time = 0.34
+sight_range = 6
+ability = ExtResource("1_5x6ya")
+casts_at_battle_start = true
+next_tier = ExtResource("2_3souv")
+note = "Opens behind someone, hits once for a fortune, then nobody can find it."
+accent = Color(0.42, 0.3, 0.48, 1)

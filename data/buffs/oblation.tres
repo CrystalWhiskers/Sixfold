@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_gggcv"]
+
+[resource]
+script = ExtResource("1_gggcv")
+id = &"oblation"
+display_name = "Oblation"
+kind = 10
+weight = 0.9
+exclusive_rarity = 1
+bronze = Vector2(1, 0)
+silver = Vector2(1, 0)
+gold = Vector2(1, 0)

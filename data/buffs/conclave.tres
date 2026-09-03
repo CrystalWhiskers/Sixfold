@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_w2phr"]
+
+[resource]
+script = ExtResource("1_w2phr")
+id = &"conclave"
+display_name = "Conclave"
+kind = 9
+weight = 0.9
+exclusive_rarity = 1
+bronze = Vector2(3, 3)
+silver = Vector2(3, 3)
+gold = Vector2(3, 3)

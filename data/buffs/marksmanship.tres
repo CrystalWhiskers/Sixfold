@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_eknjj"]
+
+[resource]
+script = ExtResource("1_eknjj")
+id = &"marksmanship"
+display_name = "Marksmanship"
+unit_id = &"archer"
+bronze = Vector2(0.25, 0.15)
+silver = Vector2(0.5, 0.3)
+gold = Vector2(1, 0.6)
+stat_b = 2
+uses_second_stat = true

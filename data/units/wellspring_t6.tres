@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/abilities/overflow.tres" id="1_3xhgn"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_3nx6p"]
+
+[resource]
+script = ExtResource("2_3nx6p")
+id = &"wellspring"
+display_name = "Wellspring VI"
+tier = 6
+max_hp = 3840.0
+attack_damage = 288.0
+attack_speed = 0.75
+move_time = 0.52
+attack_range = 2
+attack_type = 2
+ability = ExtResource("1_3xhgn")
+mana_per_attack = 0.0
+mana_per_charge = 6.0
+casts_at_battle_start = true
+note = "Opens a pool of mana around itself on the first beat. Everyone standing in it casts sooner."
+accent = Color(0.4, 0.68, 0.72, 1)

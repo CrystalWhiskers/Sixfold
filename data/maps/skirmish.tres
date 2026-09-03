@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MapData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/map_data.gd" id="1_x87v5"]
+
+[resource]
+script = ExtResource("1_x87v5")
+id = &"skirmish"
+display_name = "Skirmish"
+height = 8
+has_neutral = false
+rows = PackedStringArray()
+note = "Short and undivided — the two front ranks start in each other's faces."

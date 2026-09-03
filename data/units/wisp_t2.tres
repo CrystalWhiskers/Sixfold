@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/units/wisp_t3.tres" id="1_8l8hc"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_ftdmc"]
+
+[resource]
+script = ExtResource("2_ftdmc")
+id = &"wisp"
+display_name = "Wisp II"
+tier = 2
+max_hp = 68.0
+attack_damage = 14.0
+attack_speed = 1.3
+move_time = 0.4
+sight_range = 3
+mana_per_attack = 0.0
+next_tier = ExtResource("1_8l8hc")
+note = "Summoned only. Never drawn, never merged, gone when the round ends."
+accent = Color(0.7, 0.62, 0.86, 1)
