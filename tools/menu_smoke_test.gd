@@ -20,8 +20,17 @@ func _ready() -> void:
 	_check("the menu loads its maps", GameSetup.maps.size() >= 5,
 		"%d maps" % GameSetup.maps.size())
 	_check("and starts on one of them", GameSetup.current_map() != null)
+	# Tied to what is actually on disk rather than a number in this file, so
+	# adding a unit does not fail a test that has nothing to do with it.
+	var roster := load("res://data/loadouts/roster.tres") as LoadoutData
 	_check("the menu knows every unit type",
-		GameSetup.catalogue.size() == 14, "%d types" % GameSetup.catalogue.size())
+		roster != null and GameSetup.catalogue.size() == roster.units.size(),
+		"menu has %d, roster has %d" % [
+			GameSetup.catalogue.size(),
+			0 if roster == null else roster.units.size()])
+	_check("and none of them are units you are not meant to draw",
+		not GameSetup.catalogue.any(func(u: UnitData) -> bool:
+			return String(u.id) in ["wisp", "sentry"]))
 	var ids: PackedStringArray = []
 	for u in GameSetup.catalogue:
 		ids.append(String(u.id))
@@ -178,7 +187,28 @@ func _run() -> void:
 			GameSetup.units_for(BoardModel.TEAM_B)[0].display_name),
 		slots[0].tooltip_text)
 
+	# The panel grew a 33-map grid and pushed Done off the bottom of the screen,
+	# which left no way out of the menu at all. Whatever else goes into it, the
+	# way out has to stay on screen.
+	var window := Rect2(Vector2.ZERO,
+		Vector2(ProjectSettings.get_setting("display/window/size/viewport_width"),
+			ProjectSettings.get_setting("display/window/size/viewport_height")))
+	var exits: Array[Button] = []
+	for b in _all_buttons(editor):
+		if b.text == "Done" or b.text == "Reset both":
+			exits.append(b)
+	_check("the editor still has a way out of it", exits.size() == 2,
+		"found %d of the two bottom buttons" % exits.size())
+	var hidden: Array[String] = []
+	for b in exits:
+		if not window.encloses(Rect2(b.global_position, b.size)):
+			hidden.append("%s at %s" % [b.text, b.global_position])
+	_check("and you can see it without scrolling to it",
+		hidden.is_empty(), ", ".join(hidden))
+
 	_check("the editor offers a map picker", editor._map_label != null)
+	_check("the picker is a grid, not a pair of arrows",
+		editor._map_grid != null and editor._map_grid.columns > 1)
 	if editor._map_label != null:
 		var before_name: String = editor._map_label.text
 		var before_shape := Vector2i(BoardModel.WIDTH, BoardModel.HEIGHT)
@@ -187,9 +217,22 @@ func _run() -> void:
 		_check("the note explains what the board is like",
 			not editor._map_note.text.is_empty())
 
-		editor._on_cycle_map(1)
-		_check("cycling changes the map", editor._map_label.text != before_name,
-			editor._map_label.text)
+		_check("every map has a chip in the grid",
+			editor._chips.size() == GameSetup.maps.size(),
+			"%d chips for %d maps" % [
+				editor._chips.size(), GameSetup.maps.size()])
+		_check("each chip draws the map it stands for",
+			editor._chips.is_empty() or (
+				editor._chips[0].map == GameSetup.maps[0]
+				and editor._chips[0]._preview.map == GameSetup.maps[0]))
+		_check("the grid is ordered by the table, not the filenames",
+			GameSetup.maps[0].id == &"standard",
+			"first map is '%s'" % GameSetup.maps[0].id)
+
+		var other: int = GameSetup.maps.size() - 1
+		editor._on_pick_map(other)
+		_check("picking a chip changes the map",
+			editor._map_label.text != before_name, editor._map_label.text)
 		_check("and the board actually changes shape with it",
 			Vector2i(BoardModel.WIDTH, BoardModel.HEIGHT) != before_shape
 			or GameSetup.maps.size() < 2,
@@ -200,18 +243,25 @@ func _run() -> void:
 			"board %dx%d, map %s" % [
 				BoardModel.WIDTH, BoardModel.HEIGHT,
 				GameSetup.current_map().shape()])
+		_check("exactly the chosen chip is lit",
+			_lit_chips(editor) == [other], str(_lit_chips(editor)))
 
-		var loop_start: String = editor._map_label.text
+		# Every map has to survive being selected: use_map() silently falls back
+		# to the default board on an invalid one, and that would go unnoticed.
 		var seen := {}
 		for i in GameSetup.maps.size():
-			seen[String(GameSetup.current_map().id)] = true
-			editor._on_cycle_map(1)
-		_check("cycling reaches every map and comes back round",
-			seen.size() == GameSetup.maps.size()
-			and editor._map_label.text == loop_start,
-			"%d of %d seen, landed on '%s' from '%s'" % [
-				seen.size(), GameSetup.maps.size(),
-				editor._map_label.text, loop_start])
+			editor._on_pick_map(i)
+			var m := GameSetup.current_map()
+			seen[String(m.id)] = true
+			if BoardModel.WIDTH != m.width or BoardModel.HEIGHT != m.height:
+				_check("map '%s' loads onto the board" % m.id, false,
+					"asked for %s, board is %dx%d" % [
+						m.shape(), BoardModel.WIDTH, BoardModel.HEIGHT])
+				break
+		_check("every map in the grid can be picked and loads its own board",
+			seen.size() == GameSetup.maps.size(),
+			"%d of %d" % [seen.size(), GameSetup.maps.size()])
+		editor._on_pick_map(0)
 
 		var divided := 0
 		for m in GameSetup.maps:
@@ -303,3 +353,23 @@ func _report() -> void:
 	else:
 		print("\nMenu smoke test passed. %d checks." % _passed)
 	get_tree().quit(1 if _failed > 0 else 0)
+
+
+func _lit_chips(editor: LoadoutEditor) -> Array[int]:
+	var out: Array[int] = []
+	for i in editor._chips.size():
+		if editor._chips[i].button_pressed:
+			out.append(i)
+	return out
+
+
+func _all_buttons(root: Node) -> Array[Button]:
+	var out: Array[Button] = []
+	var stack: Array[Node] = [root]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		if n is Button:
+			out.append(n as Button)
+		for child in n.get_children():
+			stack.append(child)
+	return out

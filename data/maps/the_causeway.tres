@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="MapData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/map_data.gd" id="1_yhgtm"]
+
+[resource]
+script = ExtResource("1_yhgtm")
+id = &"the_causeway"
+display_name = "The Causeway"
+rank = 29
+width = 7
+height = 15
+rows = PackedStringArray(".......", ".......", ".......", "XX...XX", "XXX.XXX", "XXX.XXX", "XXX.XXX", "XXX.XXX", "XXX.XXX", "XXX.XXX", "XXX.XXX", "XX...XX", ".......", ".......", ".......")
+note = "One tile wide for eight rows, in full view of both shores the whole way. Holes do not stop an arrow, so crossing means walking single file through everything they have."

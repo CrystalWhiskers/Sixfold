@@ -361,6 +361,26 @@ func swap_cells(a: Vector2i, b: Vector2i) -> bool:
 	return true
 
 
+func trade_places(a: UnitInstance, b: UnitInstance) -> bool:
+	# swap_cells() is the prep-phase version and honours the deploy halves. Once
+	# the fighting starts there are no halves, so this is the same swap without
+	# that check. Nothing else about it differs.
+	if a == null or b == null or a == b:
+		return false
+	if _cells.get(a.cell, null) != a or _cells.get(b.cell, null) != b:
+		return false
+	var ca := a.cell
+	var cb := b.cell
+	_cells[ca] = b
+	_cells[cb] = a
+	a.cell = cb
+	b.cell = ca
+	a.move_from = ca
+	b.move_from = cb
+	_sorted_dirty = true
+	return true
+
+
 func push(u: UnitInstance, dir: Vector2i, tiles: int) -> int:
 	var step := Vector2i(signi(dir.x), signi(dir.y))
 	if step == Vector2i.ZERO or tiles <= 0:

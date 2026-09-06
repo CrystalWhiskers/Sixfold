@@ -33,6 +33,12 @@ func reload_maps() -> int:
 			var res := load("%s/%s" % [MAP_DIR, clean])
 			if res is MapData and (res as MapData).is_valid():
 				maps.append(res as MapData)
+	# Files come off disk alphabetically, which puts Standard somewhere in the
+	# twenties. Each map carries the table's own order instead.
+	maps.sort_custom(func(a: MapData, b: MapData) -> bool:
+		if a.rank != b.rank:
+			return a.rank < b.rank
+		return a.display_name < b.display_name)
 	map_index = clampi(map_index, 0, maxi(maps.size() - 1, 0))
 	apply_map()
 	return maps.size()
@@ -49,6 +55,20 @@ func cycle_map(step: int) -> void:
 		return
 	map_index = wrapi(map_index + step, 0, maps.size())
 	apply_map()
+
+
+func select_map(index: int) -> void:
+	if maps.is_empty() or index < 0 or index >= maps.size():
+		return
+	map_index = index
+	apply_map()
+
+
+func map_id_index(id: StringName) -> int:
+	for i in maps.size():
+		if maps[i].id == id:
+			return i
+	return -1
 
 
 func apply_map() -> void:

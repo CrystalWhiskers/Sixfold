@@ -14,6 +14,7 @@ const DMG_SCALE := 2.0
 # A map is fair when the halves match: an odd board needs the neutral divider,
 # an even one splits on its own and must not have it.
 const MAP_TABLE := [
+
 	{
 		id = &"standard", name = "Standard", w = 6, h = 11, neutral = true,
 		note = "The default. Five rows each with a no-man's row between them.",
@@ -39,21 +40,110 @@ const MAP_TABLE := [
 		note = "A deep corridor. Ranged units get to fire for a long time before anything arrives.",
 	},
 	{
-		id = &"the_bridge", name = "The Bridge", w = 7, h = 11, neutral = true,
+		id = &"the_duel", name = "The Duel", w = 3, h = 7, neutral = true,
+		note = "Three tiles wide and nine to a side. There is no flank, no cover and nowhere to put a mistake.",
+	},
+	{
+		id = &"killing_field", name = "Killing Field", w = 13, h = 9, neutral = true,
+		rows = [
+			"^^^^^^^^^^^^^",
+			".............",
+			".............",
+			".............",
+			".............",
+			".............",
+			".............",
+			".............",
+			"^^^^^^^^^^^^^",
+		],
+		note = "Thirteen wide and shallow, with a firing step along both backs. Almost everything is in range of almost everything from the opening tick.",
+	},
+	{
+		id = &"the_steppes", name = "The Steppes", w = 11, h = 13, neutral = true,
+		rows = [
+			"^^^^^^^^^^^",
+			"...........",
+			"..^^^^^^^..",
+			"...........",
+			"....^^^....",
+			"...........",
+			"...........",
+			"...........",
+			"....^^^....",
+			"...........",
+			"..^^^^^^^..",
+			"...........",
+			"^^^^^^^^^^^",
+		],
+		note = "Wide open ground in terraces. Every ridge is a range band for whoever gets to it, and the back rank of each side is the highest ground on the board.",
+	},
+	{
+		id = &"the_cauldron", name = "The Cauldron", w = 11, h = 11, neutral = true,
+		rows = [
+			"...........",
+			".^^^^^^^^^.",
+			".^.......^.",
+			".^.......^.",
+			".^.......^.",
+			".^.......^.",
+			".^.......^.",
+			".^.......^.",
+			".^.......^.",
+			".^^^^^^^^^.",
+			"...........",
+		],
+		note = "A rim of high ground all the way round a low floor. Ranged units want the wall; melee wants them off it.",
+	},
+	{
+		id = &"the_quarry", name = "The Quarry", w = 9, h = 11, neutral = true,
+		rows = [
+			".........",
+			".........",
+			".........",
+			".#.#.#.#.",
+			".........",
+			"#.#.#.#.#",
+			".........",
+			".#.#.#.#.",
+			".........",
+			".........",
+			".........",
+		],
+		note = "Loose stone scattered across the middle. Nothing is truly blocked, but no shot crosses the board cleanly, and pierce and beams die on the first block they meet.",
+	},
+	{
+		id = &"the_shatter", name = "The Shatter", w = 9, h = 11, neutral = true,
+		rows = [
+			".........",
+			"..X...X..",
+			".........",
+			"X..X.X..X",
+			".........",
+			".X.X.X.X.",
+			".........",
+			"X..X.X..X",
+			".........",
+			"..X...X..",
+			".........",
+		],
+		note = "The Quarry with holes where the stone was. The walk is the same and the cover is gone: everything can see everything, and nothing can walk straight at it.",
+	},
+	{
+		id = &"the_grove", name = "The Grove", w = 7, h = 11, neutral = true,
 		rows = [
 			".......",
-			".......",
-			".^...^.",
-			"XX...XX",
-			"XX...XX",
-			"XX...XX",
-			"XX...XX",
-			"XX...XX",
-			".^...^.",
-			".......",
+			"..#.#..",
+			".#...#.",
+			"...#...",
+			".#...#.",
+			"..#.#..",
+			".#...#.",
+			"...#...",
+			".#...#.",
+			"..#.#..",
 			".......",
 		],
-		note = "Two shores joined by a three-wide crossing. Everything has to funnel over it, and the high ground on each bank overlooks the whole span.",
+		note = "Stone pillars scattered the whole way down. There is no clean shot anywhere on this board — everything happens at the range you find each other.",
 	},
 	{
 		id = &"the_warrens", name = "The Warrens", w = 6, h = 11, neutral = true,
@@ -71,6 +161,160 @@ const MAP_TABLE := [
 			"......",
 		],
 		note = "Blocks of stone break both halves into lanes. Nothing walks straight at anything.",
+	},
+	{
+		id = &"the_spine", name = "The Spine", w = 9, h = 11, neutral = true,
+		rows = [
+			"....#....",
+			"....#....",
+			".........",
+			"....#....",
+			"....#....",
+			".........",
+			"....#....",
+			"....#....",
+			".........",
+			"....#....",
+			"....#....",
+		],
+		note = "One wall down the length of the board with three doors through it. Two lanes that can reinforce each other, but only at three places, and never by shooting across.",
+	},
+	{
+		id = &"the_ring", name = "The Ring", w = 9, h = 11, neutral = true,
+		rows = [
+			".........",
+			".........",
+			".........",
+			"..#####..",
+			"..#####..",
+			"..#####..",
+			"..#####..",
+			"..#####..",
+			".........",
+			".........",
+			".........",
+		],
+		note = "A block of stone in the dead centre that nothing crosses and nothing sees through. The fight is two separate flank fights, and neither side can help the other.",
+	},
+	{
+		id = &"three_roads", name = "Three Roads", w = 11, h = 13, neutral = true,
+		rows = [
+			"...........",
+			"...........",
+			"...#...#...",
+			"...#...#...",
+			"...#...#...",
+			"...#...#...",
+			"...#...#...",
+			"...#...#...",
+			"...#...#...",
+			"...#...#...",
+			"...#...#...",
+			"...........",
+			"...........",
+		],
+		note = "Three lanes, walled off from each other the whole way, meeting only behind each side's own lines. You are not fighting one battle here, you are funding three.",
+	},
+	{
+		id = &"four_corners", name = "Four Corners", w = 11, h = 11, neutral = true,
+		rows = [
+			".....#.....",
+			".....#.....",
+			".....#.....",
+			".....#.....",
+			"##.#####.##",
+			"...........",
+			"##.#####.##",
+			".....#.....",
+			".....#.....",
+			".....#.....",
+			".....#.....",
+		],
+		note = "Two rooms each side, one gate each, and a single hallway across the middle. You commit to a left or a right before you know where they went.",
+	},
+	{
+		id = &"the_gauntlet", name = "The Gauntlet", w = 7, h = 13, neutral = true,
+		rows = [
+			".......",
+			".......",
+			"#####..",
+			".......",
+			"..#####",
+			".......",
+			".......",
+			".......",
+			"..#####",
+			".......",
+			"#####..",
+			".......",
+			".......",
+		],
+		note = "Baffles alternating down a long board. Nothing sees down it, so every corner is an ambush, and crossing takes more than twice the steps it looks like.",
+	},
+	{
+		id = &"the_highlands", name = "The Highlands", w = 6, h = 8, neutral = false,
+		rows = [
+			".^^^^.",
+			"......",
+			"..##..",
+			"......",
+			"......",
+			"..##..",
+			"......",
+			".^^^^.",
+		],
+		note = "No divider, a boulder in each half, and a long ridge at the back of both. Short, high and mean.",
+	},
+	{
+		id = &"the_keep", name = "The Keep", w = 9, h = 11, neutral = true,
+		rows = [
+			".........",
+			".........",
+			".........",
+			"..#####..",
+			"..#^^^#..",
+			"...^^^...",
+			"..#^^^#..",
+			"..#####..",
+			".........",
+			".........",
+			".........",
+		],
+		note = "One fortress, dead centre, two doors on the neutral row, nine tiles of high ground inside and stone on every other side. Whoever gets in first owns the middle of the board.",
+	},
+	{
+		id = &"the_redoubt", name = "The Redoubt", w = 9, h = 11, neutral = true,
+		rows = [
+			".........",
+			".#######.",
+			".#.....#.",
+			".##.#.##.",
+			".........",
+			".........",
+			".........",
+			".##.#.##.",
+			".#.....#.",
+			".#######.",
+			".........",
+		],
+		note = "A walled fort at each end with two gates and a road around the outside. Archers inside cannot be shot at until something comes through a gate at them.",
+	},
+	{
+		id = &"the_anvil", name = "The Anvil", w = 9, h = 11, neutral = true,
+		rows = [
+			".........",
+			".........",
+			"....^....",
+			"...X.X...",
+			"..X^^^X..",
+			"..X^^^X..",
+			"..X^^^X..",
+			"...X.X...",
+			"....^....",
+			".........",
+			".........",
+		],
+		note = "A high plateau ringed by a dry moat, with one ramp on each side. Holding it means every archer you own gains a range band and shoots over the moat at everything below.",
 	},
 	{
 		id = &"ramparts", name = "Ramparts", w = 7, h = 11, neutral = true,
@@ -94,18 +338,38 @@ const MAP_TABLE := [
 		note = "Barriers with no thickness pinch the middle to three columns. The back rank of each side is a firing step.",
 	},
 	{
-		id = &"the_highlands", name = "The Highlands", w = 6, h = 8, neutral = false,
+		id = &"crossroads", name = "Crossroads", w = 11, h = 11, neutral = true,
 		rows = [
-			".^^^^.",
-			"......",
-			"..##..",
-			"......",
-			"......",
-			"..##..",
-			"......",
-			".^^^^.",
+			"XXX.....XXX",
+			"XXX.....XXX",
+			"XXX.....XXX",
+			"...........",
+			"...........",
+			"...........",
+			"...........",
+			"...........",
+			"XXX.....XXX",
+			"XXX.....XXX",
+			"XXX.....XXX",
 		],
-		note = "No divider, a boulder in each half, and a long ridge at the back of both. Short, high and mean.",
+		note = "A plus. Both sides come down a narrow approach into a middle that is suddenly the full width of the board.",
+	},
+	{
+		id = &"the_bridge", name = "The Bridge", w = 7, h = 11, neutral = true,
+		rows = [
+			".......",
+			".......",
+			".^...^.",
+			"XX...XX",
+			"XX...XX",
+			"XX...XX",
+			"XX...XX",
+			"XX...XX",
+			".^...^.",
+			".......",
+			".......",
+		],
+		note = "Two shores joined by a three-wide crossing. Everything has to funnel over it, and the high ground on each bank overlooks the whole span.",
 	},
 	{
 		id = &"the_hourglass", name = "The Hourglass", w = 9, h = 11, neutral = true,
@@ -123,6 +387,75 @@ const MAP_TABLE := [
 			".........",
 		],
 		note = "Wide at both ends and three tiles across in the middle, with the pinch overlooked from either side.",
+	},
+	{
+		id = &"the_chasm", name = "The Chasm", w = 9, h = 11, neutral = true,
+		rows = [
+			".........",
+			".........",
+			".^^...^^.",
+			".........",
+			".XXXXXXX.",
+			".XXXXXXX.",
+			".XXXXXXX.",
+			".........",
+			".^^...^^.",
+			".........",
+			".........",
+		],
+		note = "A trench splits the field end to end, and the only ways over it are the two flanks. Archers duel across the gap from the first second; anything with a sword has a long walk to make.",
+	},
+	{
+		id = &"the_shoals", name = "The Shoals", w = 11, h = 11, neutral = true,
+		rows = [
+			"...XX.XX...",
+			"...XX.XX...",
+			"...........",
+			"XX.XXXXX.XX",
+			"XX.XXXXX.XX",
+			"...........",
+			"XX.XXXXX.XX",
+			"XX.XXXXX.XX",
+			"...........",
+			"...XX.XX...",
+			"...XX.XX...",
+		],
+		note = "Islands joined by necks a single tile wide. Nothing here blocks a shot and almost everything blocks a step, so the necks are killing grounds long before anything reaches them.",
+	},
+	{
+		id = &"the_causeway", name = "The Causeway", w = 7, h = 15, neutral = true,
+		rows = [
+			".......",
+			".......",
+			".......",
+			"XX...XX",
+			"XXX.XXX",
+			"XXX.XXX",
+			"XXX.XXX",
+			"XXX.XXX",
+			"XXX.XXX",
+			"XXX.XXX",
+			"XXX.XXX",
+			"XX...XX",
+			".......",
+			".......",
+			".......",
+		],
+		note = "One tile wide for eight rows, in full view of both shores the whole way. Holes do not stop an arrow, so crossing means walking single file through everything they have.",
+	},
+	{
+		id = &"the_cage", name = "The Cage", w = 7, h = 11, neutral = true,
+		lines = [
+			[0, 1, 0, 2], [1, 1, 1, 2], [2, 1, 2, 2], [3, 1, 3, 2],
+			[4, 1, 4, 2], [2, 3, 2, 4], [3, 3, 3, 4], [4, 3, 4, 4],
+			[5, 3, 5, 4], [6, 3, 6, 4], [1, 4, 1, 5], [2, 4, 2, 5],
+			[3, 4, 3, 5], [4, 4, 4, 5], [5, 4, 5, 5], [1, 5, 1, 6],
+			[2, 5, 2, 6], [3, 5, 3, 6], [4, 5, 4, 6], [5, 5, 5, 6],
+			[2, 6, 2, 7], [3, 6, 3, 7], [4, 6, 4, 7], [5, 6, 5, 7],
+			[6, 6, 6, 7], [0, 8, 0, 9], [1, 8, 1, 9], [2, 8, 2, 9],
+			[3, 8, 3, 9], [4, 8, 4, 9],
+		],
+		note = "Every barrier here is waist-high: you can see and shoot the whole board from anywhere on it, and walk almost nowhere directly. Ranged units read this as an open field. Melee reads it as a maze.",
 	},
 	{
 		id = &"the_labyrinth", name = "The Labyrinth", w = 9, h = 25, neutral = true,
@@ -256,13 +589,13 @@ const UNIT_TABLE := [
 		note = "Tanky and feeble on its own. Its wisps match its tier and do the work.",
 	},
 	{
-		id = &"transcendence", name = "Transcendence", hp = 165.0, dmg = 22.0, spd = 0.7,
+		id = &"transcendence", name = "Transcendence", hp = 165.0, dmg = 22.0, spd = 0.45,
 		move = 0.62, range = "MEDIUM", sight = 4, type = "RANGED",
 		accent = Color(0.58, 0.56, 0.44),
 		mana = 0.0, magnet = true, beam = true,
 		apex = {hp = 4.0, dmg = 4.0, range = "UNLIMITED", pierce = 100,
-			endless = true, wash = 0.5},
-		note = "No ability, no tricks. Every merge it touches comes out Transcendence, and at tier 6 it fires a beam across the whole board that takes the rank behind the target with it.",
+			endless = true, wash = 0.5, spd = 0.5},
+		note = "No ability, no tricks, and slower to swing than anything else on the board. Every merge it touches comes out Transcendence, and at tier 6 it fires a beam across the whole board that takes the rank behind the target with it — once every four seconds, so what it is aimed at matters more than how often.",
 	},
 	{
 		id = &"amalgam", name = "Amalgam", hp = 190.0, dmg = 15.0, spd = 0.8,
@@ -276,7 +609,7 @@ const UNIT_TABLE := [
 		move = 0.60, range = "MELEE", sight = 3, type = "MELEE",
 		accent = Color(0.66, 0.60, 0.50),
 		ability = &"raise_host", mana = 0.0, regen = 8.0, banks = true,
-		rooted = true,
+		rooted = true, harmless = true, mechanical = true,
 		note = "Cannot move, cannot swing, and never loses the progress it made last round. When it finally raises its host, that is the end of it.",
 	},
 	{
@@ -285,6 +618,28 @@ const UNIT_TABLE := [
 		accent = Color(0.40, 0.68, 0.72),
 		ability = &"overflow", mana = 0.0, regen = 6.0, opens = true,
 		note = "Opens a pool of mana around itself on the first beat. Everyone standing in it casts sooner.",
+	},
+	{
+		id = &"tyrant", name = "Tyrant", hp = 240.0, dmg = 40.0, spd = 0.9,
+		move = 0.55, range = "MELEE", sight = 4, type = "MELEE",
+		accent = Color(0.55, 0.16, 0.22),
+		mana = 0.0, burden_radius = 2, burden = 0.30,
+		note = "Plainly stronger than anything else you can field, and every one of your own units standing within two tiles of it takes 30% more damage. It wants to be alone, which is also where a single strong unit is easiest to surround.",
+	},
+	{
+		id = &"engineer", name = "Engineer", hp = 130.0, dmg = 8.0, spd = 0.7,
+		move = 0.50, range = "MELEE", sight = 4, type = "MELEE",
+		accent = Color(0.72, 0.62, 0.30),
+		ability = &"assemble", mana = 0.0, regen = 4.0, opens = true,
+		repair = 5.0,
+		note = "Opens every round building a Sentry where it stands, exposed while it works, then steps off and leaves it standing there. Barely fights. It repairs an adjacent friendly Mechanical unit every second, and it will go to a damaged one rather than advance — so it tends its turret instead of dying on someone's spear.",
+	},
+	{
+		id = &"sentry", name = "Sentry", hp = 90.0, dmg = 45.0, spd = 0.3,
+		move = 0.60, range = "UNLIMITED", sight = 6, type = "RANGED",
+		accent = Color(0.48, 0.55, 0.62),
+		mana = 0.0, rooted = true, mechanical = true, hidden = true,
+		note = "Built, not drawn. It cannot move and it cannot be moved, it sees the whole board, and it fires rarely and enormously. Stone still stops its shot like anyone else's.",
 	},
 	{
 		id = &"wisp", name = "Wisp", hp = 34.0, dmg = 7.0, spd = 1.3,
@@ -343,15 +698,22 @@ const ABILITY_TABLE := [
 	},
 	{
 		id = &"call_wisp", name = "Call Wisp", kind = "SUMMON", cast_time = 0.5,
-		desc = "Calls a wisp to the tile beside it. Higher tiers hold more at once.",
-		summon = &"wisp", summon_max = 3,
+		desc = "Fills its retinue back up to strength with wisps on the tiles beside it — one at the lowest tiers, three at the highest. Every cast tops it back up, so a wisp that dies is replaced the next time the bar is full.",
+		summon = &"wisp", summon_max = 3, summon_retinue = true,
 	},
 	{
 		id = &"raise_host", name = "Raise Host", kind = "SUMMON", cast_time = 1.4,
-		desc = "Pours everything it has gathered into two new units, drawn at random from your own roster at its own tier and placed as close to it as the board allows. Each arrives already casting its own ability. They are yours for the rest of the match, and raising them uses the Spire up. If your half has no room for both, nothing is raised at all.",
+		desc = "Pours everything it has gathered into two new units, drawn at random from your own roster at its own tier and placed as close to it as the board allows. Never another Spire. Each arrives already casting its own ability. They are yours for the rest of the match, and raising them uses the Spire up. If your half has no room for both, nothing is raised at all.",
 		summon_count = 2, summon_random = true, summon_cap_by_tier = false,
 		summon_max = 100, summon_persists = true, consumes_caster = true,
 		guards_caster = true, summon_instacasts = true,
+	},
+	{
+		id = &"assemble", name = "Assemble", kind = "SUMMON", cast_time = 2.5,
+		desc = "Spends the opening of the round bolting a Sentry together on the tile it is standing on, then steps aside and leaves it there. It is head-down while it works and takes double damage the whole time. If its Sentry is destroyed it will build another once its bar is full, and it will not start a build it has no room to finish.",
+		summon = &"sentry", summon_max = 1, summon_cap_by_tier = false,
+		summon_retinue = true, summon_at_caster = true,
+		opener_takes_time = true, exposes_caster = 1.0, holds_when_capped = true,
 	},
 	{
 		id = &"overflow", name = "Overflow", kind = "MANA_AURA", cast_time = 0.4,
@@ -420,6 +782,13 @@ const BUFF_TABLE = [
 		unit = &"wellspring", stat_a = "MANA_REGEN", stat_b = "MAX_HP", two = true,
 		flat = true,
 		b = Vector2(3.0, 0.30), s = Vector2(6.0, 0.60), g = Vector2(9.0, 0.90)},
+	{id = &"dominion", name = "Dominion", kind = "STAT", weight = 1.0,
+		unit = &"tyrant", stat_a = "MAX_HP", stat_b = "ATTACK_DAMAGE", two = true,
+		b = Vector2(0.40, 0.40), s = Vector2(0.80, 0.80), g = Vector2(1.60, 1.60)},
+	{id = &"fabrication", name = "Fabrication", kind = "STAT", weight = 1.0,
+		unit = &"engineer", also = [&"sentry"],
+		stat_a = "MAX_HP", stat_b = "ATTACK_DAMAGE", two = true,
+		b = Vector2(0.50, 0.40), s = Vector2(1.00, 0.80), g = Vector2(2.00, 1.60)},
 	{id = &"ascension", name = "Ascension", kind = "STAT", weight = 1.0,
 		unit = &"transcendence", stat_a = "MAX_HP", stat_b = "ATTACK_DAMAGE", two = true,
 		b = Vector2(0.50, 0.50), s = Vector2(1.00, 1.00), g = Vector2(1.50, 1.50)},
@@ -447,6 +816,8 @@ const BUFF_TABLE = [
 	{id = &"oblation", name = "Oblation", kind = "SACRIFICE", weight = 0.9,
 		only = "SILVER",
 		b = Vector2(1.0, 0.0), s = Vector2(1.0, 0.0), g = Vector2(1.0, 0.0)},
+	{id = &"mimic", name = "Mimic", kind = "MIMIC", weight = 0.9,
+		b = Vector2(1.0, 0.0), s = Vector2(1.0, 0.0), g = Vector2(2.0, 0.0)},
 ]
 
 
@@ -533,9 +904,11 @@ func _save(res: Resource, path: String) -> void:
 
 
 func _make_maps() -> void:
-	for row in MAP_TABLE:
+	for i in MAP_TABLE.size():
+		var row: Dictionary = MAP_TABLE[i]
 		var m := MapData.new()
 		m.id = row.id
+		m.rank = i
 		m.display_name = row.name
 		m.width = row.w
 		m.height = row.h
@@ -571,7 +944,9 @@ func _make_abilities() -> Dictionary:
 			"heal_percent", "heal_percent_per_tier", "heal_radius", "summon_max",
 				"summon_count", "summon_random", "summon_cap_by_tier", "mana_aura_radius",
 				"summon_persists", "consumes_caster", "summon_adjacent",
-				"guards_caster", "summon_instacasts",
+				"guards_caster", "summon_instacasts", "summon_retinue",
+				"opener_takes_time", "exposes_caster", "summon_at_caster",
+				"holds_when_capped",
 				"dot_damage", "dot_ticks", "dot_interval", "burst_damage",
 				"splash_damage", "splash_radius", "pierce_targets", "pierce_damage_mult"]:
 			if row.has(key):
@@ -634,13 +1009,26 @@ func _make_units(abilities: Dictionary) -> LoadoutData:
 			u.merge_magnet = row.get("magnet", false)
 			u.beam_attack = row.get("beam", false)
 			u.wild_merge = row.get("wild", false)
+			# Two separate facts. The Spire is both; the Sentry is rooted but very
+			# much able to shoot, which is the whole of what it is for.
 			u.can_move = not row.get("rooted", false)
-			u.can_attack = not row.get("rooted", false)
+			u.can_attack = not row.get("harmless", false)
+			u.chassis = (UnitData.Chassis.MECHANICAL
+				if row.get("mechanical", false) else UnitData.Chassis.BIOLOGICAL)
+			u.repair_per_second = snappedf(
+				float(row.get("repair", 0.0)) * mult_hp, 0.5)
+			u.burden_radius = row.get("burden_radius", 0)
+			u.burden_percent = row.get("burden", 0.0)
 			if t == TIERS and row.has("apex"):
 				var apex: Dictionary = row.apex
 				u.max_hp = snappedf(u.max_hp * float(apex.get("hp", 1.0)), 1.0)
 				u.attack_damage = snappedf(
 					u.attack_damage * float(apex.get("dmg", 1.0)), 0.5)
+				# A multiplier, not a replacement: the apex beam is a siege engine,
+				# and its reload is the only thing standing between it and the
+				# whole board at once.
+				u.attack_speed = snappedf(
+					u.attack_speed * float(apex.get("spd", 1.0)), 0.01)
 				u.pierce_targets = apex.get("pierce", u.pierce_targets)
 				u.beam_endless = apex.get("endless", false)
 				u.beam_splash = apex.get("wash", 0.0)

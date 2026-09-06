@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MapData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/map_data.gd" id="1_xvk8o"]
+
+[resource]
+script = ExtResource("1_xvk8o")
+id = &"the_keep"
+display_name = "The Keep"
+rank = 20
+width = 9
+rows = PackedStringArray(".........", ".........", ".........", "..#####..", "..#^^^#..", "...^^^...", "..#^^^#..", "..#####..", ".........", ".........", ".........")
+note = "One fortress, dead centre, two doors on the neutral row, nine tiles of high ground inside and stone on every other side. Whoever gets in first owns the middle of the board."

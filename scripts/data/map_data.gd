@@ -10,6 +10,11 @@ const GLYPHS := ".#X^"
 
 @export var id: StringName = &""
 @export var display_name: String = "Map"
+
+## Where this map sits in the picker. Files load alphabetically, which buries
+## Standard in the middle of the list, so the builder stamps the table's own
+## order here and the menu sorts by it.
+@export var rank: int = 0
 @export var width: int = 6
 @export var height: int = 11
 

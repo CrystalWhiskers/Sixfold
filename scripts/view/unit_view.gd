@@ -14,8 +14,8 @@ const TIER_COLORS: Array[Color] = [
 	Color(0.53, 0.84, 0.55),
 	Color(0.42, 0.70, 0.97),
 	Color(0.76, 0.56, 0.96),
-	Color(0.98, 0.48, 0.40),
 	Color(1.00, 0.86, 0.32),
+	Color(0.98, 0.48, 0.40),
 ]
 
 

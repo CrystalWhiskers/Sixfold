@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MapData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/map_data.gd" id="1_itn7e"]
+
+[resource]
+script = ExtResource("1_itn7e")
+id = &"the_cauldron"
+display_name = "The Cauldron"
+rank = 9
+width = 11
+rows = PackedStringArray("...........", ".^^^^^^^^^.", ".^.......^.", ".^.......^.", ".^.......^.", ".^.......^.", ".^.......^.", ".^.......^.", ".^.......^.", ".^^^^^^^^^.", "...........")
+note = "A rim of high ground all the way round a low floor. Ranged units want the wall; melee wants them off it."

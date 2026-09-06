@@ -6,6 +6,7 @@
 script = ExtResource("1_hi6yk")
 id = &"the_pit"
 display_name = "The Pit"
+rank = 2
 width = 4
 height = 9
 rows = PackedStringArray()

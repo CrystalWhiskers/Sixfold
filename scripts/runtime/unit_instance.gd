@@ -39,6 +39,11 @@ var revives: int = 0
 var summons_made: int = 0
 var mana_clock: float = 0.0
 
+# Who called this unit onto the board, or -1 for one that was deployed. A
+# retinue is capped by how many of its summons are *standing*, not by how many
+# were ever made, so the caster has to be able to find its own again.
+var summoned_by: int = -1
+
 # Set on a unit raised by an ability that keeps its summons. Survives
 # reset_for_battle deliberately: it is what earns the unit a place in the roster.
 var permanent: bool = false
@@ -135,6 +140,14 @@ func charge_time() -> float:
 func is_invulnerable() -> bool:
 	return (state == State.CASTING and data.ability != null
 		and data.ability.guards_caster)
+
+
+func exposure() -> float:
+	# Extra damage taken while mid-cast. The Engineer is head-down building its
+	# turret and cannot defend itself; this is what that costs.
+	if state != State.CASTING or data.ability == null:
+		return 1.0
+	return 1.0 + maxf(data.ability.exposes_caster, 0.0)
 
 
 func can_act() -> bool:

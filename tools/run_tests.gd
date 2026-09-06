@@ -26,6 +26,13 @@ func _initialize() -> void:
 	_test_combat_determinism()
 	_test_move_lockout()
 	_test_movement_rules()
+	_test_retinue()
+	_test_chassis()
+	_test_engineer_build()
+	_test_tyrant()
+	_test_new_units_are_readable()
+	_test_spire_never_raises_a_spire()
+	_test_transcendence_rate()
 	_test_abilities()
 	_test_buff_data()
 	_test_buff_pool()
@@ -498,6 +505,79 @@ func _test_movement_rules() -> void:
 		"%d diagonal steps in the log" % diagonal_steps)
 
 	_test_displacement()
+	_test_corridor_traffic()
+
+
+func _test_corridor_traffic() -> void:
+	# A one-tile corridor is where movement rules stop being cosmetic. These two
+	# cases are why a maze board used to run to the timeout with a dozen units
+	# still standing on it.
+	var corridor := MapData.new()
+	corridor.id = &"test_corridor"
+	corridor.display_name = "Corridor"
+	corridor.width = 3
+	corridor.height = 11
+	corridor.has_neutral = true
+	corridor.rows = PackedStringArray([
+		"...", "...", "...",
+		"#.#", "#.#", "#.#", "#.#", "#.#",
+		"...", "...", "...",
+	])
+	_check("the corridor test map is legal", corridor.is_valid(),
+		corridor.invalid_reason())
+	BoardModel.use_map(corridor)
+
+	# A rooted unit cannot move and cannot be talked round. Parked in the
+	# corridor it used to seal its own side in for the rest of the round. The
+	# Spire is the shipped example, but it spends itself on its summon and so
+	# clears the way on its own — this is a bollard, to test the rule itself.
+	var bollard := (_find("warden").duplicate() as UnitData)
+	bollard.can_move = false
+	bollard.ability = null
+	var b := BoardModel.new()
+	var spire := UnitInstance.create(bollard, BoardModel.TEAM_B)
+	var walker := UnitInstance.create(_find("lancer"), BoardModel.TEAM_B)
+	var foe := UnitInstance.create(_find("warden"), BoardModel.TEAM_A)
+	var placed := b.place(spire, Vector2i(1, 6)) and b.place(walker, Vector2i(1, 7))
+	b.place(foe, Vector2i(1, 1))
+	_check("the corridor test units are all on the board", placed,
+		"place() refused — the deploy halves moved")
+	var sim := CombatSim.new()
+	sim.setup(b, 11)
+	sim.run(40.0)
+	_check("a unit shoves past a rooted friend blocking the only way through",
+		walker.cell.y < 6,
+		"walker stuck at %s, bollard at %s" % [walker.cell, spire.cell])
+	var shoved := 0
+	for e in sim.events:
+		if e.kind == "move" and e.uid == spire.uid:
+			shoved += 1
+	_check("the shove moves the rooted unit rather than deleting it",
+		shoved > 0, "a unit that cannot walk never appears in a move event")
+	_check("and the log carries both halves, so the view can animate it",
+		shoved > 0 and sim.events.any(func(e: Dictionary) -> bool:
+			return e.kind == "move" and e.uid == walker.uid))
+	_check("a corridor fight with a rooted cork in it still ends",
+		sim.is_finished(), "ran %.1fs without finishing" % sim.duration())
+
+	# A friend that can walk will clear the way itself, so the one behind should
+	# queue rather than wander off down the corridor wall.
+	var b2 := BoardModel.new()
+	var front := UnitInstance.create(_find("warden"), BoardModel.TEAM_B)
+	var back := UnitInstance.create(_find("warden"), BoardModel.TEAM_B)
+	var mark := UnitInstance.create(_find("warden"), BoardModel.TEAM_A)
+	b2.place(front, Vector2i(1, 6))
+	b2.place(back, Vector2i(1, 7))
+	b2.place(mark, Vector2i(1, 1))
+	var sim2 := CombatSim.new()
+	sim2.setup(b2, 12)
+	sim2.step()
+	sim2.step()
+	_check("a unit does not swap places with a friend that can walk",
+		back.cell.y >= front.cell.y,
+		"back at %s overtook front at %s" % [back.cell, front.cell])
+
+	BoardModel.reset_map()
 
 
 func _test_displacement() -> void:
@@ -726,8 +806,8 @@ func _test_buff_data() -> void:
 	_section("Buff data")
 
 	var pool := _pool()
-	_check("every buff on disk loaded", pool.buffs.size() == 28,
-		"loaded %d, expected 28" % pool.buffs.size())
+	_check("every buff on disk loaded", pool.buffs.size() == 31,
+		"loaded %d, expected 31" % pool.buffs.size())
 
 	var ids := {}
 	var missing: PackedStringArray = []
@@ -782,7 +862,7 @@ func _test_buff_data() -> void:
 	for b in pool.buffs:
 		if b.kind != BuffData.Kind.STAT:
 			non_stat += 1
-	_check("ten buffs do something other than bump a stat", non_stat == 10,
+	_check("eleven buffs do something other than bump a stat", non_stat == 11,
 		"found %d" % non_stat)
 
 
@@ -1396,7 +1476,7 @@ func _test_new_units() -> void:
 		roster != null and roster.is_valid())
 	if roster == null:
 		return
-	_check("fourteen unit types are pickable", roster.units.size() == 14,
+	_check("sixteen unit types are pickable", roster.units.size() == 16,
 		"%d in the roster" % roster.units.size())
 
 	var wanted := ["assassin", "herald", "revenant", "seraph", "conjurer"]
@@ -1901,6 +1981,303 @@ func _test_seraph_scaling() -> void:
 	_check("the Seraph fills its bar quickly",
 		seraph.mana_per_attack >= 30.0 and ab.cast_time <= 0.3,
 		"%.0f mana a hit, %.2fs cast" % [seraph.mana_per_attack, ab.cast_time])
+
+
+func _test_retinue() -> void:
+	_section("A retinue is who is standing, not who was made")
+	var conjurer := _find("conjurer")
+	var ab: AbilityData = conjurer.ability
+	_check("Call Wisp is a retinue, not a one-off", ab.summon_retinue)
+
+	# The opener should fill the retinue in one go. Before this it made exactly
+	# one wisp whatever the tier, so a tier 6 opened with one instead of three.
+	var opened: PackedInt32Array = []
+	for tier in range(1, 7):
+		var b := BoardModel.new()
+		var cj := UnitInstance.create(
+			BoardModel.at_tier(conjurer, tier), BoardModel.TEAM_B)
+		b.place(cj, Vector2i(2, 8))
+		b.place(UnitInstance.create(_find("warden"), BoardModel.TEAM_A),
+			Vector2i(2, 1))
+		var sim := CombatSim.new()
+		sim.setup(b, 3)
+		opened.append(sim.retinue_size(cj))
+	_check("the opening cast fills the retinue: 1, 1, 2, 2, 3, 3",
+		opened == PackedInt32Array([1, 1, 2, 2, 3, 3]), str(opened))
+
+	# A wisp that dies must free its place, or the Conjurer is done for the round
+	# after its opener however long the fight runs.
+	var board := BoardModel.new()
+	var six := UnitInstance.create(
+		BoardModel.at_tier(conjurer, 6), BoardModel.TEAM_B)
+	board.place(six, Vector2i(2, 8))
+	board.place(UnitInstance.create(_find("warden"), BoardModel.TEAM_A),
+		Vector2i(2, 1))
+	var live := CombatSim.new()
+	live.setup(board, 7)
+	_check("a tier 6 opens with three wisps", live.retinue_size(six) == 3,
+		"opened with %d" % live.retinue_size(six))
+
+	for u in board.all_units():
+		if u.summoned_by == six.uid and u.is_alive():
+			u.current_hp = 0.0
+			board.remove(u)
+			break
+	_check("losing one leaves room for one more",
+		live.retinue_size(six) == 2
+		and live.summon_want(six, ab) == 1,
+		"retinue %d, wants %d" % [
+			live.retinue_size(six), live.summon_want(six, ab)])
+
+	six.mana = UnitInstance.MANA_MAX
+	# Long enough for the 0.5s wind-up to finish; a cast is not instant.
+	for i in 12:
+		live.step()
+	_check("and the next full bar replaces it",
+		live.retinue_size(six) == 3,
+		"retinue back to %d, made %d all round" % [
+			live.retinue_size(six), six.summons_made])
+	_check("the replacement is counted as a fourth summon, not a reused slot",
+		six.summons_made == 4, "summons_made is %d" % six.summons_made)
+
+
+func _test_chassis() -> void:
+	_section("Mechanical and biological")
+	var sentry: UnitData = load("res://data/units/sentry_t1.tres")
+	var engineer := _find("engineer")
+	_check("the Sentry exists and is mechanical",
+		sentry != null and sentry.is_mechanical())
+	_check("the Spire is mechanical too, so an Engineer can keep one alive",
+		_find("spire").is_mechanical())
+	var bio := 0
+	for d in _roster().units:
+		if not d.is_mechanical():
+			bio += 1
+	_check("but most of the roster is not", bio >= _roster().units.size() - 2,
+		"%d of %d are biological" % [bio, _roster().units.size()])
+
+	# rooted and harmless used to be one flag. The Sentry is the reason they
+	# are two: it is bolted to the floor and it is the opposite of harmless.
+	_check("the Sentry cannot move", not sentry.can_move)
+	_check("but it can very much shoot", sentry.can_attack)
+	_check("the Spire still cannot do either",
+		not _find("spire").can_move and not _find("spire").can_attack)
+	_check("the Sentry sees the whole board",
+		sentry.attack_range == UnitData.RangeBand.UNLIMITED)
+	_check("and fires rarely and hard",
+		UnitInstance.create(sentry, 0).attack_interval() > 3.0
+		and sentry.attack_damage > _find("archer").attack_damage * 2.0,
+		"every %.1fs for %.0f" % [
+			UnitInstance.create(sentry, 0).attack_interval(), sentry.attack_damage])
+	_check("the Sentry is built, not drawn", not _roster().units.has(sentry))
+
+	# Repair is a trait, not an ability: the Engineer's ability slot is spent on
+	# building the thing it repairs.
+	_check("the Engineer repairs, and it is a trait not an ability",
+		engineer.repair_per_second > 0.0
+		and engineer.ability.kind == AbilityData.Kind.SUMMON)
+	var b := BoardModel.new()
+	var eng := UnitInstance.create(engineer, BoardModel.TEAM_B)
+	var mech := UnitInstance.create(sentry, BoardModel.TEAM_B)
+	var flesh := UnitInstance.create(_find("archer"), BoardModel.TEAM_B)
+	b.place(eng, Vector2i(2, 8))
+	b.place(mech, Vector2i(3, 8))
+	b.place(flesh, Vector2i(1, 8))
+	b.place(UnitInstance.create(_find("warden"), BoardModel.TEAM_A), Vector2i(2, 1))
+	var sim := CombatSim.new()
+	sim.setup(b, 4)
+	mech.current_hp = 10.0
+	flesh.current_hp = 10.0
+	for i in 15:
+		sim.step()
+	_check("standing beside it repairs a mechanical ally",
+		mech.current_hp > 10.0, "sentry still on %.0f" % mech.current_hp)
+	_check("and does nothing at all for a biological one",
+		is_equal_approx(flesh.current_hp, 10.0),
+		"archer went to %.0f" % flesh.current_hp)
+
+
+func _test_engineer_build() -> void:
+	_section("The Engineer builds where it stands")
+	var engineer := _find("engineer")
+	var ab: AbilityData = engineer.ability
+	_check("it builds at the start of the round", engineer.casts_at_battle_start)
+	_check("and the build takes real time, unlike every other opener",
+		ab.opener_takes_time and ab.cast_time > 1.0,
+		"cast_time %.1f" % ab.cast_time)
+	_check("it is exposed while it works, not protected",
+		ab.exposes_caster > 0.0 and not ab.guards_caster)
+
+	var b := BoardModel.new()
+	var eng := UnitInstance.create(engineer, BoardModel.TEAM_B)
+	var home := Vector2i(2, 8)
+	b.place(eng, home)
+	b.place(UnitInstance.create(_find("warden"), BoardModel.TEAM_A), Vector2i(2, 1))
+	var sim := CombatSim.new()
+	sim.setup(b, 5)
+	_check("it starts the round mid-build",
+		eng.state == UnitInstance.State.CASTING)
+	_check("and takes double damage while it does",
+		is_equal_approx(eng.exposure(), 2.0), "x%.2f" % eng.exposure())
+	_check("nothing is built on the first tick",
+		sim.retinue_size(eng) == 0)
+
+	for i in 40:
+		sim.step()
+	_check("the Sentry lands on the tile the Engineer was standing on",
+		board_holds(b, home, "sentry"), "nothing of the sort at %s" % home)
+	_check("and the Engineer has stepped off it", eng.cell != home,
+		"still at %s" % eng.cell)
+	_check("and it stays beside what it built, tending it",
+		BoardModel.tile_distance(eng.cell, home) <= 1,
+		"wandered off to %s" % eng.cell)
+	_check("it is no longer exposed once the build is done",
+		is_equal_approx(eng.exposure(), 1.0), "x%.2f" % eng.exposure())
+	_check("exactly one Sentry, not one per tick",
+		sim.retinue_size(eng) == 1, "%d" % sim.retinue_size(eng))
+
+	# A full bar with a healthy Sentry must not restart the build: it would
+	# stand exposed for two and a half seconds and produce nothing.
+	eng.mana = UnitInstance.MANA_MAX
+	_check("a full bar with its Sentry alive does not restart the build",
+		not sim.can_cast(eng) and ab.holds_when_capped)
+	for i in 5:
+		sim.step()
+	_check("so it stays out of the casting state", eng.state != UnitInstance.State.CASTING)
+
+	# But a destroyed Sentry must be replaceable, or the Engineer is finished.
+	for u in b.all_units():
+		if u.summoned_by == eng.uid and u.is_alive():
+			u.current_hp = 0.0
+			b.remove(u)
+			break
+	_check("but a destroyed Sentry frees it to build again", sim.can_cast(eng))
+
+
+func board_holds(b: BoardModel, c: Vector2i, id: String) -> bool:
+	var u := b.unit_at(c)
+	return u != null and String(u.data.id) == id
+
+
+func _test_new_units_are_readable() -> void:
+	# Everything a unit does has to be legible from its card, or the player is
+	# guessing. These three carry rules nothing else in the game has.
+	var eng := UnitCodex.card(_find("engineer"))
+	_check("the Engineer's card says it repairs",
+		eng.to_lower().contains("repair"), eng)
+	_check("and that it is exposed while building",
+		eng.to_lower().contains("more damage while"), eng)
+	var sentry: UnitData = load("res://data/units/sentry_t1.tres")
+	var sen := UnitCodex.card(sentry)
+	_check("the Sentry's card says it is mechanical",
+		sen.contains("Mechanical"), sen)
+	_check("and that it never moves", sen.contains("Never moves"), sen)
+	var tyr := UnitCodex.card(_find("tyrant"))
+	_check("the Tyrant's card owns up to its drawback",
+		tyr.contains("Your own units within"), tyr)
+	_check("every unit's headline names its chassis",
+		UnitCodex.headline(_find("archer")).contains("Biological"),
+		UnitCodex.headline(_find("archer")))
+
+
+func _test_tyrant() -> void:
+	_section("The Tyrant is your problem")
+	var tyrant := _find("tyrant")
+	_check("it has no ability, it is just a body", tyrant.ability == null)
+	_check("and it is plainly above curve",
+		tyrant.attack_damage > _find("warden").attack_damage
+		and tyrant.max_hp >= _find("warden").max_hp,
+		"%.0f dmg / %.0f hp" % [tyrant.attack_damage, tyrant.max_hp])
+	_check("it burdens the units around it",
+		tyrant.burden_radius > 0 and tyrant.burden_percent > 0.0)
+
+	var b := BoardModel.new()
+	var ty := UnitInstance.create(tyrant, BoardModel.TEAM_B)
+	var near := UnitInstance.create(_find("archer"), BoardModel.TEAM_B)
+	var away := UnitInstance.create(_find("archer"), BoardModel.TEAM_B)
+	var foe := UnitInstance.create(_find("archer"), BoardModel.TEAM_A)
+	b.place(ty, Vector2i(2, 8))
+	b.place(near, Vector2i(3, 8))
+	b.place(away, Vector2i(0, 10))
+	b.place(foe, Vector2i(2, 1))
+	var sim := CombatSim.new()
+	sim.setup(b, 2)
+	_check("a friend standing next to it takes more damage",
+		sim._burden_on(near) > 1.0, "x%.2f" % sim._burden_on(near))
+	_check("a friend well clear of it does not",
+		is_equal_approx(sim._burden_on(away), 1.0), "x%.2f" % sim._burden_on(away))
+	_check("the Tyrant does not burden itself",
+		is_equal_approx(sim._burden_on(ty), 1.0), "x%.2f" % sim._burden_on(ty))
+	_check("and it is not a gift to the enemy either",
+		is_equal_approx(sim._burden_on(foe), 1.0), "x%.2f" % sim._burden_on(foe))
+
+	# Asked at the moment of the hit, so it stops mattering the instant the
+	# Tyrant is gone rather than leaving stale aura state behind.
+	ty.current_hp = 0.0
+	b.remove(ty)
+	_check("kill the Tyrant and the burden lifts immediately",
+		is_equal_approx(sim._burden_on(near), 1.0), "x%.2f" % sim._burden_on(near))
+
+
+func _test_spire_never_raises_a_spire() -> void:
+	_section("A Spire never raises a Spire")
+	var spire := _find("spire")
+	var ab: AbilityData = spire.ability
+	_check("Raise Host spends its caster and rolls at random",
+		ab.consumes_caster and ab.summon_random)
+
+	var board := BoardModel.new()
+	board.team_merge_pools[BoardModel.TEAM_B] = _roster().units.duplicate()
+	var sim := CombatSim.new()
+	sim.board = board
+	var pool := sim._random_summon_pool(BoardModel.TEAM_B)
+	var ids := {}
+	for d in pool:
+		ids[String(d.id)] = true
+	_check("the roster it rolls from has the Spire taken out",
+		not ids.has("spire"), "pool: %s" % str(ids.keys()))
+	_check("but everything else is still rollable",
+		pool.size() == _roster().units.size() - 1,
+		"%d of %d" % [pool.size(), _roster().units.size()])
+
+	# Written against the mechanic, not the name: anything that spends itself to
+	# summon would otherwise pay for its own replacement.
+	var recursive := 0
+	for d in _roster().units:
+		var a: AbilityData = d.ability
+		if a != null and a.kind == AbilityData.Kind.SUMMON and a.consumes_caster:
+			recursive += 1
+	_check("and the rule catches every self-spending summoner there is",
+		recursive == _roster().units.size() - pool.size(),
+		"%d such units, %d filtered" % [
+			recursive, _roster().units.size() - pool.size()])
+
+
+func _test_transcendence_rate() -> void:
+	_section("The apex beam reloads")
+	var apex := BoardModel.at_tier(_find("transcendence"), 6)
+	var five := BoardModel.at_tier(_find("transcendence"), 5)
+	var u := UnitInstance.create(apex, BoardModel.TEAM_B)
+	var u5 := UnitInstance.create(five, BoardModel.TEAM_B)
+	_check("tier 6 fires slower than tier 5, not just harder",
+		u.attack_interval() > u5.attack_interval() * 1.5,
+		"t6 every %.2fs, t5 every %.2fs" % [
+			u.attack_interval(), u5.attack_interval()])
+	_check("it is the slowest thing on the board", _slowest_is(apex),
+		"something else swings slower than the apex beam")
+	_check("but it still fires inside a normal round",
+		u.attack_interval() < 8.0, "every %.2fs" % u.attack_interval())
+
+
+func _slowest_is(who: UnitData) -> bool:
+	var mine := UnitInstance.create(who, BoardModel.TEAM_B).attack_interval()
+	for d in _roster().units:
+		var top := BoardModel.at_tier(d, 6)
+		if top == null or top.id == who.id or not top.can_attack:
+			continue
+		if UnitInstance.create(top, BoardModel.TEAM_B).attack_interval() > mine:
+			return false
+	return true
 
 
 func _test_conjurer_shape() -> void:
@@ -2929,7 +3306,13 @@ func _test_all_or_nothing() -> void:
 	_check("the shortfall is named, and it is space",
 		sim.summon_shortfall(caster, ab) == "no_room",
 		sim.summon_shortfall(caster, ab))
-	_check("so it will not start the cast at all", not sim.can_cast(caster))
+	# The Spire casts anyway. That was a deliberate call: burning the bar with no
+	# room is the pressure to merge before it is ready. `holds_when_capped` is
+	# the opt-out, and the Spire does not take it — the Engineer does, because
+	# standing exposed for two and a half seconds to produce nothing is a trap
+	# rather than pressure.
+	_check("it starts the cast regardless, because that is the punishment",
+		sim.can_cast(caster) and not ab.holds_when_capped)
 
 	var before := board.count_of(BoardModel.TEAM_B)
 	for i in 20:
@@ -4139,6 +4522,15 @@ func _test_tier_colours() -> void:
 	_check("asking for a tier past the top clamps instead of crashing",
 		UnitView.tier_color(99) == UnitView.tier_color(DataBuilder.TIERS)
 			and UnitView.tier_color(0) == UnitView.tier_color(1))
+
+	# The top two are the ones players actually look for, and which is which is
+	# a deliberate choice rather than an ordering accident.
+	var t5 := UnitView.tier_color(5)
+	var t6 := UnitView.tier_color(6)
+	_check("tier 5 is yellow", t5.r > 0.9 and t5.g > 0.7 and t5.b < 0.5,
+		str(t5))
+	_check("tier 6 is red", t6.r > 0.9 and t6.g < 0.6 and t6.b < 0.6, str(t6))
+	_check("and the two are not each other", t5 != t6)
 
 
 func _test_the_compound() -> void:

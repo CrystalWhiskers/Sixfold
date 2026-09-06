@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MapData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/map_data.gd" id="1_girnu"]
+
+[resource]
+script = ExtResource("1_girnu")
+id = &"the_redoubt"
+display_name = "The Redoubt"
+rank = 21
+width = 9
+rows = PackedStringArray(".........", ".#######.", ".#.....#.", ".##.#.##.", ".........", ".........", ".........", ".##.#.##.", ".#.....#.", ".#######.", ".........")
+note = "A walled fort at each end with two gates and a road around the outside. Archers inside cannot be shot at until something comes through a gate at them."

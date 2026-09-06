@@ -194,10 +194,14 @@ func _look_at_half(team: int) -> void:
 
 
 func _build_buff_bars() -> void:
-	var origin := _board_view.position
-	var span := _board_view.board_size()
-	var board_w := span.x
-	var board_h := span.y
+	# Everything here is laid out against BOARD_AREA — the window the board is
+	# seen through — and never against the board's own pixel size. A 9 x 25 map
+	# is 1400 pixels tall and slides under the pan; furniture pinned to that ends
+	# up off screen, or worse, parked on top of the buttons where its PASS filter
+	# swallows the clicks.
+	var origin := BOARD_AREA.position
+	var board_w := BOARD_AREA.size.x
+	var board_h := BOARD_AREA.size.y
 
 	var theirs := BuffBar.new()
 	theirs.heading = GameSetup.short_name(AI_TEAM) if _pvp() else "Theirs"
@@ -639,6 +643,8 @@ func _fire_one_shot(team: int, buff: BuffData, rarity: BuffData.Rarity) -> void:
 			_buffs_for(team).skip_draws += 1
 		BuffData.Kind.SACRIFICE:
 			_sacrifice_highest(team)
+		BuffData.Kind.MIMIC:
+			_mimic_highest(team, roundi(buff.magnitude(rarity).x))
 
 
 func _fill_half(team: int) -> int:
@@ -678,6 +684,31 @@ func _gift_units(team: int, spec: Vector2) -> int:
 		var u := UnitInstance.create(shape, team)
 		_buffs_for(team).apply_to(u)
 		if board.place(u, free[rng.randi_range(0, free.size() - 1)]):
+			made += 1
+	_board_view.rebuild()
+	return made
+
+
+func _mimic_highest(team: int, copies: int) -> int:
+	# Copies the *template*, not the instance: a mimic of a wounded unit arrives
+	# at full health, and it carries no shields, mana or battle state from the
+	# thing it copied. Ties go to whatever is furthest along the board order,
+	# which is stable for a given board rather than random.
+	var best: UnitInstance = null
+	for u in board.units_of(team):
+		if best == null or u.data.tier > best.data.tier:
+			best = u
+	if best == null:
+		return 0
+	var made := 0
+	var rng := _rng_for(team)
+	for i in maxi(copies, 1):
+		var free := board.free_deploy_cells(team)
+		if free.is_empty():
+			break
+		var copy := UnitInstance.create(best.data, team)
+		_buffs_for(team).apply_to(copy)
+		if board.place(copy, free[rng.randi_range(0, free.size() - 1)]):
 			made += 1
 	_board_view.rebuild()
 	return made

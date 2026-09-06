@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_ikfec"]
+
+[resource]
+script = ExtResource("1_ikfec")
+id = &"mimic"
+display_name = "Mimic"
+kind = 11
+weight = 0.9
+bronze = Vector2(1, 0)
+silver = Vector2(1, 0)
+gold = Vector2(2, 0)

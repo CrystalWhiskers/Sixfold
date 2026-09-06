@@ -6,6 +6,7 @@
 script = ExtResource("1_k3g2w")
 id = &"the_long_march"
 display_name = "The Long March"
+rank = 5
 width = 5
 height = 15
 rows = PackedStringArray()

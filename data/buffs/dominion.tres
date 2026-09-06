@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_20jtr"]
+
+[resource]
+script = ExtResource("1_20jtr")
+id = &"dominion"
+display_name = "Dominion"
+unit_id = &"tyrant"
+bronze = Vector2(0.4, 0.4)
+silver = Vector2(0.8, 0.8)
+gold = Vector2(1.6, 1.6)
+stat_a = 0
+uses_second_stat = true

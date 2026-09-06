@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MapData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/map_data.gd" id="1_vcknd"]
+
+[resource]
+script = ExtResource("1_vcknd")
+id = &"the_anvil"
+display_name = "The Anvil"
+rank = 22
+width = 9
+rows = PackedStringArray(".........", ".........", "....^....", "...X.X...", "..X^^^X..", "..X^^^X..", "..X^^^X..", "...X.X...", "....^....", ".........", ".........")
+note = "A high plateau ringed by a dry moat, with one ramp on each side. Holding it means every archer you own gains a range band and shoots over the moat at everything below."

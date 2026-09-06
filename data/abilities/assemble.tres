@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_isau7"]
+[ext_resource type="Resource" path="res://data/units/sentry_t1.tres" id="2_e5mv4"]
+
+[resource]
+script = ExtResource("1_isau7")
+id = &"assemble"
+display_name = "Assemble"
+description = "Spends the opening of the round bolting a Sentry together on the tile it is standing on, then steps aside and leaves it there. It is head-down while it works and takes double damage the whole time. If its Sentry is destroyed it will build another once its bar is full, and it will not start a build it has no room to finish."
+kind = 9
+cast_time = 2.5
+summon_unit = ExtResource("2_e5mv4")
+summon_max = 1
+summon_cap_by_tier = false
+opener_takes_time = true
+exposes_caster = 1.0
+holds_when_capped = true
+summon_at_caster = true
+summon_retinue = true

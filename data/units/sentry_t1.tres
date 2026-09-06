@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/units/sentry_t2.tres" id="1_ut0s4"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_8cibs"]
+
+[resource]
+script = ExtResource("2_8cibs")
+id = &"sentry"
+display_name = "Sentry"
+max_hp = 90.0
+attack_damage = 45.0
+attack_speed = 0.3
+move_time = 0.6
+attack_range = 5
+sight_range = 6
+attack_type = 1
+mana_per_attack = 0.0
+chassis = 1
+can_move = false
+next_tier = ExtResource("1_ut0s4")
+note = "Built, not drawn. It cannot move and it cannot be moved, it sees the whole board, and it fires rarely and enormously. Stone still stops its shot like anyone else's."
+accent = Color(0.48, 0.55, 0.62, 1)

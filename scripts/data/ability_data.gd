@@ -71,6 +71,31 @@ enum Kind {
 @export var consumes_caster: bool = false
 @export var summon_adjacent: bool = true
 @export var summon_instacasts: bool = false
+
+## The opener is normally instant — no wind-up in the simulation at all. This
+## makes it take its real `cast_time` instead, so there is a window in which the
+## caster is standing there doing it.
+@export var opener_takes_time: bool = false
+
+## The opposite of `guards_caster`: while casting, the caster takes this much
+## more damage. 1.0 is double. The two are mutually exclusive by construction —
+## a cast is either protected or exposed, never both.
+@export var exposes_caster: float = 0.0
+
+## Do not start a cast that cannot land. The Spire deliberately burns its bar
+## when it has no room — that is the pressure to merge before it is ready. A
+## builder standing exposed for two and a half seconds to produce nothing is not
+## pressure, it is a trap, so it waits instead.
+@export var holds_when_capped: bool = false
+
+## Build it on the tile the caster is standing on, and step the caster aside.
+## Falls back to ordinary adjacent placement if there is nowhere to step.
+@export var summon_at_caster: bool = false
+
+## A retinue rather than a one-off: the cap counts how many of this caster's
+## summons are still standing, and a cast tops the retinue back up to it. Lose a
+## wisp and the next full bar replaces it; a tier 6 Conjurer opens with three.
+@export var summon_retinue: bool = false
 @export var guards_caster: bool = false
 
 @export_group("Mana aura")

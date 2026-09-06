@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/units/tyrant_t3.tres" id="1_gxl8q"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_kd4wv"]
+
+[resource]
+script = ExtResource("2_kd4wv")
+id = &"tyrant"
+display_name = "Tyrant II"
+tier = 2
+max_hp = 480.0
+attack_damage = 80.0
+attack_speed = 0.9
+move_time = 0.55
+mana_per_attack = 0.0
+burden_radius = 2
+burden_percent = 0.3
+next_tier = ExtResource("1_gxl8q")
+note = "Plainly stronger than anything else you can field, and every one of your own units standing within two tiles of it takes 30% more damage. It wants to be alone, which is also where a single strong unit is easiest to surround."
+accent = Color(0.55, 0.16, 0.22, 1)

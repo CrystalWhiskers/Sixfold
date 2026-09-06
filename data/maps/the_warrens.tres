@@ -6,5 +6,6 @@
 script = ExtResource("1_o6g42")
 id = &"the_warrens"
 display_name = "The Warrens"
+rank = 13
 rows = PackedStringArray("......", ".####.", "......", "..##..", "......", "......", "......", "..##..", "......", ".####.", "......")
 note = "Blocks of stone break both halves into lanes. Nothing walks straight at anything."

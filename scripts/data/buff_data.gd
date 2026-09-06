@@ -19,9 +19,11 @@ enum Kind {
 	WILD_MERGE,
 	TIER_GIFT,
 	SACRIFICE,
+	MIMIC,
 }
 
-const ONE_SHOT_KINDS := [Kind.BOARD_FILL, Kind.TIER_GIFT, Kind.SACRIFICE]
+const ONE_SHOT_KINDS := [Kind.BOARD_FILL, Kind.TIER_GIFT, Kind.SACRIFICE,
+	Kind.MIMIC]
 
 const RARITY_NAMES := ["Bronze", "Silver", "Gold"]
 const RARITY_COLORS := [
@@ -165,6 +167,8 @@ func describe(r: Rarity) -> String:
 				roundi(m.x), roundi(m.y)]
 		Kind.SACRIFICE:
 			return "Right now: your highest-tier unit is consumed and every other unit gains tiers — 1 for a tier 1-2, 2 for a tier 3-4, 3 for a tier 5-6."
+		Kind.MIMIC:
+			return "Right now: %d copy of your highest-tier unit, at its tier, placed on your half." % roundi(m.x) if roundi(m.x) == 1 else "Right now: %d copies of your highest-tier unit, at its tier, placed on your half." % roundi(m.x)
 	return ""
 
 

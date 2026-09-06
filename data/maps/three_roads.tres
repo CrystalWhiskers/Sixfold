@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="MapData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/map_data.gd" id="1_gosnw"]
+
+[resource]
+script = ExtResource("1_gosnw")
+id = &"three_roads"
+display_name = "Three Roads"
+rank = 16
+width = 11
+height = 13
+rows = PackedStringArray("...........", "...........", "...#...#...", "...#...#...", "...#...#...", "...#...#...", "...#...#...", "...#...#...", "...#...#...", "...#...#...", "...#...#...", "...........", "...........")
+note = "Three lanes, walled off from each other the whole way, meeting only behind each side's own lines. You are not fighting one battle here, you are funding three."

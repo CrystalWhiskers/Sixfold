@@ -6,6 +6,7 @@
 script = ExtResource("1_je7cp")
 id = &"the_crush"
 display_name = "The Crush"
+rank = 4
 width = 8
 height = 6
 has_neutral = false

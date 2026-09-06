@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MapData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/map_data.gd" id="1_gk0wl"]
+
+[resource]
+script = ExtResource("1_gk0wl")
+id = &"crossroads"
+display_name = "Crossroads"
+rank = 24
+width = 11
+rows = PackedStringArray("XXX.....XXX", "XXX.....XXX", "XXX.....XXX", "...........", "...........", "...........", "...........", "...........", "XXX.....XXX", "XXX.....XXX", "XXX.....XXX")
+note = "A plus. Both sides come down a narrow approach into a middle that is suddenly the full width of the board."

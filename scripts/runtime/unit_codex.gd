@@ -3,7 +3,8 @@ extends RefCounted
 
 
 static func headline(d: UnitData) -> String:
-	return "%s  ·  T%d  ·  %s" % [d.display_name, d.tier, d.range_name()]
+	return "%s  ·  T%d  ·  %s  ·  %s" % [
+		d.display_name, d.tier, d.range_name(), d.chassis_name()]
 
 
 static func stat_line(d: UnitData) -> String:
@@ -70,6 +71,17 @@ static func traits(d: UnitData) -> PackedStringArray:
 		out.append("Keeps whatever it has charged from one round to the next.")
 	if d.ability != null and d.ability.consumes_caster:
 		out.append("Using its ability spends it: it dies on the spot, for good.")
+	if d.ability != null and d.ability.exposes_caster > 0.0:
+		out.append("Takes %d%% more damage while it is casting." % roundi(
+			d.ability.exposes_caster * 100.0))
+	if d.is_mechanical():
+		out.append("Mechanical — an Engineer beside it will repair it.")
+	if d.repair_per_second > 0.0:
+		out.append("Repairs %s health a second to each adjacent friendly Mechanical unit, and stays with them rather than advancing."
+			% _num(d.repair_per_second))
+	if d.burden_radius > 0 and d.burden_percent > 0.0:
+		out.append("Your own units within %d tiles take %d%% more damage. Theirs do not."
+			% [d.burden_radius, roundi(d.burden_percent * 100.0)])
 	return out
 
 

@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MapData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/map_data.gd" id="1_3v4ky"]
+
+[resource]
+script = ExtResource("1_3v4ky")
+id = &"the_spine"
+display_name = "The Spine"
+rank = 14
+width = 9
+rows = PackedStringArray("....#....", "....#....", ".........", "....#....", "....#....", ".........", "....#....", "....#....", ".........", "....#....", "....#....")
+note = "One wall down the length of the board with three doors through it. Two lanes that can reinforce each other, but only at three places, and never by shooting across."

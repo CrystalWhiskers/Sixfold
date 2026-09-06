@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MapData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/map_data.gd" id="1_ijd2s"]
+
+[resource]
+script = ExtResource("1_ijd2s")
+id = &"the_chasm"
+display_name = "The Chasm"
+rank = 27
+width = 9
+rows = PackedStringArray(".........", ".........", ".^^...^^.", ".........", ".XXXXXXX.", ".XXXXXXX.", ".XXXXXXX.", ".........", ".^^...^^.", ".........", ".........")
+note = "A trench splits the field end to end, and the only ways over it are the two flanks. Archers duel across the gap from the first second; anything with a sword has a long walk to make."

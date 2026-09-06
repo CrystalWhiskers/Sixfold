@@ -6,6 +6,7 @@
 script = ExtResource("1_k8lp2")
 id = &"the_highlands"
 display_name = "The Highlands"
+rank = 19
 height = 8
 has_neutral = false
 rows = PackedStringArray(".^^^^.", "......", "..##..", "......", "......", "..##..", "......", ".^^^^.")

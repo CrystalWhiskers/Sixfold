@@ -376,7 +376,22 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not interactive or board == null:
+	if board == null:
+		return
+
+	# The camera is not part of playing your turn: a board too big for its window
+	# has to be readable while the fighting happens, when `interactive` is off and
+	# there is nothing to drag. Only picking units up is gated on the turn.
+	if event is InputEventKey and event.pressed:
+		var step := Vector2.ZERO
+		match (event as InputEventKey).keycode:
+			KEY_LEFT: step = Vector2(KEY_PAN, 0.0)
+			KEY_RIGHT: step = Vector2(-KEY_PAN, 0.0)
+			KEY_UP: step = Vector2(0.0, KEY_PAN)
+			KEY_DOWN: step = Vector2(0.0, -KEY_PAN)
+		if step != Vector2.ZERO:
+			pan_by(step)
+			get_viewport().set_input_as_handled()
 		return
 
 	if event is InputEventMouseMotion:
@@ -384,6 +399,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			var now := get_global_mouse_position()
 			pan_by(now - _pan_from)
 			_pan_from = now
+			return
+		if not interactive:
 			return
 		var cell := pos_to_cell(to_local(get_global_mouse_position()))
 		if _drag_uid >= 0:
@@ -395,26 +412,27 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		var cell := pos_to_cell(to_local(get_global_mouse_position()))
-		if event.pressed:
-			_begin_drag(cell)
-		else:
+		var at := get_global_mouse_position()
+		if not event.pressed:
 			_panning = false
-			_end_drag(cell)
-
-	if event is InputEventKey and event.pressed:
-		var step := Vector2.ZERO
-		match (event as InputEventKey).keycode:
-			KEY_LEFT: step = Vector2(KEY_PAN, 0.0)
-			KEY_RIGHT: step = Vector2(-KEY_PAN, 0.0)
-			KEY_UP: step = Vector2(0.0, KEY_PAN)
-			KEY_DOWN: step = Vector2(0.0, -KEY_PAN)
-		if step != Vector2.ZERO:
-			pan_by(step)
+			if interactive:
+				_end_drag(pos_to_cell(to_local(at)))
+			return
+		if not view_area.has_point(at):
+			return
+		if interactive:
+			_begin_drag(pos_to_cell(to_local(at)))
+		elif overflows():
+			# Nothing to pick up mid-battle, so a press anywhere on the board
+			# window takes the camera.
+			_begin_pan(at)
 
 
 func _begin_drag(cell: Vector2i) -> void:
 	if not board.in_bounds(cell):
+		# Inside the window but off the edge of the board — still somewhere to
+		# grab the camera by.
+		_begin_pan(get_global_mouse_position())
 		return
 	var u := board.unit_at(cell)
 	cell_pressed.emit(cell)

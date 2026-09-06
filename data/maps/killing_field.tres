@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="MapData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/map_data.gd" id="1_t3tgp"]
+
+[resource]
+script = ExtResource("1_t3tgp")
+id = &"killing_field"
+display_name = "Killing Field"
+rank = 7
+width = 13
+height = 9
+rows = PackedStringArray("^^^^^^^^^^^^^", ".............", ".............", ".............", ".............", ".............", ".............", ".............", "^^^^^^^^^^^^^")
+note = "Thirteen wide and shallow, with a firing step along both backs. Almost everything is in range of almost everything from the opening tick."

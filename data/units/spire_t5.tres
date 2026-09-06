@@ -18,6 +18,7 @@ ability = ExtResource("1_6pwfm")
 mana_per_attack = 0.0
 mana_per_charge = 8.0
 keeps_mana = true
+chassis = 1
 can_move = false
 can_attack = false
 next_tier = ExtResource("2_2mmae")

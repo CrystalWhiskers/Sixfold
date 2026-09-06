@@ -82,10 +82,10 @@ second during headless balance runs.
 ## Running things
 
 ```
-godot --headless --script res://tools/run_tests.gd      # 354 model + sim tests
+godot --headless --script res://tools/run_tests.gd      # 1065 model + sim tests
 godot --headless res://tools/smoke_test.tscn            # vs-computer match, start to finish
 godot --headless res://tools/pvp_smoke_test.tscn        # local PvP: turn taking and the blind
-godot --headless res://tools/menu_smoke_test.tscn       # menu, loadout editor, map picker
+godot --headless res://tools/menu_smoke_test.tscn       # menu, loadout editor, map grid
 godot --headless res://tools/map_smoke_test.tscn        # a round on an undivided, non-default board
 godot --headless --script res://tools/generate_data.gd  # regenerate data/ from the tables
 ```
@@ -197,7 +197,7 @@ window. Layout constants sit at the top of `scripts/view/buff_picker.gd`:
 `BOTTOM_MARGIN`, and `CENTER_VERTICALLY` — flip that last one to `true` to park
 the stack in the middle of the screen instead of near the bottom.
 
-### The twenty-eight buffs
+### The thirty-one buffs
 
 Bronze / silver / gold, all in `tools/data_builder.gd`'s `BUFF_TABLE`. Every one
 doubles from bronze to silver and doubles again to gold.
@@ -224,6 +224,8 @@ doubles from bronze to silver and doubles again to gold.
 | Incubation | Spire | **+3 / +6 / +9 flat mana a charge**, +50 / 100 / 200% health |
 | Confluence | Wellspring | **+3 / +6 / +9 flat mana a charge**, +30 / 60 / 90% health |
 | Ascension | Transcendence | +50 / 100 / 150% health **and** attack |
+| Dominion | Tyrant | +40 / 80 / 160% health **and** attack |
+| Fabrication | Engineer **and its Sentries** | +50 / 100 / 200% health, +40 / 80 / 160% attack |
 
 Fanfare carries a **third** modifier (`stat_c` / `third`) on top of its two:
 +25 / 50 / 100% **aura power**, which multiplies the horn the Herald hands out.
@@ -505,6 +507,49 @@ a mirror duel under pressure is still near even, and there is a test for that. A
 
 Before this, roughly 1 in 40 random 8-v-8 matches ran to timeout.
 
+### Pressure moves as well as hits
+
+The maze and corridor boards found the hole in that. A round can also overrun
+because the last units never *meet*, and a bigger multiplier does nothing for a
+unit that is still walking — the Gauntlet averaged 76 seconds and the Labyrinth
+62. So `pressure()` divides `MOVE_TIME` too, floored at one tick. Every unit is
+divided by the same number, so who outruns whom never changes, and the movement
+lockout test still passes untouched.
+
+### A corridor is where the movement rules stop being cosmetic
+
+Two things that never mattered on an open board turned out to decide whether a
+maze round finishes at all. Both were found by running forty random matches on
+every map and printing the survivors of any round that hit the cap.
+
+**A rooted unit is a cork.** A Spire cannot move, and occupied tiles are
+impassable, so a Spire deployed onto a one-tile corridor sealed its own army in
+for the rest of the round — one probe ended 90 seconds with twelve units alive
+and 42 moves in the whole log. A unit whose only route is blocked by a friend
+that *cannot walk* now trades places with it (`BoardModel.trade_places()` — the
+same swap as `swap_cells()` without the deploy-zone check, which is a prep-phase
+rule). The log carries a move for both, so the view animates a shove rather than
+a teleport.
+
+**Units queued badly.** When every route was blocked, `_next_step()` fell through
+to a greedy step — walk whichever way shortens the straight-line distance. On an
+open board that is a fine approximation. In a corridor it is pathological: the
+units behind a jam scatter along the wall beside it and never arrive. Now the
+fallback re-paths as if friendly units were not there and takes its place in the
+queue: shove past anything rooted, and **wait** behind anything that will move on
+its own. `_downhill()` also prefers an open tile to one it would have to queue
+behind at equal distance.
+
+Together with faster movement these took the Gauntlet from 76s average to 41,
+the Labyrinth from 62 to 46, the Cage's worst round from 81s to 50, and removed
+the Causeway's timeouts entirely.
+
+There are tests for both rules on a purpose-built 3 x 11 corridor map. The rooted
+one uses a **bollard** — a Warden duplicated with `can_move = false` and no
+ability — not a Spire, because a Spire spends itself on its summon and clears the
+corridor on its own, which made the first version of the test pass for the wrong
+reason.
+
 ---
 
 ## The force bar
@@ -565,6 +610,146 @@ in flight, so a unit killed mid-wind-up doesn't die with a ring around it.
 If you want the animation longer or shorter, `MIN_CAST_SHOW` sets the floor for
 openers and `AbilityData.cast_time` sets it for everything else — and `cast_time`
 is a **real simulation cost**, so lengthening it is a nerf, not a visual tweak.
+
+---
+
+## A retinue, not a running total
+
+`summons_made` counted how many a caster had *ever* made, and `summon_cap()`
+capped against that. For the Spire that is right — it raises a host once and
+spends itself. For the Conjurer it was wrong in two ways at once, and both showed
+at tier 6: it opened with **one** wisp instead of three, and once it had made
+three over the round it was finished even if all three were dead.
+
+`AbilityData.summon_retinue` marks an ability as a standing retinue instead. Two
+things change for it:
+
+- **The cap counts who is standing.** `retinue_size()` walks the unit list for
+  living units whose `summoned_by` is this caster. A wisp that dies frees its
+  place, so the next full bar replaces it.
+- **A cast fills the retinue** rather than making `summon_count` of them. So the
+  opener brings a Conjurer straight up to strength — 1, 1, 2, 2, 3, 3 across the
+  six tiers, the same ramp the cap always used.
+
+`summon_want()` is the single place that decides how many a cast makes, because
+`_resolve_summon()` and `summon_shortfall()` both need the answer and a round
+where they disagree is a caster that burns its bar on nothing.
+
+### A Spire never raises a Spire
+
+`Raise Host` rolls two units at random from your own roster. Rolling a Spire
+would hand the winner of one cast a free second cast, and that one another. The
+filter is written against the mechanic rather than the name — nothing whose
+ability spends its caster to summon can be summoned this way — so a future unit
+with the same shape is covered without anyone remembering to add it. There is a
+test that counts the self-spending summoners in the roster and checks exactly
+that many are missing from the pool.
+
+(`_open_now()` already refused to instant-cast a `consumes_caster` ability, which
+stopped the *instant* runaway. This stops the slow one.)
+
+---
+
+## Mechanical and biological
+
+Every unit is one or the other. Nothing reads it except the Engineer, and a
+unit's chassis never changes — it exists so that "repairs machines" means
+something specific rather than "heals whatever is nearby".
+
+**Mechanical: the Sentry and the Spire.** Everything else is biological. Putting
+the Spire in gives the Engineer something to do besides tend its own turret, and
+an Engineer keeping a Spire alive long enough to raise its host is a real pairing
+rather than a coincidence.
+
+## The Engineer and the Sentry
+
+The Engineer opens every round building a Sentry **on the tile it is standing
+on**, then steps off and leaves it there.
+
+Four things about it are new machinery rather than new numbers:
+
+- **An opener that takes time.** `_resolve_openers()` normally calls
+  `_open_now()`, which has no wind-up in the simulation at all. `Assemble` sets
+  `opener_takes_time`, so the opener goes through `_begin_cast()` and takes its
+  real 2.5 seconds — during which the Engineer can be killed and the Sentry never
+  arrives.
+- **A cast that exposes its caster.** The opposite of `guards_caster`, which is
+  what makes the Spire invulnerable mid-cast. `exposes_caster = 1.0` doubles
+  damage taken for the duration, and `UnitInstance.exposure()` returns 1.0 the
+  instant the cast ends.
+- **Building on your own tile.** `summon_at_caster` places the summon on the
+  caster's cell and steps the caster into the nearest free neighbour, emitting a
+  move for it so the view animates the shuffle. With nowhere to step it falls
+  through to ordinary adjacent placement rather than wasting the cast.
+- **A caster that holds instead of burning.** The Spire burning its bar with no
+  room is deliberate — that is the pressure to merge before it is ready. Standing
+  exposed for two and a half seconds to produce nothing is not pressure, it is a
+  trap, so `Assemble` sets `holds_when_capped` and the previously-unused
+  `can_cast()` finally gates `_decide()`. The Spire does not set it, so its
+  behaviour is unchanged.
+
+**The Sentry** cannot move and sees the whole board: 45 damage every 3.3 seconds
+at tier 1, 1440 at tier 6. It is a `RANGED` unit, so `line_of_fire()` still
+applies — a Sentry on the Labyrinth mostly stares at a wall, and on Killing Field
+it covers everything. It is hidden from the loadout: built, not drawn.
+
+That unit is also why `rooted` had to become **two** flags. It used to set
+`can_move` and `can_attack` together, which was fine when the Spire was the only
+rooted thing in the game. The Sentry is bolted to the floor and is the opposite of
+harmless, so the builder now takes `rooted` and `harmless` separately and the
+Spire declares both.
+
+**Repair is a trait, not an ability** — the Engineer's one ability slot is already
+spent on building the thing it repairs. It restores health every second to each
+*adjacent* friendly Mechanical unit, and it **holds station with its machines
+instead of advancing**. That last part is not flavour: without it the Engineer
+steps off its build tile, walks at the enemy, and the repair never fires once,
+because the turret it just built is the only mechanical thing on the board and it
+is walking away from it. A 130-health, 8-damage body advancing is a donation
+anyway.
+
+## The Tyrant
+
+240 health, 40 damage, no ability, and every one of **your own** units within two
+tiles takes 30% more damage. The enemy's units standing next to it are unaffected,
+and it does not burden itself.
+
+`_burden_on()` is asked at the moment of the hit rather than tracked as aura
+state. That means killing the Tyrant lifts the burden instantly, walking out of
+its radius lifts it instantly, and there is nothing to clean up at the round
+boundary — which is where the shield and mana state all has to be wiped.
+
+The number was measured, not guessed. Running 60 matches of *two of this unit plus
+six random* against *eight random*:
+
+| Unit | Inclusion win rate |
+|---|---|
+| Warden | 82% |
+| **Tyrant** | **82%** |
+| Spire | 50% |
+| Transcendence | 48% |
+| Archer | 47% |
+
+At the first value I tried (15% within 2 tiles) it came out at 85% against the
+Warden's 82% — the drawback was a rounding error, because units in a random
+deployment are rarely within two tiles of each other. At 30% it lands level with
+the best body already in the game, which is the point: a genuine alternative to
+the Warden rather than an upgrade over it.
+
+---
+
+## The apex beam reloads
+
+Tier 6 Transcendence fires an unlimited-range beam that pierces 100 targets and
+washes the rank behind them. It was doing that on the base attack speed, which
+made "how often" matter more than "at what", and there is no counterplay to a
+board-clearing shot every 1.4 seconds.
+
+The base rate dropped from 0.7 to 0.45 attacks a second, and `apex.spd` is a
+**multiplier** applied on top at tier 6 only — 0.5, so the apex fires every
+**4.35 seconds** against tier 5's 2.22. It is the slowest thing on the board, and
+a test asserts that against every other unit's tier 6 rather than against a
+number, so it stays true if something else is slowed later.
 
 ---
 
@@ -973,8 +1158,15 @@ top tier.
 ## Maps
 
 The board is no longer one fixed shape. `data/maps/*.tres` holds a `MapData` per
-board — width, height, and whether there is a neutral divider — and you pick one
-at the top of the loadout menu.
+board — width, height, whether there is a neutral divider, and its terrain — and
+there are **thirty-three** of them. You pick one at the top of the loadout menu.
+
+Maps load off disk alphabetically, which put Standard somewhere in the twenties,
+so each one carries a `rank` stamped from its position in `MAP_TABLE` and the
+menu sorts by that. The table's order is therefore the menu's order, and it runs
+roughly simple to strange: plain rectangles, then open ground with high places on
+it, then loose cover, then structure, then something worth holding, then the
+boards cut up by holes, then the three awkward ones at the end.
 
 | Map | Shape | Divider | Terrain | Character |
 |---|---|---|---|---|
@@ -984,13 +1176,33 @@ at the top of the loadout menu.
 | Broad Front | 9 x 11 | yes | — | Wide, with a long walk to the enemy. |
 | The Crush | 8 x 6 | **no** | — | Wide and shallow; almost everything is in range at once. |
 | The Long March | 5 x 15 | yes | — | A deep corridor. Archers get to work for a long time. |
-| The Bridge | 7 x 11 | yes | holes, high ground | Two shores and a three-wide crossing, overlooked from both banks. |
+| The Duel | 3 x 7 | yes | — | Nine tiles a side. No flank, no cover, nowhere to put a mistake. |
+| Killing Field | 13 x 9 | yes | high ground | Wide and shallow with a firing step at both backs. |
+| The Steppes | 11 x 13 | yes | high ground | Open ground in terraces; every ridge is a range band. |
+| The Cauldron | 11 x 11 | yes | high ground | A rim of high ground round a low floor. |
+| The Quarry | 9 x 11 | yes | walls | Loose stone; no shot crosses the board cleanly. |
+| The Shatter | 9 x 11 | yes | holes | The Quarry with holes where the stone was — same walk, no cover. |
+| The Grove | 7 x 11 | yes | walls | Pillars the whole way down. No clean shot anywhere. |
 | The Warrens | 6 x 11 | yes | walls | Stone blocks break each half into lanes. |
-| Ramparts | 7 x 11 | yes | barriers, high ground | Thickness-free barriers pinch the middle to three columns. |
+| The Spine | 9 x 11 | yes | walls | One wall down the length with three doors through it. |
+| The Ring | 9 x 11 | yes | walls | A block in the dead centre. Two flank fights that cannot help each other. |
+| Three Roads | 11 x 13 | yes | walls | Three walled lanes meeting only behind each side's own lines. |
+| Four Corners | 11 x 11 | yes | walls | Two rooms a side, one gate each, one hallway across the middle. |
+| The Gauntlet | 7 x 13 | yes | walls | Alternating baffles. Nothing sees down it; crossing takes twice the steps. |
 | The Highlands | 6 x 8 | **no** | walls, high ground | No divider, a boulder each side, a ridge at both backs. |
+| The Keep | 9 x 11 | yes | walls, high ground | One fortress, dead centre, two doors. Whoever gets in owns the middle. |
+| The Redoubt | 9 x 11 | yes | walls | A walled fort each end with two gates and a road around it. |
+| The Anvil | 9 x 11 | yes | holes, high ground | A high plateau in a dry moat, one ramp each side. |
+| Ramparts | 7 x 11 | yes | barriers, high ground | Thickness-free barriers pinch the middle to three columns. |
+| Crossroads | 11 x 11 | yes | holes | A plus. Narrow approaches into a middle the full width of the board. |
+| The Bridge | 7 x 11 | yes | holes, high ground | Two shores and a three-wide crossing, overlooked from both banks. |
 | The Hourglass | 9 x 11 | yes | holes, high ground | Wide at the ends, three tiles across in the middle. |
-| The Labyrinth | 9 x 25 | yes | walls | A real maze. Open staging fields at both ends, then corridors one tile wide the whole way through. |
-| The Compound | 12 x 21 | yes | walls, high ground | The biggest board. 81 tiles a side, cut into two- and three-tile rooms, with four gates across the middle. |
+| The Chasm | 9 x 11 | yes | holes, high ground | A trench end to end, crossable only at the two flanks. |
+| The Shoals | 11 x 11 | yes | holes | Islands joined by one-tile necks, every one of them in plain sight. |
+| The Causeway | 7 x 15 | yes | holes | Single file for eight rows, in full view of both shores. |
+| The Cage | 7 x 11 | yes | barriers | Every barrier waist-high: shoot the whole board, walk almost nowhere. |
+| The Labyrinth | 9 x 25 | yes | walls | A real maze. Open staging at both ends, one tile wide the whole way through. |
+| The Compound | 12 x 21 | yes | walls, high ground | The biggest board. 81 tiles a side, cut into rooms, four gates across the middle. |
 
 ### Terrain
 
@@ -1059,14 +1271,16 @@ there forever. Pierce stops at the first wall, and so does the apex beam.
 
 Six tiers of the same unit used to differ only by two characters in a corner
 badge. `UnitView.tier_color()` now gives each tier its own colour — steel, green,
-blue, violet, red, gold — used three ways at once: the corner badge becomes a
+blue, violet, **yellow, red** — used three ways at once: the corner badge becomes a
 solid chip of it, an inner rim inside the team ring thickens as the tier climbs,
 and a row of **pips along the bottom edge counts the tier** so you can read it
 without reading. The body fill takes a little of the colour too, so a tier 6
 looks hotter than a tier 1 of the same unit without losing its identity.
 
 A test asserts no two tier colours are within 0.3 of each other in RGB, so
-"make T5 a bit more orange" can never quietly collide with T6.
+"make T5 a bit more orange" can never quietly collide with T6. Two more assert
+that T5 is yellow and T6 is red specifically — the top two are the ones players
+scan for, so which is which is a choice, not an artefact of list order.
 
 ### High ground
 
@@ -1079,6 +1293,30 @@ gold Far Sight standing on high ground goes Long → Sniper → **Unlimited**.
 The sim asks `u.reach_on(BoardModel.is_high(u.cell))` when deciding whether to
 shoot or walk, so the bonus applies where the unit *is*, moment to moment — walk
 off the ridge and you lose it.
+
+### Picking one of thirty-three
+
+Thirty-three boards do not fit behind a `<` and a `>`. The picker is a scrolling
+grid of `MapChip`s — each one a small `MapPreview` of the board's real shape with
+its name under it — and the chosen one's summary, note and terrain breakdown show
+underneath. You choose by recognising a silhouette rather than by clicking
+thirty-two times, and the shapes are distinct enough that this actually works.
+
+The chips are a `ButtonGroup`, so exactly one is lit; `_refresh_map()` re-lights
+from `GameSetup.map_index` rather than trusting the click, so a map selected from
+anywhere else still shows correctly.
+
+The grid is 216 pixels of scroller inside a panel that already held two loadouts
+and a detail pane, and adding it pushed **Done off the bottom of the screen** —
+which left no way out of the menu at all. The editor is now a fixed title, a
+scrolling body, and a fixed button row: whatever else goes into it, the way out
+stays pinned. A test walks the editor for its buttons and asserts both are inside
+the viewport, and it fails on the version that shipped broken.
+
+`menu_smoke_test` picks **every** map in the grid and checks the board that comes
+up is the one asked for. That matters because `BoardModel.use_map()` silently
+falls back to the default board when handed an invalid map — without this check a
+broken map would look like a working Standard.
 
 ### The fairness rule
 
@@ -1109,7 +1347,8 @@ shrinking**, and you move the camera to see the rest.
 
 - **Drag** anywhere on the board that isn't one of your own units. `_begin_drag`
   already had to decide between "pick up a unit" and "do nothing"; "do nothing"
-  became "pan".
+  became "pan". Dragging off the edge of the board but still inside the window
+  pans too.
 - **Arrow keys** pan by `KEY_PAN` (46 px) a press.
 - At the start of your prep, `main.gd._look_at_half()` centres the camera on
   **your** half, so you never open a round looking at empty enemy ground.
@@ -1119,6 +1358,24 @@ board currently sits relative to it. `pan_limits()` clamps the offset so you can
 always reach both edges and never scroll past them, and an axis that already
 fits is centred rather than panned — so on the Standard board the camera never
 moves at all and nothing about it changes.
+
+**The camera is not part of taking your turn.** `BoardView.interactive` goes
+false the moment the fighting starts — there is nothing to pick up mid-battle —
+and `_unhandled_input()` used to return on that flag before it reached any of the
+pan handling. So a 25-row board froze on whichever third you happened to be
+looking at for the whole fight. Only the drag-a-unit path is gated on
+`interactive` now; the keys and the camera-drag always run.
+
+**The HUD belongs to the window, not the board.** Every bar, roster and banner
+around the board was laid out from `_board_view.position` and `board_size()`.
+That is the same thing as `BOARD_AREA` on the Standard map, which is why it
+survived this long — but the Labyrinth's board is 1400 pixels tall, so the
+player's own buff bar landed at y=1540 and their roster at y=1570, both off the
+bottom of a 1280-tall screen, both sliding further away with every pan, and the
+force bar was sized 74 x 1400. They are all laid out from `BOARD_AREA` now, and
+`map_smoke_test` builds a whole Main on the Labyrinth and asserts every piece of
+the HUD is on screen, is not taller than the screen, and does not move when the
+camera does.
 
 Two consequences worth knowing:
 

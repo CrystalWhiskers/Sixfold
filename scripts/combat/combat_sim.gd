@@ -16,6 +16,12 @@ const REGEN_INTERVAL := 1.0
 const SUDDEN_DEATH := 30.0
 const PRESSURE_RATE := 0.15
 
+# A round can also overrun because the last two units never *meet* — on a maze
+# or a long corridor, harder hits do nothing for a unit that is still walking.
+# So pressure shortens the step as well as fattening the hit. Every unit is
+# divided by the same number, so who outruns whom never changes.
+const MIN_MOVE_TIME := TICK
+
 var team_buffs: Dictionary = {}
 
 var board: BoardModel = null
@@ -187,6 +193,7 @@ func _tick_regen() -> void:
 	_regen_timer -= REGEN_INTERVAL
 	_tick_mana_regen()
 	_tick_mana_auras()
+	_tick_repairs()
 	if _regen[0] <= 0.0 and _regen[1] <= 0.0:
 		return
 	for u in _units:
@@ -209,6 +216,12 @@ func _resolve_openers() -> void:
 		if not u.is_alive() or u.has_opened:
 			continue
 		if u.data.ability == null or not u.data.casts_at_battle_start:
+			continue
+		if u.data.ability.opener_takes_time:
+			# Not instant: this one wants a window in which it is standing there
+			# doing the thing, and can be interrupted by dying.
+			u.has_opened = true
+			_begin_cast(u)
 			continue
 		_open_now(u)
 	_absorb_new_units()
@@ -245,13 +258,24 @@ func _shuffle_order() -> void:
 
 func _decide(u: UnitInstance) -> void:
 	u.target = board.nearest_enemy(u)
-	if u.mana_full():
-		# Deliberately not gated on whether the cast can land. A Spire that fills
-		# its bar with no room for the host burns it — that is the pressure to
-		# merge before it is ready, not a bug.
+	if u.mana_full() and can_cast(u):
+		# Deliberately not gated on whether the cast can land, unless the ability
+		# asks to be. A Spire that fills its bar with no room for the host burns
+		# it — that is the pressure to merge before it is ready, not a bug.
 		_begin_cast(u)
 		return
 	if u.target == null or not u.can_act():
+		return
+
+	var patient := _tending(u)
+	if patient != null:
+		# Already beside it: stand still and keep working rather than drifting off
+		# and letting the repair lapse.
+		if BoardModel.tile_distance(u.cell, patient.cell) > 1:
+			var was := u.target
+			u.target = patient
+			_begin_move(u)
+			u.target = was
 		return
 
 	var dist := BoardModel.tile_distance(u.cell, u.target.cell)
@@ -264,6 +288,32 @@ func _decide(u: UnitInstance) -> void:
 	# there with nothing to walk towards.
 	if u.data.can_move:
 		_begin_move(u)
+
+
+func _tending(u: UnitInstance) -> UnitInstance:
+	# A repairer with a hurt machine to fix goes to it instead of going forward.
+	# Without this the Engineer steps off its build tile, walks at the enemy, and
+	# the repair trait never fires once — the turret it just built is the only
+	# mechanical thing on the board and it is walking away from it.
+	if u.data.repair_per_second <= 0.0 or not u.data.can_move:
+		return null
+	# It holds station with its machines whether they are hurt or not. A body with
+	# 130 health and 8 damage advancing on the enemy is not a trade, it is a
+	# donation — and it would not be there to repair the turret when the turret
+	# finally needs it. A damaged one wins over a healthy one at the same range.
+	var best: UnitInstance = null
+	var best_key := Vector2i(9, 99)
+	for other in _units:
+		if other == u or other.team != u.team or not other.is_alive():
+			continue
+		if not other.data.is_mechanical():
+			continue
+		var hurt := 0 if other.current_hp < other.stat(StatModifier.Stat.MAX_HP) else 1
+		var key := Vector2i(hurt, BoardModel.tile_distance(u.cell, other.cell))
+		if key.x < best_key.x or (key.x == best_key.x and key.y < best_key.y):
+			best_key = key
+			best = other
+	return best
 
 
 func _has_shot(u: UnitInstance, target: UnitInstance) -> bool:
@@ -279,10 +329,23 @@ func _begin_move(u: UnitInstance) -> void:
 	if next == u.cell:
 		return
 	var from := u.cell
-	if not board.move_unit(u, next):
+	var dur := maxf(u.stat(StatModifier.Stat.MOVE_TIME) / pressure(), MIN_MOVE_TIME)
+	var blocker := board.unit_at(next)
+	if blocker != null:
+		# _next_step only picks an occupied tile when a friend is standing in the
+		# only way through. One that can walk will clear it itself, so we hold
+		# our place in the queue rather than barging.
+		if blocker.data.can_move:
+			return
+		# One that cannot never will, so we trade places with it. The log carries
+		# both halves so the view animates a shove, not a teleport.
+		if not board.trade_places(u, blocker):
+			return
+		blocker.move_from = from
+		_emit("move", {uid = blocker.uid, from = next, to = from, duration = dur})
+	elif not board.move_unit(u, next):
 		return
 	u.move_from = from
-	var dur := u.stat(StatModifier.Stat.MOVE_TIME)
 	_enter(u, UnitInstance.State.MOVING, dur)
 	_emit("move", {uid = u.uid, from = from, to = next, duration = dur})
 
@@ -564,6 +627,26 @@ func summon_cap(u: UnitInstance, ab: AbilityData) -> int:
 	return clampi((u.data.tier + 1) / 2, 1, maxi(ab.summon_max, 1))
 
 
+func retinue_size(u: UnitInstance) -> int:
+	var n := 0
+	for other in _units:
+		if other.summoned_by == u.uid and other.is_alive():
+			n += 1
+	return n
+
+
+func summon_want(u: UnitInstance, ab: AbilityData) -> int:
+	# One place decides how many a cast makes, so _resolve_summon and
+	# summon_shortfall can never disagree about whether it is worth casting.
+	var cap := summon_cap(u, ab)
+	if not ab.summon_retinue:
+		return mini(maxi(ab.summon_count, 1), maxi(cap - u.summons_made, 0))
+	# A retinue is measured by who is standing, and a cast refills it. That is
+	# what makes a tier 6 Conjurer open with three wisps rather than one, and
+	# what lets it replace one that dies instead of being done for the round.
+	return maxi(cap - retinue_size(u), 0)
+
+
 func _resolve_mana_aura(u: UnitInstance, ab: AbilityData) -> void:
 	if not _mana_auras.has(u.uid):
 		_mana_auras.append(u.uid)
@@ -581,16 +664,29 @@ func _resolve_mana_aura(u: UnitInstance, ab: AbilityData) -> void:
 func _summon_shape(u: UnitInstance, ab: AbilityData) -> UnitData:
 	if not ab.summon_random:
 		return BoardModel.at_tier(ab.summon_unit, u.data.tier)
-	var pool := board.pool_for(u.team)
+	var pool := _random_summon_pool(u.team)
 	if pool.is_empty():
 		return null
 	var pick: UnitData = pool[rng.randi_range(0, pool.size() - 1)]
 	return BoardModel.at_tier(pick, u.data.tier)
 
 
+func _random_summon_pool(team: int) -> Array[UnitData]:
+	# A Spire never rolls another Spire. Raising one would hand the winner of a
+	# single cast a free second cast, and the one after that another — a board
+	# that pays for itself. The rule is written against the mechanic rather than
+	# the name: nothing that spends itself to summon can be summoned this way.
+	var out: Array[UnitData] = []
+	for d in board.pool_for(team):
+		var ab := d.ability
+		if ab != null and ab.kind == AbilityData.Kind.SUMMON and ab.consumes_caster:
+			continue
+		out.append(d)
+	return out
+
+
 func _resolve_summon(u: UnitInstance, ab: AbilityData) -> void:
-	var cap := summon_cap(u, ab)
-	var want := mini(maxi(ab.summon_count, 1), maxi(cap - u.summons_made, 0))
+	var want := summon_want(u, ab)
 	if want <= 0:
 		_wasted_summon(u, ab, "capped")
 		return
@@ -619,6 +715,7 @@ func _resolve_summon(u: UnitInstance, ab: AbilityData) -> void:
 			break
 		minion.current_hp = minion.stat(StatModifier.Stat.MAX_HP)
 		minion.permanent = ab.summon_persists
+		minion.summoned_by = u.uid
 		u.summons_made += 1
 		_pending_units.append(minion)
 		raised_now.append(minion)
@@ -666,13 +763,15 @@ func can_cast(u: UnitInstance) -> bool:
 	var ab := u.data.ability
 	if ab == null or ab.kind != AbilityData.Kind.SUMMON:
 		return true
+	if not ab.holds_when_capped:
+		return true
 	return summon_shortfall(u, ab) == ""
 
 
 func summon_shortfall(u: UnitInstance, ab: AbilityData) -> String:
 	# Counted, never sampled: probing with _summon_cells() would consume the
 	# seeded rng and desync every roll that follows.
-	var want := mini(maxi(ab.summon_count, 1), maxi(summon_cap(u, ab) - u.summons_made, 0))
+	var want := summon_want(u, ab)
 	if want <= 0:
 		return "capped"
 	if ab.summon_persists and persist_room(u.team) < want:
@@ -691,6 +790,19 @@ func persist_room(team: int) -> int:
 
 func _summon_cells(u: UnitInstance, ab: AbilityData, count: int) -> Array[Vector2i]:
 	var out: Array[Vector2i] = []
+	if ab.summon_at_caster and count == 1:
+		# It is built where the builder was standing, and the builder steps off.
+		# If there is nowhere to step, fall through to ordinary placement rather
+		# than wasting the cast — the turret still gets built, just beside them.
+		var step := _step_aside(u)
+		if step != Vector2i(-1, -1):
+			out.append(u.cell)
+			board.move_unit(u, step)
+			u.move_from = out[0]
+			_emit("move", {
+				uid = u.uid, from = out[0], to = step, duration = DISPLACE_TIME,
+			})
+			return out
 	if ab.summon_adjacent:
 		# Closest to the summoner first, then further out. The far side of the
 		# board is the fallback for a packed field, not the default.
@@ -712,6 +824,15 @@ func _summon_cells(u: UnitInstance, ab: AbilityData, count: int) -> Array[Vector
 	if out.size() < count:
 		out.clear()
 	return out
+
+
+func _step_aside(u: UnitInstance) -> Vector2i:
+	for off in _neighbour_offsets():
+		var c: Vector2i = u.cell + off
+		if board.in_bounds(c) and board.is_empty(c) \
+				and not BoardModel.blocks_between(u.cell, c):
+			return c
+	return Vector2i(-1, -1)
 
 
 func _take_random(pool: Array[Vector2i], count: int, into: Array[Vector2i]) -> void:
@@ -787,6 +908,27 @@ func _tick_mana_auras() -> void:
 				continue
 			ally.gain_mana(gift)
 			_emit("mana", {uid = ally.uid, mana = ally.mana})
+
+
+func _tick_repairs() -> void:
+	# A trait, not an ability: the unit that has this already spends its ability
+	# slot building the thing it repairs. Only reaches adjacent friendly
+	# MECHANICAL units, which is the whole reason a chassis exists.
+	for mech in _units:
+		if not mech.is_alive() or mech.data.repair_per_second <= 0.0:
+			continue
+		for other in board.units_in_box(mech.cell, 1, mech.team):
+			if other == mech or not other.data.is_mechanical():
+				continue
+			if BoardModel.tile_distance(mech.cell, other.cell) != 1:
+				continue
+			var before := other.current_hp
+			other.heal(mech.data.repair_per_second)
+			if other.current_hp > before:
+				_emit("heal", {
+					uid = other.uid, amount = other.current_hp - before,
+					hp = other.current_hp, cell = other.cell, repair = true,
+				})
 
 
 func _try_queue_revive(victim: UnitInstance) -> bool:
@@ -980,7 +1122,8 @@ func _damage(victim: UnitInstance, amount: float, source: UnitInstance,
 		var frac: float = _hp_damage[source.team]
 		if frac > 0.0:
 			total += victim.stat(StatModifier.Stat.MAX_HP) * frac
-	total *= victim.damage_taken_multiplier() * pressure()
+	total *= victim.damage_taken_multiplier() * pressure() * victim.exposure()
+	total *= _burden_on(victim)
 	var landed := victim.take_damage(total)
 	_drain_life(source, victim, total, landed)
 	_emit("damage", {
@@ -992,6 +1135,21 @@ func _damage(victim: UnitInstance, amount: float, source: UnitInstance,
 		_emit("death", {uid = victim.uid, cell = victim.cell, killer_uid = source.uid})
 		board.remove(victim)
 		_try_queue_revive(victim)
+
+
+func _burden_on(victim: UnitInstance) -> float:
+	# Asked at the moment of the hit rather than tracked as state, so a Tyrant
+	# that dies or walks off stops mattering immediately and there is no stale
+	# aura to clean up at the round boundary.
+	var mult := 1.0
+	for other in _units:
+		if other == victim or other.team != victim.team or not other.is_alive():
+			continue
+		if other.data.burden_radius <= 0 or other.data.burden_percent <= 0.0:
+			continue
+		if BoardModel.tile_distance(other.cell, victim.cell) <= other.data.burden_radius:
+			mult += other.data.burden_percent
+	return mult
 
 
 func _drain_life(source: UnitInstance, victim: UnitInstance, dealt: float,
@@ -1025,27 +1183,62 @@ func _next_step(u: UnitInstance) -> Vector2i:
 	# Own BFS rather than AStarGrid2D: a grid solver can mark tiles solid but
 	# has no way to express a barrier that sits *between* two open tiles.
 	var goal := u.target.cell
-	var came := _distance_field(goal, u.cell)
-	var here: int = came.get(u.cell, -1)
-	if here > 0:
-		var best := u.cell
-		var best_d := here
-		for off in _neighbour_offsets():
-			var c: Vector2i = u.cell + off
-			if BoardModel.blocks_between(u.cell, c) or not board.is_empty(c):
-				continue
-			var d: int = came.get(c, -1)
-			if d >= 0 and d < best_d:
-				best_d = d
-				best = c
-		if best != u.cell:
-			return best
+	var step := _downhill(u, _distance_field(goal, u.cell), {})
+	if step != u.cell:
+		return step
+
+	# Every route out is blocked by our own people. Path again as if they were
+	# not there and take our place in the queue: shove past anything rooted, and
+	# wait behind anything that will move on its own. Falling straight through to
+	# a greedy step here is what made a corridor board time out — the units at
+	# the back scatter along the wall beside the jam instead of lining up for it.
+	var friends := _friendly_cells(u)
+	if not friends.is_empty():
+		step = _downhill(u, _distance_field(goal, u.cell, friends), friends)
+		if step != u.cell:
+			return step
 	return _greedy_step(u, goal)
 
 
-func _distance_field(goal: Vector2i, start: Vector2i) -> Dictionary:
+func _friendly_cells(u: UnitInstance) -> Dictionary:
+	var out := {}
+	for other in _units:
+		if other != u and other.team == u.team and other.is_alive():
+			out[other.cell] = true
+	return out
+
+
+func _downhill(u: UnitInstance, field: Dictionary, through: Dictionary) -> Vector2i:
+	var here: int = field.get(u.cell, -1)
+	if here <= 0:
+		return u.cell
+	var best := u.cell
+	var best_d := here
+	var best_free := false
+	for off in _neighbour_offsets():
+		var c: Vector2i = u.cell + off
+		if BoardModel.blocks_between(u.cell, c):
+			continue
+		var free := board.is_empty(c)
+		if not free and not through.has(c):
+			continue
+		var d: int = field.get(c, -1)
+		if d < 0 or d >= here:
+			continue
+		# Strictly closer wins; at the same distance an open tile beats one we
+		# would have to queue behind.
+		if best == u.cell or d < best_d or (d == best_d and free and not best_free):
+			best = c
+			best_d = d
+			best_free = free
+	return best
+
+
+func _distance_field(goal: Vector2i, start: Vector2i,
+		through: Dictionary = {}) -> Dictionary:
 	# Steps from every reachable tile back to the goal. The goal and the mover's
-	# own tile are walkable even though something is standing on them.
+	# own tile are walkable even though something is standing on them, and so is
+	# anything in `through` — the friendly rooted units the mover may shove past.
 	var dist := {goal: 0}
 	var queue: Array[Vector2i] = [goal]
 	var head := 0
@@ -1059,7 +1252,7 @@ func _distance_field(goal: Vector2i, start: Vector2i) -> Dictionary:
 				continue
 			if BoardModel.is_blocked(n) or BoardModel.blocks_between(c, n):
 				continue
-			if n != start and not board.is_empty(n):
+			if n != start and not through.has(n) and not board.is_empty(n):
 				continue
 			dist[n] = next
 			if n == start:

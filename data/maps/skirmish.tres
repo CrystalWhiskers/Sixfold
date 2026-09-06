@@ -6,6 +6,7 @@
 script = ExtResource("1_x87v5")
 id = &"skirmish"
 display_name = "Skirmish"
+rank = 1
 height = 8
 has_neutral = false
 rows = PackedStringArray()

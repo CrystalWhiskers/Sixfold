@@ -144,6 +144,7 @@ func _check_prep() -> void:
 		"the boulder is see-through")
 	_check_maze()
 	_check_camera()
+	_check_hud_clearance()
 
 	var hud: Label = _main._hud
 	_check("the HUD is not clipped by the new layout",
@@ -269,6 +270,24 @@ func _check_camera() -> void:
 	_check("the camera moves when you drag it", view.position != start,
 		"still at %s" % view.position)
 
+	# The camera is not part of taking your turn. `interactive` goes false the
+	# moment the fighting starts, and it used to take the camera with it, which
+	# left a 25-row board frozen on whichever third you happened to be looking at.
+	var was: bool = view.interactive
+	view.interactive = false
+	var mid := view.position
+	view.pan_by(Vector2(0.0, 200.0))
+	_check("and it still moves once the fighting has started",
+		view.position != mid, "frozen at %s with interactive off" % view.position)
+	var key := InputEventKey.new()
+	key.keycode = KEY_UP
+	key.pressed = true
+	var before_key := view.position
+	view._unhandled_input(key)
+	_check("the arrow keys move it too, battle or not",
+		view.position != before_key, "still at %s" % view.position)
+	view.interactive = was
+
 	view.pan_by(Vector2(0.0, -9000.0))
 	var span := view.board_size()
 	var area: Rect2 = _main.BOARD_AREA
@@ -303,3 +322,94 @@ func _report() -> void:
 	else:
 		print("\nUndivided map test passed. %d checks." % _passed)
 	get_tree().quit(1 if _failed > 0 else 0)
+
+
+func _check_hud_clearance() -> void:
+	# Built on the biggest board there is, and built fresh: the layout bug only
+	# shows on a map taller than its window, and this suite's own map fits, so
+	# checking _main's HUD would prove nothing.
+	var big := -1
+	for i in GameSetup.maps.size():
+		if GameSetup.maps[i].id == MAZE_MAP:
+			big = i
+	if big < 0:
+		return
+	var was := GameSetup.map_index
+	GameSetup.select_map(big)
+	var packed := load("res://scenes/main.tscn") as PackedScene
+	var tall := packed.instantiate() as Node2D
+	add_child(tall)
+	_check("a board too tall for its window still lays out its HUD",
+		tall._board_view.overflows(),
+		"%s fits %s" % [tall._board_view.board_size(), tall.BOARD_AREA.size])
+	_hud_clearance_of(tall)
+	tall.queue_free()
+	GameSetup.select_map(was)
+
+
+func _hud_clearance_of(_main: Node2D) -> void:
+	# Every piece of furniture round the board used to be laid out from the
+	# board's own pixel size. On this board — 9 x 25, so 1400 pixels tall — the
+	# player's own buff bar landed at y=1540 and their roster at y=1570, both off
+	# the bottom of a 1280-tall screen, and both sliding further away every time
+	# the camera moved. The HUD belongs to the window, not to the board.
+	var buttons: Array[Button] = [
+		_main._fight_btn, _main._speed_btn, _main._menu_btn]
+	var blocked: Array[String] = []
+	for b in buttons:
+		if b == null or not b.visible:
+			continue
+		var rect := Rect2(b.global_position, b.size)
+		for node in _main.get_node("UI/Root").get_children():
+			var c := node as Control
+			if c == null or not c.visible:
+				continue
+			if c.mouse_filter == Control.MOUSE_FILTER_IGNORE:
+				continue
+			if c.is_ancestor_of(b) or c == b:
+				continue
+			if Rect2(c.global_position, c.size).intersects(rect):
+				blocked.append("%s covers %s" % [c.name, b.name])
+	_check("nothing that takes the mouse is sitting on top of a button",
+		blocked.is_empty(), ", ".join(blocked))
+
+	var screen := Rect2(Vector2.ZERO,
+		Vector2(ProjectSettings.get_setting("display/window/size/viewport_width"),
+			ProjectSettings.get_setting("display/window/size/viewport_height")))
+	var off: Array[String] = []
+	for b in buttons:
+		if b != null and not screen.encloses(Rect2(b.global_position, b.size)):
+			off.append(b.name)
+	_check("and every button is on the screen", off.is_empty(), ", ".join(off))
+
+	# The one that actually bit: furniture sized and placed from the board runs
+	# off the bottom of the screen entirely on a board taller than its window.
+	var lost: Array[String] = []
+	var oversized: Array[String] = []
+	for node in _main.get_node("UI/Root").get_children():
+		var c := node as Control
+		if c == null or c.size == Vector2.ZERO:
+			continue
+		# A modal overlay is meant to fill the screen; furniture is not.
+		if c.size.x >= screen.size.x and c.size.y >= screen.size.y:
+			continue
+		if not screen.intersects(Rect2(c.global_position, c.size)):
+			lost.append("%s at %s" % [c.name, c.global_position])
+		if c.size.y > screen.size.y:
+			oversized.append("%s is %.0f tall" % [c.name, c.size.y])
+	_check("every piece of the HUD is somewhere on the screen",
+		lost.is_empty(), ", ".join(lost))
+	_check("and none of it is sized to the board instead of the window",
+		oversized.is_empty(), ", ".join(oversized))
+
+	# The furniture belongs to the window, not to the board, so panning a big
+	# board must not drag the HUD along with it.
+	var view: BoardView = _main._board_view
+	var bar: Control = _main._bars.get(_main.PLAYER_TEAM, null)
+	if bar == null:
+		return
+	var where := bar.global_position
+	view.pan_by(Vector2(0.0, -300.0))
+	_check("the HUD stays put when the camera moves",
+		bar.global_position == where,
+		"bar slid from %s to %s" % [where, bar.global_position])

@@ -46,7 +46,31 @@ const UNLIMITED_TILES := 100
 @export var keeps_mana: bool = false
 @export var casts_at_battle_start: bool = false
 
+## What a unit is made of. It exists so the Engineer has something to repair:
+## nothing else in the game reads it, and a unit's chassis never changes.
+enum Chassis {
+	BIOLOGICAL,
+	MECHANICAL,
+}
+
+const CHASSIS_NAMES := {
+	Chassis.BIOLOGICAL: "Biological",
+	Chassis.MECHANICAL: "Mechanical",
+}
+
 @export_group("Passive")
+@export var chassis: Chassis = Chassis.BIOLOGICAL
+
+## Health restored every second to each adjacent friendly MECHANICAL unit. This
+## is a trait rather than an ability, because the unit that has it already spends
+## its ability slot on building the thing it repairs.
+@export var repair_per_second: float = 0.0
+
+## Every friendly unit within this many tiles takes `burden_percent` more damage.
+## A cost the unit imposes on its own side, not a debuff on the enemy.
+@export var burden_radius: int = 0
+@export var burden_percent: float = 0.0
+
 @export var pierce_targets: int = 1
 @export var merge_magnet: bool = false
 @export var beam_attack: bool = false
@@ -105,3 +129,11 @@ func chain_length() -> int:
 			push_error("Merge chain for '%s' looks circular." % id)
 			break
 	return n
+
+
+func chassis_name() -> String:
+	return CHASSIS_NAMES[chassis]
+
+
+func is_mechanical() -> bool:
+	return chassis == Chassis.MECHANICAL

@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="MapData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/map_data.gd" id="1_kd40p"]
+
+[resource]
+script = ExtResource("1_kd40p")
+id = &"the_gauntlet"
+display_name = "The Gauntlet"
+rank = 18
+width = 7
+height = 13
+rows = PackedStringArray(".......", ".......", "#####..", ".......", "..#####", ".......", ".......", ".......", "..#####", ".......", "#####..", ".......", ".......")
+note = "Baffles alternating down a long board. Nothing sees down it, so every corner is an ambush, and crossing takes more than twice the steps it looks like."

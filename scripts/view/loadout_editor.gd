@@ -7,6 +7,8 @@ const PANEL_WIDTH := 640.0
 const ROW_HEIGHT := 40.0
 const DETAIL_HEIGHT := 176.0
 const PREVIEW_SIZE := Vector2(112.0, 112.0)
+const GRID_COLUMNS := 6
+const GRID_HEIGHT := 216.0
 const ICON_SIZE := Vector2(34.0, 34.0)
 
 var _rows: Dictionary = {}
@@ -17,6 +19,9 @@ var _focus: UnitData = null
 var _map_label: Label = null
 var _map_note: Label = null
 var _map_preview: MapPreview = null
+var _map_grid: GridContainer = null
+var _map_group: ButtonGroup = null
+var _chips: Array[MapChip] = []
 var _icons: Dictionary = {}
 var _detail_icon: UnitIcon = null
 
@@ -41,17 +46,30 @@ func _ready() -> void:
 	frame.add_theme_constant_override("margin_bottom", 40)
 	add_child(frame)
 
-	var column := VBoxContainer.new()
-	column.alignment = BoxContainer.ALIGNMENT_CENTER
-	column.add_theme_constant_override("separation", 18)
-	frame.add_child(column)
+	# Title and buttons are pinned; everything between them scrolls. The panel
+	# grew a 33-map grid and pushed Done off the bottom of the screen, and a
+	# menu you cannot leave is worse than one you have to scroll.
+	var shell := VBoxContainer.new()
+	shell.add_theme_constant_override("separation", 12)
+	frame.add_child(shell)
 
 	var title := Label.new()
 	title.text = "Loadouts"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	title.add_theme_font_size_override("font_size", 26)
-	column.add_child(title)
+	shell.add_child(title)
+
+	var page := ScrollContainer.new()
+	page.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	page.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	page.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	shell.add_child(page)
+
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 18)
+	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	page.add_child(column)
 
 	var blurb := Label.new()
 	blurb.text = "Pick the board, then fill five slots each. Repeat a unit to weight your draw toward it — and to weight the merge lottery, which rolls from this same list. Hover a slot to read what that unit does."
@@ -74,7 +92,7 @@ func _ready() -> void:
 	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
 	buttons.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	buttons.add_theme_constant_override("separation", 12)
-	column.add_child(buttons)
+	shell.add_child(buttons)
 
 	var reset := Button.new()
 	reset.text = "Reset both"
@@ -112,29 +130,30 @@ func _build_map_block() -> Control:
 	heading.add_theme_color_override("font_color", Color(0.80, 0.77, 0.60))
 	column.add_child(heading)
 
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	column.add_child(row)
+	# Thirty-odd boards do not fit behind a pair of arrows, so they are a grid of
+	# shapes you pick by looking. The scroller is deliberately short — the panel
+	# has two loadouts and a detail pane under it that must stay on screen.
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0.0, GRID_HEIGHT)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.add_child(scroll)
 
-	var left := Button.new()
-	left.text = "<"
-	left.custom_minimum_size = Vector2(44.0, ROW_HEIGHT)
-	left.pressed.connect(_on_cycle_map.bind(-1))
-	row.add_child(left)
+	_map_grid = GridContainer.new()
+	_map_grid.columns = GRID_COLUMNS
+	_map_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_map_grid.add_theme_constant_override("h_separation", 8)
+	_map_grid.add_theme_constant_override("v_separation", 8)
+	scroll.add_child(_map_grid)
 
-	_map_label = Label.new()
-	_map_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_map_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_map_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_map_label.custom_minimum_size = Vector2(0.0, ROW_HEIGHT)
-	_map_label.add_theme_font_size_override("font_size", 16)
-	row.add_child(_map_label)
-
-	var right := Button.new()
-	right.text = ">"
-	right.custom_minimum_size = Vector2(44.0, ROW_HEIGHT)
-	right.pressed.connect(_on_cycle_map.bind(1))
-	row.add_child(right)
+	_map_group = ButtonGroup.new()
+	for i in GameSetup.maps.size():
+		var chip := MapChip.new()
+		chip.button_group = _map_group
+		chip.set_map(GameSetup.maps[i])
+		chip.pressed.connect(_on_pick_map.bind(i))
+		_map_grid.add_child(chip)
+		_chips.append(chip)
 
 	var body := HBoxContainer.new()
 	body.add_theme_constant_override("separation", 12)
@@ -145,19 +164,28 @@ func _build_map_block() -> Control:
 	_map_preview.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	body.add_child(_map_preview)
 
+	var chosen := VBoxContainer.new()
+	chosen.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	chosen.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	chosen.add_theme_constant_override("separation", 4)
+	body.add_child(chosen)
+
+	_map_label = Label.new()
+	_map_label.add_theme_font_size_override("font_size", 16)
+	chosen.add_child(_map_label)
+
 	_map_note = Label.new()
 	_map_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_map_note.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_map_note.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_map_note.add_theme_font_size_override("font_size", 13)
 	_map_note.add_theme_color_override("font_color", Color(0.60, 0.65, 0.74))
-	body.add_child(_map_note)
+	chosen.add_child(_map_note)
 
 	return card
 
 
-func _on_cycle_map(step: int) -> void:
-	GameSetup.cycle_map(step)
+func _on_pick_map(index: int) -> void:
+	GameSetup.select_map(index)
 	refresh()
 
 
@@ -176,6 +204,10 @@ func _refresh_map() -> void:
 	_map_note.text = m.note if terrain.is_empty() else "%s\n\n%s" % [m.note, terrain]
 	if _map_preview != null:
 		_map_preview.set_map(m)
+	# The grid is the picker, so it has to agree with whatever the map actually
+	# is — including a map chosen from somewhere other than a chip.
+	for i in _chips.size():
+		_chips[i].set_pressed_no_signal(i == GameSetup.map_index)
 
 
 func _build_team_block(team: int) -> Control:
