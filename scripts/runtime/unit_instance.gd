@@ -44,6 +44,19 @@ var mana_clock: float = 0.0
 # were ever made, so the caster has to be able to find its own again.
 var summoned_by: int = -1
 
+# Set once at the opening bell by CombatSim, never during the battle. Both are
+# wiped by reset_for_battle(), so empowerment is re-decided from scratch every
+# round against whatever the board looks like then.
+var empowered: bool = false
+var taunt_left: float = 0.0
+var reflect_left: float = 0.0
+
+# The Devourer's two states. `ascended` is the transformation, which is one-way
+# and lasts the round; `executes_next` is the armed swing, which is spent the
+# moment it lands. Both are battle state, so a new round starts it small again.
+var ascended: bool = false
+var executes_next: bool = false
+
 # Set on a unit raised by an ability that keeps its summons. Survives
 # reset_for_battle deliberately: it is what earns the unit a place in the roster.
 var permanent: bool = false
@@ -89,6 +102,8 @@ func _base(s: StatModifier.Stat) -> float:
 			return 1.0
 		StatModifier.Stat.DAMAGE_TAKEN:
 			return 1.0
+		StatModifier.Stat.RESIST:
+			return data.damage_resist
 		StatModifier.Stat.MANA_REGEN:
 			return data.mana_per_charge
 	return 0.0
@@ -125,8 +140,21 @@ func range_name() -> String:
 	return UnitData.band_name(stat_int(StatModifier.Stat.ATTACK_RANGE))
 
 
+const MAX_RESIST := 0.90
+
+
+func resist() -> float:
+	# Capped short of 1.0 so nothing can ever become literally unkillable by
+	# stacking resistance; the Paragon's taunt is the only thing in the game
+	# allowed to take it that far, and only for four seconds.
+	var r := stat(StatModifier.Stat.RESIST)
+	if is_reflecting() and data.ability != null:
+		r += data.ability.reflect_resist
+	return clampf(r, 0.0, MAX_RESIST)
+
+
 func damage_taken_multiplier() -> float:
-	return maxf(stat(StatModifier.Stat.DAMAGE_TAKEN), 0.0)
+	return maxf(stat(StatModifier.Stat.DAMAGE_TAKEN), 0.0) * (1.0 - resist())
 
 
 func mana_per_charge() -> float:
@@ -140,6 +168,30 @@ func charge_time() -> float:
 func is_invulnerable() -> bool:
 	return (state == State.CASTING and data.ability != null
 		and data.ability.guards_caster)
+
+
+func is_taunting() -> bool:
+	return taunt_left > 0.0
+
+
+func is_reflecting() -> bool:
+	return reflect_left > 0.0
+
+
+func can_move_now() -> bool:
+	# Holding still is the price of the taunt: it plants itself, and it cannot
+	# swing while it is doing it either.
+	return data.can_move and not is_taunting()
+
+
+func can_attack_now() -> bool:
+	return data.can_attack and not is_taunting()
+
+
+func taunt_damage_taken() -> float:
+	if not is_taunting() or data.ability == null:
+		return 1.0
+	return maxf(data.ability.taunt_damage_taken, 0.0)
 
 
 func exposure() -> float:
@@ -273,6 +325,11 @@ func reset_for_battle() -> void:
 		mana = 0.0
 	has_opened = false
 	pending_target_uid = -1
+	empowered = false
+	taunt_left = 0.0
+	reflect_left = 0.0
+	ascended = false
+	executes_next = false
 	shield = 0.0
 	haste_stacks = 0
 	stealth_left = 0.0

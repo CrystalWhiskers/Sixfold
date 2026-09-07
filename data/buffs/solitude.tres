@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_mcpwj"]
+
+[resource]
+script = ExtResource("1_mcpwj")
+id = &"solitude"
+display_name = "Solitude"
+unit_id = &"paragon"
+empowered_cap_at_gold = 2
+bronze = Vector2(0.5, 0.5)
+silver = Vector2(1, 1)
+gold = Vector2(1.5, 1.5)
+stat_a = 0
+uses_second_stat = true

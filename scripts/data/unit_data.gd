@@ -46,6 +46,12 @@ const UNLIMITED_TILES := 100
 @export var keeps_mana: bool = false
 @export var casts_at_battle_start: bool = false
 
+## Mana gained every time one of its own side falls, anywhere on the board. It is
+## the one mana source you cannot farm on purpose: the bar only moves while your
+## army is losing people, so a unit built on this is strongest in the fight you
+## are already losing and does nothing in the fight you are winning.
+@export var mana_per_ally_death: float = 0.0
+
 ## What a unit is made of. It exists so the Engineer has something to repair:
 ## nothing else in the game reads it, and a unit's chassis never changes.
 enum Chassis {
@@ -61,10 +67,32 @@ const CHASSIS_NAMES := {
 @export_group("Passive")
 @export var chassis: Chassis = Chassis.BIOLOGICAL
 
+## Fraction of incoming damage this unit shrugs off before anything else is
+## applied. 0.15 is 15% off every hit, all the time, with no upkeep.
+@export_range(0.0, 0.9) var damage_resist: float = 0.0
+
 ## Health restored every second to each adjacent friendly MECHANICAL unit. This
 ## is a trait rather than an ability, because the unit that has it already spends
 ## its ability slot on building the thing it repairs.
 @export var repair_per_second: float = 0.0
+
+## Fights better alone. If your side starts the battle with no more than the
+## empowered cap of this unit type on the board, each of them is empowered for
+## the round: bigger, harder, and its ordinary swing splashes. Decided once, at
+## the opening bell — anything that arrives later stays in its small form,
+## because empowerment is a reward for how you built the board, not a thing you
+## can summon your way into.
+@export var solo_empower: bool = false
+@export var empower_hp_mult: float = 1.0
+@export var empower_damage_mult: float = 1.0
+
+## Attack speed once empowered. Unlike the other two this is meant to go BELOW
+## 1.0: the empowered form is a siege piece, not a faster version of the small
+## one. Everything it is worth arrives in one swing, rarely.
+@export var empower_attack_speed_mult: float = 1.0
+
+## The radius its ordinary attack splashes over once empowered. 1 is a 3x3.
+@export var empower_splash_radius: int = 0
 
 ## Every friendly unit within this many tiles takes `burden_percent` more damage.
 ## A cost the unit imposes on its own side, not a debuff on the enemy.

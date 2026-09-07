@@ -65,8 +65,8 @@ func _process(_delta: float) -> void:
 		_main.get_node_or_null("UI/Root/Bench") == null,
 		"a Bench node is still in main.tscn")
 		_check("loadout resolved", _main.loadout != null)
-		_check("a match can be played entirely with the new units",
-			_all_new_units(), "the draw contained an original unit")
+		_check("every unit on the board came from the loadout",
+			_all_from_loadout(), "something was drawn that is not in the loadout")
 		_check("the round-end pause is long enough to read",
 			_main.round_end_hold >= 1.0,
 			"hold is %.2fs" % _main.round_end_hold)
@@ -315,11 +315,24 @@ func _check_cards_are_on_screen(picker: BuffPicker) -> void:
 				a.global_position.y, screen.size.y])
 
 
-func _all_new_units() -> bool:
-	var new_ids := ["assassin", "herald", "revenant", "seraph", "conjurer"]
-	for u in _main.board.all_units():
-		if not new_ids.has(String(u.data.id)):
+func _all_from_loadout() -> bool:
+	# This used to name five units by hand, from back when those five were the
+	# new ones. It survived two roster reorders as a list of the wrong names. The
+	# invariant worth holding is that the board is drawn from the loadout and
+	# nothing leaks in from outside it.
+	# Per team, from the loadout that team actually drew with. `_main.loadout` is
+	# the starter file on disk, which is *not* what the board was dealt from once
+	# the slots have been set — comparing against it fails for the wrong reason.
+	for team in [BoardModel.TEAM_A, BoardModel.TEAM_B]:
+		var lo: LoadoutData = _main._loadout_for(team)
+		if lo == null:
 			return false
+		var allowed := {}
+		for d in lo.units:
+			allowed[String(d.id)] = true
+		for u in _main.board.units_of(team):
+			if not allowed.has(String(u.data.id)):
+				return false
 	return true
 
 

@@ -637,7 +637,7 @@ func _grant(team: int, buff: BuffData, rarity: BuffData.Rarity) -> void:
 func _fire_one_shot(team: int, buff: BuffData, rarity: BuffData.Rarity) -> void:
 	match buff.kind:
 		BuffData.Kind.BOARD_FILL:
-			_fill_half(team)
+			_fill_half(team, roundi(buff.magnitude(rarity).x))
 		BuffData.Kind.TIER_GIFT:
 			_gift_units(team, buff.magnitude(rarity))
 			_buffs_for(team).skip_draws += 1
@@ -647,10 +647,14 @@ func _fire_one_shot(team: int, buff: BuffData, rarity: BuffData.Rarity) -> void:
 			_mimic_highest(team, roundi(buff.magnitude(rarity).x))
 
 
-func _fill_half(team: int) -> int:
+func _fill_half(team: int, target: int) -> int:
+	# Up to a headcount, not up to the edges of the board. Filling every free
+	# tile made Levy scale with the map — a formality on the Pit and an army on
+	# the Compound — and it rewarded going into the pick with an empty board.
+	# Topping up to a fixed number means it is worth most when you are behind.
 	var made := 0
 	var rng := _rng_for(team)
-	while true:
+	while board.count_of(team) < target:
 		var free := board.free_deploy_cells(team)
 		if free.is_empty():
 			break

@@ -9,6 +9,6 @@ display_name = "Conflagration"
 unit_id = &"pyre"
 bronze = Vector2(0.4, 0.1)
 silver = Vector2(0.8, 0.2)
-gold = Vector2(1.6, 0.4)
+gold = Vector2(1.2, 0.3)
 stat_b = 2
 uses_second_stat = true

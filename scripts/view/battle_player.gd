@@ -105,6 +105,26 @@ func _apply(e: Dictionary) -> void:
 		"counts":
 			_counts = [int(e.a), int(e.b)]
 			_announce_counts()
+		"empowered":
+			var ev := _view.view_for(e.uid)
+			if ev != null:
+				ev.queue_redraw()
+			_view.spawn_label(_view.cell_to_pos(e.cell), "EMPOWERED",
+				Color(1.00, 0.86, 0.42))
+		"ascend":
+			# Its health bar has to be rebuilt, not just refilled: the maximum
+			# moved, so a view still holding the old one draws it permanently full.
+			var av := _view.view_for(e.uid)
+			if av != null:
+				av.set_hp(float(e.hp), float(e.max_hp))
+				av.queue_redraw()
+			_hp[e.uid] = {cur = float(e.hp), max = float(e.max_hp)}
+			_view.spawn_label(_view.cell_to_pos(e.cell), "ASCENDED",
+				Color(0.92, 0.40, 0.48))
+		"taunt_end":
+			var tv := _view.view_for(e.uid)
+			if tv != null:
+				tv.queue_redraw()
 		"sudden_death":
 			_view.spawn_label(_view.board_size() * 0.5, "SUDDEN DEATH",
 				Color(0.98, 0.52, 0.40))
@@ -266,6 +286,22 @@ func _show_ability(e: Dictionary) -> void:
 			_view.flash_cells(spot, Color(0.66, 0.52, 0.88, 0.55), 0.45)
 		AbilityData.Kind.REVIVE:
 			pass
+		AbilityData.Kind.RAISE:
+			if bool(e.get("wasted", false)):
+				_view.spawn_label(at, "NO DEAD", Color(0.62, 0.66, 0.74))
+				return
+			var graves: Array[Vector2i] = []
+			for c in e.get("cells", []):
+				graves.append(c)
+			_view.flash_cells(graves, Color(0.58, 0.72, 0.86, 0.55), 0.6)
+			_view.spawn_label(at, "RISE", Color(0.72, 0.82, 0.94))
+		AbilityData.Kind.ASCEND:
+			# Two different things share this ability, so they need two labels:
+			# the one-off change, and the armed swing that follows every later bar.
+			if bool(e.get("armed", false)):
+				_view.spawn_label(at, "MARKED", Color(0.92, 0.36, 0.44))
+			else:
+				_view.spawn_label(at, "GORGED", Color(0.80, 0.30, 0.42))
 
 
 static func _waste_label(reason: String) -> String:

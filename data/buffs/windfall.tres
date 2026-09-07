@@ -9,4 +9,4 @@ display_name = "Windfall"
 kind = 3
 bronze = Vector2(0.1, 0)
 silver = Vector2(0.2, 0)
-gold = Vector2(0.4, 0)
+gold = Vector2(0.3, 0)

@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_lqtvi"]
+
+[resource]
+script = ExtResource("1_lqtvi")
+id = &"execute"
+display_name = "Execute"
+description = "A single committed swing at whatever it is already fighting, for four times its own attack damage. Because it is a multiple of its attack rather than a fixed number, it grows with every tier and with everything that sharpens the blade."
+kind = 3
+cast_time = 0.35
+burst_attack_multiple = 4.0
+splash_damage = 0.0
+splash_radius = 0

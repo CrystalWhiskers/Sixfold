@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/abilities/retribution.tres" id="1_eogd2"]
+[ext_resource type="Resource" path="res://data/units/aegis_t6.tres" id="2_ixcvx"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_hwuru"]
+
+[resource]
+script = ExtResource("3_hwuru")
+id = &"aegis"
+display_name = "Aegis V"
+tier = 5
+max_hp = 3360.0
+attack_damage = 320.0
+attack_speed = 0.45
+move_time = 0.8
+sight_range = 3
+ability = ExtResource("1_eogd2")
+mana_per_attack = 22.0
+damage_resist = 0.15
+next_tier = ExtResource("2_ixcvx")
+note = "Shrugs off 15% of everything before anything else is counted, and answers whatever is standing next to it with twice what it was given. It does not out-damage anything; it makes hitting it a bad idea."
+accent = Color(0.48, 0.52, 0.66, 1)

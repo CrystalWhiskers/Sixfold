@@ -8,5 +8,5 @@ id = &"war_drums"
 display_name = "War Drums"
 bronze = Vector2(0.15, 0)
 silver = Vector2(0.3, 0)
-gold = Vector2(0.6, 0)
+gold = Vector2(0.45, 0)
 stat_a = 2

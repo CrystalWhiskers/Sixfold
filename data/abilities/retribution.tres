@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_1al78"]
+
+[resource]
+script = ExtResource("1_1al78")
+id = &"retribution"
+display_name = "Retribution"
+description = "Sets itself and waits. For five seconds it shrugs off half again of everything that lands, and anything striking it from an adjacent tile — a swing or an ability — takes 200% of that damage straight back. A bow across the board is untouched by it."
+kind = 12

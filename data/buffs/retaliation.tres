@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_13qfv"]
+
+[resource]
+script = ExtResource("1_13qfv")
+id = &"retaliation"
+display_name = "Retaliation"
+unit_id = &"aegis"
+bronze = Vector2(0.25, 0.15)
+silver = Vector2(0.5, 0.3)
+gold = Vector2(0.75, 0.45)
+stat_a = 0
+stat_b = 11
+uses_second_stat = true
+flat_b = true

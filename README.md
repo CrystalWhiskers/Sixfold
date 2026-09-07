@@ -82,7 +82,7 @@ second during headless balance runs.
 ## Running things
 
 ```
-godot --headless --script res://tools/run_tests.gd      # 1065 model + sim tests
+godot --headless --script res://tools/run_tests.gd      # 1220 model + sim tests
 godot --headless res://tools/smoke_test.tscn            # vs-computer match, start to finish
 godot --headless res://tools/pvp_smoke_test.tscn        # local PvP: turn taking and the blind
 godot --headless res://tools/menu_smoke_test.tscn       # menu, loadout editor, map grid
@@ -197,35 +197,40 @@ window. Layout constants sit at the top of `scripts/view/buff_picker.gd`:
 `BOTTOM_MARGIN`, and `CENTER_VERTICALLY` — flip that last one to `true` to park
 the stack in the middle of the screen instead of near the bottom.
 
-### The thirty-one buffs
+### The thirty-four buffs
 
 Bronze / silver / gold, all in `tools/data_builder.gd`'s `BUFF_TABLE`. Every one
 doubles from bronze to silver and doubles again to gold.
 
 | Buff | Who | Effect |
 |---|---|---|
-| Mending Wind | all | Heal 1 / 2 / 4% of max health every second |
-| Rupture | all | Attacks deal an extra 1 / 2 / 4% of the target's max health |
-| Windfall | all | 10 / 20 / 40% chance on merge to summon one extra random unit |
-| Promotion | all | 4 / 8 / 16% chance on merge for the result to gain a tier |
-| Full Muster | all | While all five types are on the board: +30 / 60 / 120% health **and** attack |
-| War Drums | all | +15 / 30 / 60% attack speed |
-| Ironwall | Warden | +50 / 100 / 200% max health (the shield scales off it) |
-| Marksmanship | Archer | +25 / 50 / 100% attack, +15 / 30 / 60% attack speed |
-| Vigor | Lancer | +30 / 60 / 120% health, +20 / 40 / 80% attack |
-| Conflagration | Pyre | +40 / 80 / 160% attack, +10 / 20 / 40% attack speed |
-| Swarm | Vexer | +50 / 100 / 200% attack speed |
-| Shadowcraft | Assassin | +10 / 20 / 40% attack speed, +15 / 30 / 60% attack |
-| Fanfare | Herald | +20 / 40 / 80% attack, +25 / 50 / 100% health |
-| Undying | Revenant | +50 / 100 / 200% health **and** attack |
-| Grace | Seraph | +35 / 70 / 140% health, +10 / 20 / 40% **healing power** |
-| Covenant | Conjurer **and its Wisps** | +50 / 100 / 200% health, +30 / 60 / 120% attack |
+| Mending Wind | Heal 1 / 2 / 3% of max health every second |
+| Rupture | Attacks deal an extra 1 / 2 / 3% of the target's max health |
+| Windfall | 10 / 20 / 30% chance on merge to summon one extra random unit |
+| Promotion | 4 / 8 / 12% chance on merge for the result to gain a tier |
+| Full Muster | While all five types are on the board: +30 / 60 / 90% health **and** attack |
+| War Drums | +15 / 30 / 45% attack speed |
+| Ironwall | Warden | +50 / 100 / 150% max health — the shield scales off max health |
+| Marksmanship | Archer | +25 / 50 / 75% attack, +15 / 30 / 45% attack speed |
+| Vigor | Lancer | +30 / 60 / 90% health, +20 / 40 / 60% attack |
+| Conflagration | Pyre | +40 / 80 / 120% attack, +10 / 20 / 30% attack speed |
+| Swarm | Vexer | +50 / 100 / 150% attack speed |
+| Shadowcraft | Assassin | +10 / 20 / 30% attack speed, +15 / 30 / 45% attack |
+| Fanfare | Herald | +20 / 40 / 60% attack, +25 / 50 / 75% health, **+aura power** |
+| Undying | Revenant | +50 / 100 / 150% health **and** attack |
+| Grace | Seraph | +35 / 70 / 105% health, +10 / 20 / 30% healing power |
+| Covenant | Conjurer **and its Wisps** | +50 / 100 / 150% health, +30 / 60 / 90% attack |
 | Cohesion | Amalgam | +100 / 200 / 300% max health |
-| Incubation | Spire | **+3 / +6 / +9 flat mana a charge**, +50 / 100 / 200% health |
+| Incubation | Spire | **+3 / 6 / 9 flat mana a second**, +0.5 / 1 / 1.5 health |
 | Confluence | Wellspring | **+3 / +6 / +9 flat mana a charge**, +30 / 60 / 90% health |
 | Ascension | Transcendence | +50 / 100 / 150% health **and** attack |
-| Dominion | Tyrant | +40 / 80 / 160% health **and** attack |
-| Fabrication | Engineer **and its Sentries** | +50 / 100 / 200% health, +40 / 80 / 160% attack |
+| Dominion | Tyrant | +40 / 80 / 120% health **and** attack |
+| Fabrication | Engineer **and its Sentries** | +50 / 100 / 150% health, +40 / 80 / 120% attack |
+| Solitude | Paragon | +50 / 100 / 150% health **and** attack — and **at gold only**, two Paragons may be empowered instead of one |
+| Whetstone | Reaver | +50 / 100 / 150% attack, +25 / 50 / 75% attack speed |
+| Retaliation | Aegis | +25 / 50 / 75% health, **+15 / 30 / 45 points of damage resist** (flat, not a percentage of a percentage) |
+| Remembrance | Vigil | +50 / 100 / 150% health — and **+1 / +2 / +3 more of the fallen raised per cast** |
+| Gluttony | Devourer | +50 / 100 / 150% health, +20 / 40 / 60% attack speed |
 
 Fanfare carries a **third** modifier (`stat_c` / `third`) on top of its two:
 +25 / 50 / 100% **aura power**, which multiplies the horn the Herald hands out.
@@ -293,6 +298,36 @@ whole thing untestable headless. Chips take their natural width when they fit an
 share the space fairly when they don't, shortest first, so a long name is trimmed
 with an ellipsis only once the row genuinely runs out of room. `BAR_HEIGHT` and
 `BAR_GAP` in `main.gd` set where the strips sit.
+
+### Gold is three times bronze, not four
+
+Every buff that scaled used to run **1x / 2x / 4x** across bronze, silver and
+gold. That makes the last pick of a match worth more than the three before it put
+together, and a gold Ironwall at +200% health or a gold Swarm at +200% attack
+speed was less a buff than a different game.
+
+They now run **1x / 2x / 3x**. Twenty buffs changed. The ones already linear —
+Cohesion, Conscription, Bloodletting, Confluence, Solitude, Ascension — were left
+alone, and so were the flag-shaped ones (Far Sight, Levy, Alchemy) and Reckless,
+whose drawback deliberately *shrinks* as it gets rarer. Two buffs scaled
+differently on their two stats, so the rule was applied per component rather than
+per buff: Incubation's flat mana was already 3/6/9 and only its health half moved.
+
+**Ten tests broke on this, which is the interesting part.** They had the old
+numbers typed into them — `is_equal_approx(healer.stat(HEAL_POWER), 1.4)`,
+`solo_hp * 2.2`, `base_interval / 1.6`. Each was rewritten to read the number off
+the buff and assert the *relationship* instead: that attack speed divides the
+interval rather than subtracting from it, that Ironwall's health bonus grows the
+shield by the same ratio, that a Wisp inherits exactly what Covenant says. A test
+that restates a tuning value only tests that nobody retuned it.
+
+Two were worse than stale. `_test_merge_procs` stacked **seven** copies of
+Promotion to guarantee a proc — a magic number that only reached certainty while
+gold was 0.16. At 0.12 it lands at 84%, and the test started failing on a third
+of its seeds. It now works out how many copies certainty needs from the buff.
+
+The scaling law lives in exactly one place: the check that every scaling buff runs
+one, two, three times bronze.
 
 ### A unit buff is only in your pool if you field that unit
 
@@ -671,8 +706,10 @@ Four things about it are new machinery rather than new numbers:
 - **An opener that takes time.** `_resolve_openers()` normally calls
   `_open_now()`, which has no wind-up in the simulation at all. `Assemble` sets
   `opener_takes_time`, so the opener goes through `_begin_cast()` and takes its
-  real 2.5 seconds — during which the Engineer can be killed and the Sentry never
-  arrives.
+  real **ten seconds** — a third of the way to the sudden-death mark, by a long
+  way the longest cast in the game, and all of it at double damage. It is long
+  enough that a single tier 1 Warden can walk the length of the board and kill
+  the Engineer before it finishes.
 - **A cast that exposes its caster.** The opposite of `guards_caster`, which is
   what makes the Spire invulnerable mid-cast. `exposes_caster = 1.0` doubles
   damage taken for the duration, and `UnitInstance.exposure()` returns 1.0 the
@@ -687,6 +724,63 @@ Four things about it are new machinery rather than new numbers:
   trap, so `Assemble` sets `holds_when_capped` and the previously-unused
   `can_cast()` finally gates `_decide()`. The Spire does not set it, so its
   behaviour is unchanged.
+
+### What ten seconds costs, and who collects
+
+The build has been lengthened twice, and each step cost real strength:
+
+| Build time | Builds finished (random placement) | Inclusion win rate |
+|---|---|---|
+| 2.5s | — | 62% |
+| 5s | 78% | 50% |
+| **10s** | **49%** | **38%** |
+
+At ten seconds it is a **below-average pick** — half its builds never finish, and
+a round often turns before the turret exists. That is a deliberate choice rather
+than an accident, but it is worth knowing it is not a free knob.
+
+**Where the builds are lost flipped, too**, which is the interesting part. Over 80
+matches with two Engineers a side:
+
+| Placement | at 5 seconds | at 10 seconds |
+|---|---|---|
+| Random | 78% | 49% |
+| Deliberately in the back rank | **62%** | **66%** |
+| Back rank, no Assassin in either pool | 100% | — |
+
+At five seconds, putting the Engineer somewhere safe made it **worse**: the
+Assassin's Shadowstep opens *behind* the enemy line, which is exactly where a
+builder goes to hide, and taking the Assassin out of both pools took the failure
+rate to zero. At ten seconds the ordinary advancing army has time to arrive as
+well, so distance starts paying for itself again and the back rank is the better
+place after all — 66% against 49%.
+
+So the same unit rewards opposite placements at the two build lengths, from one
+number changing.
+
+### Baiting the blink
+
+Shadowstep does not pick the weakest target, it picks the **deepest** one — the
+enemy standing furthest into its own half. That is a rule you can play against:
+put something tough behind the Engineer and the blink lands on that instead.
+
+| Formation | Builds finished | Win rate |
+|---|---|---|
+| Random placement | 53% | 45% |
+| Engineers at the very back | 62% | 52% |
+| **A tank behind them as bait** | **82%** | **69%** |
+
+One extra body in the right place takes the Engineer from a below-average pick to
+one of the better ones. The ten second build is not a nerf so much as a
+requirement to protect it, which is the shape the unit wanted all along.
+
+`_backline_enemy()` is asserted directly in the tests rather than through a
+battle, because at tier 4 the Assassin's opener kills a mid-build Engineer during
+`setup()` — the unit under test is already gone by the time the board settles, and
+the check would pass for the wrong reason.
+
+The Sentry was strengthened to match the longer build: **80 damage** a shot, up
+from 45, and 110 health.
 
 **The Sentry** cannot move and sees the whole board: 45 damage every 3.3 seconds
 at tier 1, 1440 at tier 6. It is a `RANGED` unit, so `line_of_fire()` still
@@ -707,6 +801,156 @@ steps off its build tile, walks at the enemy, and the repair never fires once,
 because the turret it just built is the only mechanical thing on the board and it
 is walking away from it. A 130-health, 8-damage body advancing is a donation
 anyway.
+
+## The Aegis, and a resist stat
+
+210 health, 20 damage, and **15% of every hit shrugged off before anything else
+is counted** — the only unit in the game with innate resistance. It does not
+out-damage anything. It makes hitting it a bad idea.
+
+Resistance needed a new stat rather than reuse of `DAMAGE_TAKEN`. That one is a
+*multiplier*, so a buff reading "+15% resist" would have had to be written as a
+negative number to work, and every description would have printed backwards.
+`StatModifier.Stat.RESIST` is a fraction where higher is better;
+`damage_taken_multiplier()` is now `DAMAGE_TAKEN × (1 − resist)`, and resist is
+clamped to **0.90** so nothing can stack its way to literal immunity.
+
+**Retribution** is the first `REFLECT`. For five seconds it shrugs off a further
+50% and sends **200% of what lands on it straight back** — but only at whatever
+struck it from an adjacent tile, a swing or an ability alike. An archer across the
+board is untouched, which is what makes it a melee answer rather than a blanket
+one. Unlike the Paragon's taunt it does not plant the caster: the Aegis keeps
+moving and swinging while it holds.
+
+The reflected hit is dealt with `may_reflect` false. Two Aegis facing each other
+would otherwise bounce one swing between them until a stack ran out, and there is
+a test that puts two nose to nose and checks the event log does not explode.
+
+Measured at **53%** inclusion — mid-pack, below the Warden's 75%, which is right
+for a unit whose job is to be unpleasant rather than to win fights.
+
+---
+
+## The Reaver, and a burst that actually scales
+
+95 health, 34 damage, the fastest swing and the fastest legs in the game. Less
+health than a Lancer with more than twice its damage: it wins any exchange it
+starts and loses any exchange it is caught in.
+
+**Execute** is where the interesting part is. Flat `burst_damage` does not scale
+with tier and no buff can reach it — a tier 6 Pyre's Cinder Lance still hits for
+78 while its ordinary swing hits for 224. So Execute is written as
+`burst_attack_multiple = 4.0`: four times the caster's *current* attack damage,
+resolved through `burst_damage_of()`. That means it grows with tier (120 at tier
+1, 3840 at tier 6) and Whetstone's attack bonus reaches it, which is what makes
+the buff coherent with the unit.
+
+**The Pyre and the Vexer still have the old problem.** Fixing them is the same
+one-line change plus a balance pass, and it is not done.
+
+Finding the stats took a sweep rather than a guess. At the first cut — 65 health,
+"low survivability" taken literally — it came in at **37%**, below the Archer,
+because a soft melee unit simply dies on the walk in:
+
+| health / damage / move | Inclusion win rate |
+|---|---|
+| 65 / 30 / 0.38 | 37% |
+| 90 / 30 / 0.38 | 45% |
+| **95 / 34 / 0.34** | **53%** |
+| 110 / 30 / 0.36 | 57% |
+| 110 / 34 / 0.34 | 62% |
+
+110 health reaches 57% but stops being fragile — that is mid-pack for this
+roster. 95 is the honest compromise: bottom half of the roster by health, and
+nothing that fragile out-damages it. There is a test that asserts exactly that,
+against the roster rather than against a number, so it stays true as units are
+added.
+
+---
+
+## The roster is ordered simplest first
+
+`UNIT_TABLE`'s order is the menu's order **and** the starter loadout's — the
+builder takes the first five playable units as the fallback loadout. So the order
+is a decision, not a listing, and it runs least to most complicated:
+
+Warden, Archer, Lancer, Reaver, Vexer, Pyre, Aegis, Tyrant, Seraph, Herald,
+Revenant, Assassin, Wellspring, Amalgam, Transcendence, Conjurer, Vigil, Paragon,
+Devourer, Spire, Engineer — then the two you never pick, the Wisp and the Sentry.
+
+"Complicated" here means how many rules you have to hold in your head. The Warden
+shields itself. The Engineer builds a timed turret on its own tile while exposed,
+steps aside, repairs Mechanical units, holds its cast when capped, and has a
+companion unit that only exists because of it.
+
+A new player is handed the first five, which is the point of the ordering — and
+there is now a test naming those five, because inserting a unit near the front
+silently pushes one out. That is not hypothetical: the Aegis went in at slot five
+first, which dropped the Vexer from the starter and broke a whole ability section
+that had keyed its lookup table off the starter rather than the roster. The Aegis
+moved to seventh, where it belongs anyway — innate resist *plus* a conditional
+reflect is two ideas, not one.
+
+**Reordering the table broke a test, in a way worth recording.** `_run_crossing`
+built its two units as `_unit(2)` and `_unit(1)` — slots into the loadout — so
+the movement-lockout test, the one the top of this file calls out as proving the
+core mechanic bites, quietly became an Archer walking at a Lancer. It now looks
+both units up by name. The scene test had the same shape of rot: it checked "a
+match can be played entirely with the new units" against five hard-coded names
+from back when those five were new, and had survived two reorders as a list of
+the wrong units. It now checks that every unit on the board came from the
+loadout its team actually drew with.
+
+---
+
+## The Paragon
+
+Field exactly one and it starts the round **empowered**: 250% health, 200%
+damage, and its ordinary swing lands on the whole 3x3 around whatever it hit.
+Field two and neither of them is.
+
+That cliff is the unit. Measured over 60 matches:
+
+| Army | Inclusion win rate |
+|---|---|
+| 1 Paragon + 7 random | **68%** |
+| 2 Paragons + 6 random | **32%** |
+| 3 Paragons + 5 random | 32% |
+| 1 Tyrant + 7 random | 65% |
+| 2 Wardens + 6 random | 80% |
+
+One is among the best single picks in the game; two is among the worst boards you
+can field. The escape hatch is the one the game already has — two Paragons of the
+same tier merge into one of the next, so a duplicate draw is a merge you were
+going to want anyway rather than a dead unit.
+
+**Empowerment is decided once, at the opening bell**, in `_decide_empowerment()`,
+against the board as it stands then. Nothing that arrives later is ever empowered
+— not a Mimic's copy, not a Spire's host, not a merge result — because this is a
+reward for the board you built and a summon you can pay for is not that. There is
+a test that has a Spire raise Paragons and checks every one of them comes up
+small.
+
+It is applied as **battle** modifiers, not permanent ones, so the round boundary
+wipes it and next round re-decides from scratch against whatever you have then.
+
+**Last Stand** is the first `TAUNT` in the game and only an empowered Paragon can
+cast it. Every enemy within three tiles drops what it was doing and comes for it;
+for four seconds it takes 90% less damage; and it can neither move nor swing
+while it holds. It deals no damage at all — the ability is not an attack, it is a
+way of choosing who the other army is fighting for four seconds.
+
+`_mark_for()` runs ahead of `nearest_enemy()` and prefers an enemy holding a taunt
+inside its radius. Testing that honestly needed care: with the Paragon as the only
+enemy on the board, *everything* targets it and the test proves nothing, so the
+real test gives every foe a closer friendly bait to prefer first and checks the
+taunt pulls it off that.
+
+**Solitude**, its buff, is the only one in the game whose gold tier does something
+that is not a stat: it raises the empowered cap from one to two. Bronze and silver
+give the stats alone.
+
+---
 
 ## The Tyrant
 
@@ -1419,14 +1663,15 @@ all do the right thing without any of them special-casing anything.
 
 `AStarGrid2D` can mark a *tile* solid. It has no way to say "these two open tiles
 are not connected", which is exactly what a barrier is. So `CombatSim._next_step()`
-now runs its own BFS: a distance field flooded out from the target across tiles
-that are unblocked, unoccupied and not barrier-separated, and the mover takes the
-neighbour with the lowest distance.
+now runs its own search: a distance field flooded out from the target across tiles
+that are unblocked and not barrier-separated, and the mover takes the neighbour
+with the lowest distance.
 
 It is a 135-tile board at worst, so this is cheaper than it sounds, and it is
 fully deterministic — neighbours are visited in a fixed order and ties go to the
 first. `_greedy_step()` is still the fallback when the target is walled off
-entirely.
+entirely. See *Queues, and the price of walking round one* below for what the
+field costs a tile that one of your own is standing on.
 
 ### Fitting any board to the same screen
 
@@ -1721,6 +1966,170 @@ of the arrangement, which is where the interesting decisions are.
 The consequence is that boards only ever grow — five new units every prep, and
 thirty tiles a side. That fills up in six rounds, so merging becomes a space
 problem as much as a power one. That pressure is deliberate.
+
+## Two units that eat your own dead
+
+Both the Vigil and the Devourer charge off `UnitData.mana_per_ally_death`, and
+neither charges off anything else. That one field is the whole design: their bars
+do not move when they swing, do not move when they kill, and do not move when the
+fight is going well. **You cannot farm this.** It fills only while your own side
+is losing people, which makes both units comebacks rather than snowballs — the
+opposite of every other scaling mechanic in the game.
+
+`CombatSim._feed_on_death()` pays out to living units on the **dead unit's own
+team**, deliberately not the killer's. Killing things gives you nothing.
+
+### The Vigil
+
+Medium range, slow legs, and an attack barely worth mentioning. Four of your own
+dying fills its bar; **Lament** then calls back one of your fallen per tier —
+tier 1 raises one, tier 6 raises six — at **85% health**, on their own graves
+where possible and beside the Vigil otherwise.
+
+Which of your dead comes back is a **random draw** from everyone who has fallen,
+seeded from `CombatSim.rng` like every other roll. That is on purpose: it means a
+Vigil hands you back an army, never a specific unit you were hoping to rescue.
+
+Tier is the entirety of its scaling. Its own stats barely move between tier 1 and
+tier 6; what changes is how much of your board it gives back, and the probe shows
+that as clearly as anything in the game — **40% at tier 1, 55% at tier 3, 65% at
+tier 6**, where the Warden goes the other way (65 → 57 → 52).
+
+Two rules keep it honest, both tested:
+
+- **A body is used once.** `_take_fallen()` removes it from `_fallen`, so two
+  Vigils never raise the same corpse and one Vigil never raises it twice.
+- **Something already getting up is not available.** A Revenant mid-revive never
+  enters the pile, so you cannot have it both ways.
+
+### The Devourer
+
+Melee, unremarkable, and it stays unremarkable until **five** of your own have
+died — that is `grief = 25` against a 100-point bar. **Gorge** then transforms it
+once: 2.5x health, 50% faster swings, a third quicker on its feet.
+
+The second half is the part worth reading the code for. Once ascended — and
+**only** once ascended — its swings start paying mana (`ascend_mana_per_attack`).
+Every bar it fills after the transformation arms the next swing to **kill
+outright**, whatever it hits and however much health that thing has left.
+
+`_execute()` is a deletion, not a large number. It goes through shields, through
+resistance, through the Aegis's reflect. That is not laziness — a tier 6 Warden
+in this game carries **20,720 effective health** behind its opening shield, so
+any "very big number" that reliably killed one would be obscene against
+everything else. The one thing an execute does not go through is invulnerability,
+so a guarded cast is still guarded.
+
+Both the ordinary swing and the armed swing route their death through
+`_fell()`. Keeping that in one place is what stops the execute from quietly
+skipping the revive roll, or the mana it owes the other side's scavengers.
+
+Measured: **52%** at tier 3 — above the roster median of ~42%, below the Vigil
+(55%) and the Warden (57%), well below the Tyrant (65%). The tuning lever is
+`grief` alone, and it is steep: 20 (five deaths) reads 47%, 25 (four) reads 52%,
+34 (three) reads 58%.
+
+### A test that passed for the wrong reason, again
+
+`_find()` returns null for anything outside the roster, and the Wisp is hidden.
+Three of the first Vigil tests built their corpses out of `_find("wisp")` — that
+is, out of null — and reported failures that looked like broken game logic. The
+fix is `_must_find()`, which fails a check when the roster has no such unit, so
+the next one of these is a loud failure instead of a confusing one.
+
+## The empowered Paragon is a siege engine, not a bigger soldier
+
+`empower_attack_speed_mult` is the only empowerment multiplier allowed to go
+*below* 1.0, and the Paragon is the only unit that uses it. Empowered, it gets
+2.5x health and **4x** damage over a 3x3 — and swings at **0.35x** its own attack
+speed, which is one blow every **3.81 seconds**. That is slower between swings
+than anything else in the game including the Sentry.
+
+The trade is deliberately extreme in both directions. Almost anything on the
+board out-trades it over ten seconds. Almost nothing survives being in the wrong
+square when it lands.
+
+The number that matters is that this is **not a nerf to the Paragon** — it is a
+cost attached to the empowered form only. Two Paragons are two ordinary Paragons
+swinging at ordinary speed, exactly as before. There is a test for that, and it
+fails if the multiplier is applied unconditionally.
+
+| | One (empowered) | Two (neither empowered) |
+|---|---|---|
+| Before | 62% | 35% |
+| After | 63% | 35% |
+
+Unchanged, in other words — the same unit strength arriving in a completely
+different rhythm, which was the whole point. Across tiers, one empowered Paragon
+reads 70% at tier 1, 63% at tier 3, 55% at tier 6.
+
+## Queues, and the price of walking round one
+
+The old distance field treated a tile with a friendly unit on it as solid. That
+is wrong in both directions. It made a unit take any detour at all rather than
+wait one tick behind an ally, and when *no* detour existed it fell through to
+`_greedy_step()`, which walks the single tile that most reduces the straight-line
+distance and has no idea a wall is there. On a map with one gate, that meant the
+back half of an army fanning out along a wall while the front half fought.
+
+So a friendly-occupied tile is no longer a wall, it is expensive:
+
+```gdscript
+const CONGESTION_COST := 6
+```
+
+The field is now Dijkstra rather than BFS, because steps no longer all cost 1.
+A tile costs 1 empty and 6 with one of your own standing on it, which reads as:
+*walk four tiles round rather than queue behind one, but do not walk twenty.*
+Enemies are still solid — you have to go through them, and going through them is
+what attacking is.
+
+The number is a lever, and it is the one to touch if movement looks wrong. Set it
+to 1 and everyone shoves down the shortest line in single file. Set it to 40 and
+they scatter to the far side of the board to avoid each other. Six is roughly
+"one ally is worth about half a screen of detour".
+
+There is a test for this on a purpose-built two-gate map, and the useful thing
+about it is that it **fails on the old code** — it asserts the unit holds at the
+near gate and the old rule sent it sideways to the far one. Every test for new
+movement behaviour in this project has to be run against the old rule first,
+because several of them passed for the wrong reason before that became a habit.
+
+## Targeting has slack in it
+
+`nearest_enemy()` returning one exact answer meant every unit in a clump picked
+the same body, the whole line fixated on it, and fights looked mechanical. Now:
+
+```gdscript
+const TARGET_SLACK := 2
+```
+
+A unit builds a pool of every enemy within `distance(nearest) + 2` and picks from
+it at random. Two extra rules keep it from looking like indecision:
+
+- **It is sticky.** A unit keeps its current target while that target is alive,
+  visible and still inside the slack band. It only rerolls when the fight moves.
+- **It is seeded.** The roll comes from `CombatSim.rng`, the same seeded stream as
+  everything else, so a replay of the same seed is still frame-identical. This is
+  randomness in the *fight*, not in the *simulation*.
+
+The knock-on: positional tests can no longer assume the nearest enemy is the one
+that gets hit. `_test_beam_wash` had to respace its dummies so the intended target
+is unambiguously closest, and it now asserts that spacing outright rather than
+relying on it.
+
+## Levy is a headcount, not a fill
+
+Levy used to fill your half of the board to its edges. On the big maps added with
+the 33-map set that is fifty-odd units from one gold buff, which is not a buff,
+it is a win button. It now tops you up to a **headcount of 30** — five units on
+the board means Levy gives you twenty-five, and thirty already on the board means
+Levy gives you nothing.
+
+`_fill_half()` loops on `board.count_of(team) < target` instead of on free cells,
+and the target comes from `buff.magnitude(rarity).x` rather than a constant, so
+the number is tuned in `BUFF_TABLE` like every other buff. The description string
+reads it from the same place, so it can never drift from what the buff does.
 
 ## Decisions the code is waiting on
 

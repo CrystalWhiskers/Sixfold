@@ -89,6 +89,30 @@ func extra_draw() -> int:
 	return roundi(_sum(BuffData.Kind.EXTRA_DRAW))
 
 
+func empowered_cap() -> int:
+	# One by default. A gold pick of a buff that says so raises it, which is the
+	# only thing in the game that changes how many of a unit may be empowered.
+	var cap := 1
+	for p in picks:
+		var buff: BuffData = p.buff
+		if buff.empowered_cap_at_gold > 0 and p.rarity == BuffData.Rarity.GOLD:
+			cap = maxi(cap, buff.empowered_cap_at_gold)
+	return cap
+
+
+func extra_raises_for(u: UnitInstance) -> int:
+	# Summed, not maxed, unlike the empowered cap: two picks that both feed the
+	# Vigil should both count. Nothing currently offers two, but the picker is
+	# the only reason for that and it can change.
+	var extra := 0
+	for p in picks:
+		var buff: BuffData = p.buff
+		if buff.kind != BuffData.Kind.STAT or not buff.applies_to(u):
+			continue
+		extra += buff.extra_raises_at(p.rarity)
+	return extra
+
+
 func wild_merge() -> bool:
 	for p in picks:
 		if p.buff.kind == BuffData.Kind.WILD_MERGE:

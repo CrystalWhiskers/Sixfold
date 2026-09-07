@@ -9,4 +9,4 @@ display_name = "Mending Wind"
 kind = 1
 bronze = Vector2(0.01, 0)
 silver = Vector2(0.02, 0)
-gold = Vector2(0.04, 0)
+gold = Vector2(0.03, 0)

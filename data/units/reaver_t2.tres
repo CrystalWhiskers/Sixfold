@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/abilities/execute.tres" id="1_63pf8"]
+[ext_resource type="Resource" path="res://data/units/reaver_t3.tres" id="2_ty2l2"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_o5vfg"]
+
+[resource]
+script = ExtResource("3_o5vfg")
+id = &"reaver"
+display_name = "Reaver II"
+tier = 2
+max_hp = 190.0
+attack_damage = 68.0
+attack_speed = 1.15
+move_time = 0.34
+ability = ExtResource("1_63pf8")
+mana_per_attack = 20.0
+next_tier = ExtResource("2_ty2l2")
+note = "The hardest, fastest swing in the game, and the fastest legs, behind less health than a Lancer. Everything it does is on the front foot: it wins any exchange it starts and loses any exchange it is caught in."
+accent = Color(0.74, 0.26, 0.3, 1)

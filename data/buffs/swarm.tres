@@ -9,5 +9,5 @@ display_name = "Swarm"
 unit_id = &"vexer"
 bronze = Vector2(0.5, 0)
 silver = Vector2(1, 0)
-gold = Vector2(2, 0)
+gold = Vector2(1.5, 0)
 stat_a = 2

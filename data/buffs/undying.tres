@@ -9,6 +9,6 @@ display_name = "Undying"
 unit_id = &"revenant"
 bronze = Vector2(0.5, 0.5)
 silver = Vector2(1, 1)
-gold = Vector2(2, 2)
+gold = Vector2(1.5, 1.5)
 stat_a = 0
 uses_second_stat = true

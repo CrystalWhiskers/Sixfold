@@ -3,10 +3,10 @@
 [ext_resource type="Script" path="res://scripts/data/loadout_data.gd" id="1_ve6ax"]
 [ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_8dwy7"]
 [ext_resource type="Resource" path="res://data/units/warden_t1.tres" id="3_ck24u"]
-[ext_resource type="Resource" path="res://data/units/lancer_t1.tres" id="4_mkjda"]
-[ext_resource type="Resource" path="res://data/units/archer_t1.tres" id="5_w6klo"]
-[ext_resource type="Resource" path="res://data/units/vexer_t1.tres" id="6_yvc2k"]
-[ext_resource type="Resource" path="res://data/units/pyre_t1.tres" id="7_hp2t5"]
+[ext_resource type="Resource" path="res://data/units/archer_t1.tres" id="4_mkjda"]
+[ext_resource type="Resource" path="res://data/units/lancer_t1.tres" id="5_w6klo"]
+[ext_resource type="Resource" path="res://data/units/reaver_t1.tres" id="6_yvc2k"]
+[ext_resource type="Resource" path="res://data/units/vexer_t1.tres" id="7_hp2t5"]
 
 [resource]
 script = ExtResource("1_ve6ax")

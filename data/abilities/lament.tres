@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_ycd2j"]
+
+[resource]
+script = ExtResource("1_ycd2j")
+id = &"lament"
+display_name = "Lament"
+description = "Calls your dead back onto the field — one for every tier it has, chosen at random from everyone who has fallen, each standing up on its own grave at 85% health. It gathers the charge for this from those deaths themselves, so it can only give an army back after it has watched one die."
+kind = 13
+cast_time = 0.8

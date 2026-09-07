@@ -10,6 +10,6 @@ unit_id = &"conjurer"
 also_units = Array[StringName]([&"wisp"])
 bronze = Vector2(0.5, 0.3)
 silver = Vector2(1, 0.6)
-gold = Vector2(2, 1.2)
+gold = Vector2(1.5, 0.9)
 stat_a = 0
 uses_second_stat = true

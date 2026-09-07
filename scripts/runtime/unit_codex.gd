@@ -71,6 +71,8 @@ static func traits(d: UnitData) -> PackedStringArray:
 		out.append("Keeps whatever it has charged from one round to the next.")
 	if d.ability != null and d.ability.consumes_caster:
 		out.append("Using its ability spends it: it dies on the spot, for good.")
+	if d.ability != null and d.ability.requires_empowered:
+		out.append("Its ability only works while it is empowered.")
 	if d.ability != null and d.ability.exposes_caster > 0.0:
 		out.append("Takes %d%% more damage while it is casting." % roundi(
 			d.ability.exposes_caster * 100.0))
@@ -79,6 +81,11 @@ static func traits(d: UnitData) -> PackedStringArray:
 	if d.repair_per_second > 0.0:
 		out.append("Repairs %s health a second to each adjacent friendly Mechanical unit, and stays with them rather than advancing."
 			% _num(d.repair_per_second))
+	if d.solo_empower:
+		out.append("Field exactly one and it starts the round **empowered**: %d%% health, %d%% damage, and its swing lands on the whole square around what it hits. Field two and neither is."
+			% [roundi(d.empower_hp_mult * 100.0),
+				roundi(d.empower_damage_mult * 100.0)])
+		out.append("Nothing summoned, raised or merged into one after the opening bell is ever empowered.")
 	if d.burden_radius > 0 and d.burden_percent > 0.0:
 		out.append("Your own units within %d tiles take %d%% more damage. Theirs do not."
 			% [d.burden_radius, roundi(d.burden_percent * 100.0)])

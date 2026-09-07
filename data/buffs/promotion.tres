@@ -9,4 +9,4 @@ display_name = "Promotion"
 kind = 4
 bronze = Vector2(0.04, 0)
 silver = Vector2(0.08, 0)
-gold = Vector2(0.16, 0)
+gold = Vector2(0.12, 0)

@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/abilities/lament.tres" id="1_2fovy"]
+[ext_resource type="Resource" path="res://data/units/vigil_t2.tres" id="2_j7f0e"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_gwpeg"]
+
+[resource]
+script = ExtResource("3_gwpeg")
+id = &"vigil"
+display_name = "Vigil"
+max_hp = 130.0
+attack_speed = 0.7
+move_time = 0.72
+attack_range = 2
+attack_type = 2
+ability = ExtResource("1_2fovy")
+mana_per_attack = 0.0
+mana_per_ally_death = 25.0
+next_tier = ExtResource("2_j7f0e")
+note = "Its bar does not move when it swings and does not move when it kills. It fills only when your own side loses someone, four deaths to a cast — so it is dead weight in a fight you are winning and the reason you win the one you are losing. Every tier is one more body it hands back."
+accent = Color(0.56, 0.6, 0.7, 1)

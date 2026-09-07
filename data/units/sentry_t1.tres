@@ -7,8 +7,8 @@
 script = ExtResource("2_8cibs")
 id = &"sentry"
 display_name = "Sentry"
-max_hp = 90.0
-attack_damage = 45.0
+max_hp = 110.0
+attack_damage = 80.0
 attack_speed = 0.3
 move_time = 0.6
 attack_range = 5
@@ -18,5 +18,5 @@ mana_per_attack = 0.0
 chassis = 1
 can_move = false
 next_tier = ExtResource("1_ut0s4")
-note = "Built, not drawn. It cannot move and it cannot be moved, it sees the whole board, and it fires rarely and enormously. Stone still stops its shot like anyone else's."
+note = "Built, not drawn, and the ten seconds it costs to raise are paid for here. It cannot move and it cannot be moved, it sees the whole board, and it fires rarely and enormously. Stone still stops its shot like anyone else's."
 accent = Color(0.48, 0.55, 0.62, 1)

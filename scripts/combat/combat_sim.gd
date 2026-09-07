@@ -22,6 +22,16 @@ const PRESSURE_RATE := 0.15
 # divided by the same number, so who outruns whom never changes.
 const MIN_MOVE_TIME := TICK
 
+# What a tile costs to path through when one of your own is standing on it. Six
+# says "walk four tiles round rather than wait behind one, but do not walk
+# twenty". It is a queueing cost, not a wall.
+const CONGESTION_COST := 6
+
+# How much further than the closest enemy another one may be and still be worth
+# picking. Without this every unit in range converges on the same body and the
+# whole line fixates; with it they spread across the front.
+const TARGET_SLACK := 2
+
 var team_buffs: Dictionary = {}
 
 var board: BoardModel = null
@@ -45,6 +55,12 @@ var _start_count: Array[int] = [0, 0]
 var _recruited: Array[int] = [0, 0]
 var _sudden_death := false
 var _last_counts: Array[int] = [-1, -1]
+var _field_team := -1
+
+# Everything that has died and could still be called back. A unit leaves this
+# list the moment something raises it, so two Vigils never raise the same corpse
+# and one Vigil never raises it twice.
+var _fallen: Array[UnitInstance] = []
 
 
 func setup(p_board: BoardModel, p_seed: int) -> void:
@@ -57,6 +73,7 @@ func setup(p_board: BoardModel, p_seed: int) -> void:
 
 	_units = board.all_units()
 	_respawns.clear()
+	_fallen.clear()
 	_pending_units.clear()
 	_mana_auras.clear()
 	_recruits.clear()
@@ -80,8 +97,56 @@ func setup(p_board: BoardModel, p_seed: int) -> void:
 			has_ability = u.data.ability != null,
 		})
 
+	_decide_empowerment()
 	_resolve_openers()
 	_tick_counts()
+
+
+func empowered_cap(team: int) -> int:
+	var tb: TeamBuffs = team_buffs.get(team, null)
+	return 1 if tb == null else tb.empowered_cap()
+
+
+func _decide_empowerment() -> void:
+	# Counted once, here, against the board as it stands at the opening bell.
+	# Nothing that arrives later is ever empowered — not a Mimic's copy, not a
+	# Spire's host, not a merge result — because this is a reward for the board
+	# you built, and a summon you can pay for is not that.
+	var tally := {}
+	for u in _units:
+		if not u.data.solo_empower:
+			continue
+		var key := [u.team, String(u.data.id)]
+		tally[key] = int(tally.get(key, 0)) + 1
+	for u in _units:
+		if not u.data.solo_empower:
+			continue
+		var key := [u.team, String(u.data.id)]
+		if int(tally[key]) > empowered_cap(u.team):
+			continue
+		u.empowered = true
+		# Battle modifiers, not permanent ones: the round boundary wipes them, so
+		# next round re-decides empowerment from scratch.
+		var hp_mult := maxf(u.data.empower_hp_mult, 1.0)
+		if hp_mult > 1.0:
+			u.add_battle_modifier(StatModifier.make(StatModifier.Stat.MAX_HP,
+				StatModifier.Mode.PERCENT, hp_mult - 1.0))
+		var dmg_mult := maxf(u.data.empower_damage_mult, 1.0)
+		if dmg_mult > 1.0:
+			u.add_battle_modifier(StatModifier.make(
+				StatModifier.Stat.ATTACK_DAMAGE,
+				StatModifier.Mode.PERCENT, dmg_mult - 1.0))
+		# The only empowerment multiplier allowed to go the wrong way, and the
+		# reason the empowered form reads as a siege piece rather than a bigger
+		# soldier: it hits enormously, over a 3x3, and almost never.
+		var spd_mult := maxf(u.data.empower_attack_speed_mult, 0.05)
+		if not is_equal_approx(spd_mult, 1.0):
+			u.add_battle_modifier(StatModifier.make(
+				StatModifier.Stat.ATTACK_SPEED,
+				StatModifier.Mode.PERCENT, spd_mult - 1.0))
+		u.heal_to_full()
+		_emit("empowered", {uid = u.uid, cell = u.cell,
+			hp = u.current_hp, max_hp = u.stat(StatModifier.Stat.MAX_HP)})
 
 
 func living_count(team: int) -> int:
@@ -135,6 +200,8 @@ func step() -> void:
 	_tick_regen()
 	_tick_pressure()
 	_tick_stealth()
+	_tick_taunts()
+	_tick_reflects()
 	_tick_respawns()
 	_absorb_new_units()
 	elapsed += TICK
@@ -257,7 +324,11 @@ func _shuffle_order() -> void:
 
 
 func _decide(u: UnitInstance) -> void:
-	u.target = board.nearest_enemy(u)
+	u.target = _mark_for(u)
+	if u.is_taunting():
+		# Planted. It cannot move and it cannot swing while it holds — that is
+		# what it is paying for the damage reduction and everyone's attention.
+		return
 	if u.mana_full() and can_cast(u):
 		# Deliberately not gated on whether the cast can land, unless the ability
 		# asks to be. A Spire that fills its bar with no room for the host burns
@@ -280,14 +351,63 @@ func _decide(u: UnitInstance) -> void:
 
 	var dist := BoardModel.tile_distance(u.cell, u.target.cell)
 	if dist <= u.reach_on(BoardModel.is_high(u.cell)) and _has_shot(u, u.target):
-		if u.data.can_attack:
+		if u.can_attack_now():
 			_begin_attack(u)
 		return
 	# In range but behind a wall: close in until there is a shot. Targeting is
 	# deliberately not gated on sight, or a unit with no clear shot would stand
 	# there with nothing to walk towards.
-	if u.data.can_move:
+	if u.can_move_now():
 		_begin_move(u)
+
+
+func _mark_for(u: UnitInstance) -> UnitInstance:
+	# An enemy holding a taunt inside its radius takes precedence over whoever
+	# was closest. That is the whole ability: it does not deal damage, it decides
+	# who the other army is fighting.
+	var best: UnitInstance = null
+	var best_d := 1 << 30
+	for other in _units:
+		if other.team == u.team or not other.is_alive() or not other.is_taunting():
+			continue
+		var ab := other.data.ability
+		if ab == null:
+			continue
+		var d := BoardModel.tile_distance(u.cell, other.cell)
+		if d <= ab.taunt_radius and d < best_d:
+			best = other
+			best_d = d
+	return best if best != null else _choose_enemy(u)
+
+
+func _choose_enemy(u: UnitInstance) -> UnitInstance:
+	# Not simply the closest. Everything picking the strict nearest meant a whole
+	# line converging on one body while the rest of the front stood unopposed,
+	# and it made every battle on a given seed play out identically. Anything
+	# within TARGET_SLACK of the closest is fair game, chosen off the seeded rng
+	# so a replay is still exact.
+	var near := board.nearest_enemy(u)
+	if near == null:
+		return null
+	var reach := BoardModel.tile_distance(u.cell, near.cell) + TARGET_SLACK
+
+	# Stick with what it is already fighting while that is still sensible, or a
+	# unit would re-roll its mind every tick and never finish anything.
+	var held := u.target
+	if held != null and held.is_alive() and held.team != u.team \
+			and not held.is_hidden() \
+			and BoardModel.tile_distance(u.cell, held.cell) <= reach:
+		return held
+
+	var pool: Array[UnitInstance] = []
+	for other in _units:
+		if other.team == u.team or not other.is_alive() or other.is_hidden():
+			continue
+		if BoardModel.tile_distance(u.cell, other.cell) <= reach:
+			pool.append(other)
+	if pool.size() <= 1:
+		return near
+	return pool[rng.randi_range(0, pool.size() - 1)]
 
 
 func _tending(u: UnitInstance) -> UnitInstance:
@@ -355,6 +475,16 @@ func _begin_attack(u: UnitInstance) -> void:
 	var dmg := u.stat(StatModifier.Stat.ATTACK_DAMAGE)
 	var cd := u.attack_interval()
 	_enter(u, UnitInstance.State.ATTACKING, cd)
+
+	if u.executes_next:
+		# The armed swing. Spent whatever happens, so a Devourer that arms itself
+		# and then swings at something already dying has burnt it — the bar is not
+		# saved for a better target.
+		u.executes_next = false
+		_execute(u, victim)
+		_mana_from_swing(u)
+		return
+
 	_emit("attack", {
 		uid = u.uid, target_uid = victim.uid,
 		from = u.cell, to = victim.cell, amount = dmg,
@@ -372,7 +502,29 @@ func _begin_attack(u: UnitInstance) -> void:
 	if u.data.beam_attack and u.data.beam_splash > 0.0:
 		_beam_wash(u, victim, dmg, struck)
 
-	u.gain_mana(u.data.mana_per_attack)
+	# An empowered swing lands on the square around what it hit. Full damage, not
+	# a wash: this is the reward for fielding exactly one of it.
+	var splash := u.data.empower_splash_radius if u.empowered else 0
+	if splash > 0:
+		for other in board.units_in_box(victim.cell, splash, 1 - u.team):
+			if struck.has(other.uid) or not other.is_alive():
+				continue
+			struck[other.uid] = true
+			_damage(other, dmg, u)
+
+	_mana_from_swing(u)
+
+
+func _mana_from_swing(u: UnitInstance) -> void:
+	var gained := u.data.mana_per_attack
+	if u.ascended and u.data.ability != null:
+		# The changed form pays for itself. A Devourer that has not changed yet
+		# gains nothing from swinging at all, so its first bar has to come from
+		# its own side dying.
+		gained += u.data.ability.ascend_mana_per_attack
+	if gained <= 0.0:
+		return
+	u.gain_mana(gained)
 	if u.data.ability != null:
 		_emit("mana", {uid = u.uid, mana = u.mana})
 
@@ -497,6 +649,14 @@ func _resolve_ability(u: UnitInstance) -> void:
 			_resolve_summon(u, ab)
 		AbilityData.Kind.MANA_AURA:
 			_resolve_mana_aura(u, ab)
+		AbilityData.Kind.TAUNT:
+			_resolve_taunt(u, ab)
+		AbilityData.Kind.REFLECT:
+			_resolve_reflect(u, ab)
+		AbilityData.Kind.RAISE:
+			_resolve_raise(u, ab)
+		AbilityData.Kind.ASCEND:
+			_resolve_ascend(u, ab)
 
 
 func _resolve_blink(u: UnitInstance, ab: AbilityData, target: UnitInstance) -> void:
@@ -647,6 +807,39 @@ func summon_want(u: UnitInstance, ab: AbilityData) -> int:
 	return maxi(cap - retinue_size(u), 0)
 
 
+func _resolve_reflect(u: UnitInstance, ab: AbilityData) -> void:
+	u.reflect_left = ab.reflect_duration
+	_emit("ability", {uid = u.uid, ability = ab.id, kind = ab.kind,
+		cell = u.cell, duration = ab.reflect_duration,
+		percent = ab.reflect_percent})
+
+
+func _resolve_taunt(u: UnitInstance, ab: AbilityData) -> void:
+	u.taunt_left = ab.taunt_duration
+	var pulled: Array[int] = []
+	var cells: Array[Vector2i] = []
+	for dy in range(-ab.taunt_radius, ab.taunt_radius + 1):
+		for dx in range(-ab.taunt_radius, ab.taunt_radius + 1):
+			var c := u.cell + Vector2i(dx, dy)
+			if board.in_bounds(c) and BoardModel.tile_distance(u.cell, c) <= ab.taunt_radius:
+				cells.append(c)
+	for other in _units:
+		if other.team == u.team or not other.is_alive():
+			continue
+		if BoardModel.tile_distance(u.cell, other.cell) > ab.taunt_radius:
+			continue
+		# Drop what you were doing. A unit mid-swing at something else finishes
+		# that swing and then comes here; one mid-walk turns around now.
+		other.target = u
+		if other.state == UnitInstance.State.MOVING:
+			other.state = UnitInstance.State.IDLE
+			other.state_timer = 0.0
+		pulled.append(other.uid)
+	_emit("ability", {uid = u.uid, ability = ab.id, kind = ab.kind,
+		cell = u.cell, cells = cells, radius = ab.taunt_radius,
+		duration = ab.taunt_duration, pulled = pulled})
+
+
 func _resolve_mana_aura(u: UnitInstance, ab: AbilityData) -> void:
 	if not _mana_auras.has(u.uid):
 		_mana_auras.append(u.uid)
@@ -761,7 +954,11 @@ func _wasted_summon(u: UnitInstance, ab: AbilityData, reason: String) -> void:
 
 func can_cast(u: UnitInstance) -> bool:
 	var ab := u.data.ability
-	if ab == null or ab.kind != AbilityData.Kind.SUMMON:
+	if ab == null:
+		return true
+	if ab.requires_empowered and not u.empowered:
+		return false
+	if ab.kind != AbilityData.Kind.SUMMON:
 		return true
 	if not ab.holds_when_capped:
 		return true
@@ -855,6 +1052,26 @@ func _absorb_new_units() -> void:
 	_order.clear()
 	for i in _units.size():
 		_order.append(i)
+
+
+func _tick_reflects() -> void:
+	for u in _units:
+		if u.reflect_left <= 0.0:
+			continue
+		u.reflect_left -= TICK
+		if u.reflect_left <= 0.0:
+			u.reflect_left = 0.0
+			_emit("reflect_end", {uid = u.uid, cell = u.cell})
+
+
+func _tick_taunts() -> void:
+	for u in _units:
+		if u.taunt_left <= 0.0:
+			continue
+		u.taunt_left -= TICK
+		if u.taunt_left <= 0.0:
+			u.taunt_left = 0.0
+			_emit("taunt_end", {uid = u.uid, cell = u.cell})
 
 
 func _tick_stealth() -> void:
@@ -976,6 +1193,14 @@ func _bring_back(r: Dictionary) -> void:
 		home = _any_free_cell(home, Vector2i(-1, -1))
 	if not board.in_bounds(home) or not board.force_place(u, home):
 		return
+	_restore(u, home, r.fraction)
+
+
+func _restore(u: UnitInstance, home: Vector2i, fraction: float) -> void:
+	# Shared by the Revenant getting itself up and the Vigil calling someone else
+	# up. Both have to wipe exactly the same state or the two paths drift: a unit
+	# that came back with its old shield, or its old stealth, or having already
+	# spent its opener, is a different unit from the one that died.
 	u.state = UnitInstance.State.IDLE
 	u.state_timer = 0.0
 	u.target = null
@@ -990,14 +1215,113 @@ func _bring_back(r: Dictionary) -> void:
 	u.battle_modifiers.clear()
 	for m in _team_battle_mods.get(u.team, [] as Array[StatModifier]):
 		u.add_battle_modifier(m)
+	u.ascended = false
+	u.executes_next = false
 	u.revives += 1
-	u.current_hp = u.stat(StatModifier.Stat.MAX_HP) * clampf(r.fraction, 0.05, 1.0)
+	u.current_hp = u.stat(StatModifier.Stat.MAX_HP) * clampf(fraction, 0.05, 1.0)
 	_emit("respawn", {
 		uid = u.uid, cell = home, hp = u.current_hp,
 		max_hp = u.stat(StatModifier.Stat.MAX_HP), revives = u.revives,
 	})
 	if u.data.casts_at_battle_start and u.data.ability != null:
 		u.has_opened = true
+
+
+func raise_count(u: UnitInstance) -> int:
+	# Tier is the whole of this unit's scaling. Its own stats barely move between
+	# tier 1 and tier 6; what changes is how much of your army it hands back.
+	var ab := u.data.ability
+	if ab == null or ab.kind != AbilityData.Kind.RAISE:
+		return 0
+	var n := maxi(ab.raise_per_tier, 0) * maxi(u.data.tier, 1)
+	var tb: TeamBuffs = team_buffs.get(u.team, null)
+	if tb != null:
+		n += tb.extra_raises_for(u)
+	return n
+
+
+func _take_fallen(team: int) -> UnitInstance:
+	# Randomly, not in the order they died. Which of your dead comes back is a
+	# roll, so a Vigil is never a way to reliably rescue the one unit you care
+	# about — it hands you back an army, not a choice.
+	var pool: Array[int] = []
+	for i in _fallen.size():
+		var u: UnitInstance = _fallen[i]
+		if u.team == team and not u.consumed:
+			pool.append(i)
+	if pool.is_empty():
+		return null
+	var at: int = pool[rng.randi_range(0, pool.size() - 1)]
+	var picked: UnitInstance = _fallen[at]
+	_fallen.remove_at(at)
+	return picked
+
+
+func _resolve_raise(u: UnitInstance, ab: AbilityData) -> void:
+	var want := raise_count(u)
+	var risen: Array[Vector2i] = []
+	var uids: Array[int] = []
+	while risen.size() < want:
+		var body := _take_fallen(u.team)
+		if body == null:
+			break
+		# Its own grave first, the ground near the Vigil second. A raised line
+		# reforms roughly where it fell, which is usually where it was needed.
+		var home := body.cell
+		if not board.in_bounds(home) or not board.is_empty(home):
+			home = _any_free_cell(u.cell, Vector2i(-1, -1))
+		if not board.in_bounds(home) or not board.force_place(body, home):
+			# No room anywhere. Put it back rather than losing the body — the
+			# next cast, after the board has thinned, can still use it.
+			_fallen.append(body)
+			break
+		_restore(body, home, ab.raise_hp_percent)
+		risen.append(home)
+		uids.append(body.uid)
+	if risen.is_empty():
+		_emit("ability", {uid = u.uid, ability = ab.id, kind = ab.kind,
+			cell = u.cell, wasted = true, reason = "no_dead"})
+		return
+	# No _absorb_new_units() here on purpose: a raised unit is not a new unit. It
+	# was on the board at the opening bell, so it is already in _units and already
+	# has its slot in the action order — it just stopped being alive for a while.
+	_emit("ability", {uid = u.uid, ability = ab.id, kind = ab.kind,
+		cell = u.cell, cells = risen, raised = uids})
+
+
+func _resolve_ascend(u: UnitInstance, ab: AbilityData) -> void:
+	if u.ascended:
+		# Already changed shape. A full bar now does the other thing: it arms the
+		# next swing. Nothing stacks and nothing is wasted — the bar always buys
+		# exactly one of the two.
+		u.executes_next = true
+		_emit("ability", {uid = u.uid, ability = ab.id, kind = ab.kind,
+			cell = u.cell, armed = true})
+		return
+	u.ascended = true
+	# Battle modifiers, like empowerment: the round boundary wipes them, so every
+	# round it has to eat its way back up again.
+	var hp_mult := maxf(ab.ascend_hp_mult, 1.0)
+	if hp_mult > 1.0:
+		u.add_battle_modifier(StatModifier.make(StatModifier.Stat.MAX_HP,
+			StatModifier.Mode.PERCENT, hp_mult - 1.0))
+	var spd_mult := maxf(ab.ascend_attack_speed_mult, 1.0)
+	if spd_mult > 1.0:
+		u.add_battle_modifier(StatModifier.make(StatModifier.Stat.ATTACK_SPEED,
+			StatModifier.Mode.PERCENT, spd_mult - 1.0))
+	# MOVE_TIME is inverted — less of it is faster — so a multiplier below 1.0
+	# has to become a negative percentage here.
+	var move_mult := clampf(ab.ascend_move_mult, 0.05, 1.0)
+	if move_mult < 1.0:
+		u.add_battle_modifier(StatModifier.make(StatModifier.Stat.MOVE_TIME,
+			StatModifier.Mode.PERCENT, move_mult - 1.0))
+	u.heal_to_full()
+	_emit("ascend", {
+		uid = u.uid, cell = u.cell, hp = u.current_hp,
+		max_hp = u.stat(StatModifier.Stat.MAX_HP),
+	})
+	_emit("ability", {uid = u.uid, ability = ab.id, kind = ab.kind,
+		cell = u.cell, ascended = true})
 
 
 func _resolve_haste(u: UnitInstance, ab: AbilityData) -> void:
@@ -1029,9 +1353,16 @@ func _resolve_dot(u: UnitInstance, ab: AbilityData, target: UnitInstance) -> voi
 		cell = u.cell, target_uid = target.uid, target_cell = target.cell})
 
 
+func burst_damage_of(u: UnitInstance, ab: AbilityData) -> float:
+	if ab.burst_attack_multiple > 0.0:
+		return u.stat(StatModifier.Stat.ATTACK_DAMAGE) * ab.burst_attack_multiple
+	return ab.burst_damage
+
+
 func _resolve_burst(u: UnitInstance, ab: AbilityData, target: UnitInstance) -> void:
 	if target == null or not target.is_alive():
 		return
+	var hit := burst_damage_of(u, ab)
 	var centre := target.cell
 	var splashed: Array[Vector2i] = []
 	for dy in range(-ab.splash_radius, ab.splash_radius + 1):
@@ -1041,13 +1372,13 @@ func _resolve_burst(u: UnitInstance, ab: AbilityData, target: UnitInstance) -> v
 				splashed.append(c)
 	_emit("ability", {uid = u.uid, ability = ab.id, kind = ab.kind,
 		cell = u.cell, target_uid = target.uid, target_cell = centre,
-		cells = splashed, amount = ab.burst_damage})
+		cells = splashed, amount = hit})
 
 	for c in splashed:
 		var v := board.unit_at(c)
 		if v == null or not v.is_alive() or v.team == u.team:
 			continue
-		_damage(v, ab.burst_damage if v == target else ab.splash_damage, u, true)
+		_damage(v, hit if v == target else ab.splash_damage, u, true)
 
 
 func _resolve_pierce(u: UnitInstance, ab: AbilityData, target: UnitInstance) -> void:
@@ -1111,7 +1442,7 @@ func displace(u: UnitInstance, dir: Vector2i, tiles: int) -> int:
 
 
 func _damage(victim: UnitInstance, amount: float, source: UnitInstance,
-		is_spell := false, hp_bonus := true) -> void:
+		is_spell := false, hp_bonus := true, may_reflect := true) -> void:
 	if not victim.is_alive():
 		return
 	if victim.is_invulnerable():
@@ -1123,6 +1454,7 @@ func _damage(victim: UnitInstance, amount: float, source: UnitInstance,
 		if frac > 0.0:
 			total += victim.stat(StatModifier.Stat.MAX_HP) * frac
 	total *= victim.damage_taken_multiplier() * pressure() * victim.exposure()
+	total *= victim.taunt_damage_taken()
 	total *= _burden_on(victim)
 	var landed := victim.take_damage(total)
 	_drain_life(source, victim, total, landed)
@@ -1132,9 +1464,85 @@ func _damage(victim: UnitInstance, amount: float, source: UnitInstance,
 		cell = victim.cell, spell = is_spell,
 	})
 	if not victim.is_alive():
-		_emit("death", {uid = victim.uid, cell = victim.cell, killer_uid = source.uid})
-		board.remove(victim)
-		_try_queue_revive(victim)
+		_fell(victim, source.uid)
+	_reflect_back(victim, source, total, may_reflect)
+
+
+func _fell(victim: UnitInstance, killer_uid: int) -> void:
+	# Every route to a death goes through here — an ordinary swing, a spell, and
+	# the Devourer's execute. Keeping it in one place is what stops the execute
+	# from quietly skipping the revive roll or the mana it owes the other side's
+	# scavengers.
+	_emit("death", {uid = victim.uid, cell = victim.cell, killer_uid = killer_uid})
+	board.remove(victim)
+	if not _try_queue_revive(victim):
+		# Only a body nobody is already getting back up goes in the pile. A
+		# Revenant mid-revive is not available to be raised as well.
+		_fallen.append(victim)
+	_feed_on_death(victim)
+
+
+func _execute(u: UnitInstance, victim: UnitInstance) -> void:
+	# Not enormous damage — an actual deletion. It goes through shields, through
+	# resistance and through the Aegis's reflect, because a number big enough to
+	# be reliable against a tier 6 Warden would be absurd against everything else.
+	# The one thing it does not go through is invulnerability, so a guarded cast
+	# is still guarded.
+	if victim.is_invulnerable():
+		_emit("blocked", {uid = victim.uid, cell = victim.cell})
+		return
+	_emit("attack", {
+		uid = u.uid, target_uid = victim.uid,
+		from = u.cell, to = victim.cell,
+		amount = victim.effective_hp(), execute = true,
+	})
+	var taken := victim.effective_hp()
+	victim.shield = 0.0
+	victim.current_hp = 0.0
+	victim.state = UnitInstance.State.DEAD
+	victim.target = null
+	_emit("damage", {
+		uid = victim.uid, source_uid = u.uid,
+		amount = taken, hp = 0.0, shield = 0.0,
+		cell = victim.cell, spell = false, execute = true,
+	})
+	_fell(victim, u.uid)
+
+
+func _feed_on_death(victim: UnitInstance) -> void:
+	# Every living unit on the DEAD one's own side that eats deaths gets a charge.
+	# It is deliberately not a kill reward — you cannot fill this bar by winning,
+	# only by losing people, which is why the units built on it are comebacks
+	# rather than snowballs.
+	for u in _units:
+		if u == victim or u.team != victim.team or not u.is_alive():
+			continue
+		if u.data.mana_per_ally_death <= 0.0:
+			continue
+		u.gain_mana(u.data.mana_per_ally_death)
+		_emit("mana", {uid = u.uid, mana = u.mana})
+
+
+func _reflect_back(victim: UnitInstance, source: UnitInstance, dealt: float,
+		may_reflect: bool) -> void:
+	# Only what hit it from arm's length comes back — a swing or an ability cast
+	# from an adjacent tile. An archer across the board is safe, which is what
+	# makes this a melee answer rather than a blanket one.
+	if not may_reflect or source == null or not victim.is_reflecting():
+		return
+	if source == victim or source.team == victim.team or not source.is_alive():
+		return
+	if BoardModel.tile_distance(source.cell, victim.cell) > 1:
+		return
+	var ab := victim.data.ability
+	if ab == null or ab.reflect_percent <= 0.0:
+		return
+	var back := dealt * ab.reflect_percent
+	_emit("reflect", {uid = victim.uid, target_uid = source.uid,
+		cell = source.cell, amount = back})
+	# may_reflect false on the way back, or two of these facing each other would
+	# bounce a hit between them until one of the stacks ran out.
+	_damage(source, back, victim, false, false, false)
 
 
 func _burden_on(victim: UnitInstance) -> float:
@@ -1183,6 +1591,7 @@ func _next_step(u: UnitInstance) -> Vector2i:
 	# Own BFS rather than AStarGrid2D: a grid solver can mark tiles solid but
 	# has no way to express a barrier that sits *between* two open tiles.
 	var goal := u.target.cell
+	_field_team = u.team
 	var step := _downhill(u, _distance_field(goal, u.cell), {})
 	if step != u.cell:
 		return step
@@ -1236,28 +1645,47 @@ func _downhill(u: UnitInstance, field: Dictionary, through: Dictionary) -> Vecto
 
 func _distance_field(goal: Vector2i, start: Vector2i,
 		through: Dictionary = {}) -> Dictionary:
-	# Steps from every reachable tile back to the goal. The goal and the mover's
-	# own tile are walkable even though something is standing on them, and so is
-	# anything in `through` — the friendly rooted units the mover may shove past.
+	# Cost from every reachable tile back to the goal — cost, not steps, because
+	# a tile with one of your own people standing on it is passable but slow.
+	# Treating it as a wall was what made a whole column queue behind one jam
+	# when a two-tile detour was standing empty beside them; charging it
+	# CONGESTION_COST instead means a short way round wins and a long one does
+	# not, which is the judgement a player would make.
+	#
+	# Enemies stay impassable. You do not walk through them, you fight them, and
+	# the one you are walking at is the goal and therefore free.
 	var dist := {goal: 0}
-	var queue: Array[Vector2i] = [goal]
-	var head := 0
-	while head < queue.size():
-		var c: Vector2i = queue[head]
-		head += 1
-		var next: int = int(dist[c]) + 1
+	var open: Array[Vector2i] = [goal]
+	while not open.is_empty():
+		# Small boards, so a linear scan for the cheapest open tile is cheaper
+		# than keeping a heap in order.
+		var pick := 0
+		for i in range(1, open.size()):
+			if int(dist[open[i]]) < int(dist[open[pick]]):
+				pick = i
+		var c: Vector2i = open[pick]
+		open.remove_at(pick)
+		if c == start:
+			continue
+		var here: int = int(dist[c])
 		for off in _neighbour_offsets():
 			var n: Vector2i = c + off
-			if dist.has(n) or not board.in_bounds(n):
+			if not board.in_bounds(n):
 				continue
 			if BoardModel.is_blocked(n) or BoardModel.blocks_between(c, n):
 				continue
-			if n != start and not through.has(n) and not board.is_empty(n):
+			var step := 1
+			if n != start and not through.has(n):
+				var sitting := board.unit_at(n)
+				if sitting != null:
+					if sitting.team != _field_team:
+						continue
+					step = CONGESTION_COST
+			var cost := here + step
+			if dist.has(n) and int(dist[n]) <= cost:
 				continue
-			dist[n] = next
-			if n == start:
-				continue
-			queue.append(n)
+			dist[n] = cost
+			open.append(n)
 	return dist
 
 

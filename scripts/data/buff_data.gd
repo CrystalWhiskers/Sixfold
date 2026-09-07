@@ -38,6 +38,17 @@ const RARITY_COLORS := [
 @export var kind: Kind = Kind.STAT
 @export var unit_id: StringName = &""
 @export var also_units: Array[StringName] = []
+
+## Gold only, and only on the buff belonging to a unit that empowers: raises how
+## many of that unit may be empowered at the opening bell. Zero means the buff
+## does not touch it. This is the one buff effect that is not a stat.
+@export var empowered_cap_at_gold: int = 0
+
+## Extra units raised per cast by whatever this buff covers, bronze/silver/gold.
+## Like `empowered_cap_at_gold` this is a rider on a stat buff rather than a stat
+## of its own — the buff is still a max-health buff, this is what makes it the
+## Vigil's max-health buff rather than anyone's.
+@export var extra_raises: Vector3 = Vector3.ZERO
 @export var weight: float = 1.0
 @export var exclusive_rarity: int = -1
 
@@ -129,6 +140,15 @@ func modifiers_for(r: Rarity) -> Array[StatModifier]:
 	return out
 
 
+func extra_raises_at(r: Rarity) -> int:
+	match r:
+		Rarity.BRONZE:
+			return roundi(extra_raises.x)
+		Rarity.SILVER:
+			return roundi(extra_raises.y)
+	return roundi(extra_raises.z)
+
+
 func third_magnitude(r: Rarity) -> float:
 	match r:
 		Rarity.BRONZE:
@@ -145,7 +165,18 @@ func describe(r: Rarity) -> String:
 	var who := "All units" if is_global() else _who()
 	match kind:
 		Kind.STAT:
-			return "%s: %s" % [who, _stat_phrase_with_extra(m, r)]
+			var line := "%s: %s" % [who, _stat_phrase_with_extra(m, r)]
+			# The one non-stat rider in the game, and it only exists at gold, so
+			# the card has to say so at every rarity or it reads as a surprise.
+			if empowered_cap_at_gold > 0:
+				line += ("  At gold, %d of them may be empowered at the opening bell instead of one."
+					% empowered_cap_at_gold) if r == Rarity.GOLD else \
+					("  At gold this also lets %d of them be empowered at once."
+					% empowered_cap_at_gold)
+			var raises := extra_raises_at(r)
+			if raises > 0:
+				line += "  Each of them calls back %d more of the fallen per cast." % raises
+			return line
 		Kind.REGEN:
 			return "Allies heal %s of max health every second." % _bare(m.x)
 		Kind.PERCENT_HP_DAMAGE:
@@ -159,7 +190,7 @@ func describe(r: Rarity) -> String:
 		Kind.EXTRA_DRAW:
 			return "Draw %d more unit(s) every turn from now on." % roundi(m.x)
 		Kind.BOARD_FILL:
-			return "Right now: fill every free tile on your half with tier 1 units."
+			return "Right now: draw tier 1 units until you have %d on the board. Worth most when you are behind." % roundi(m.x)
 		Kind.WILD_MERGE:
 			return "Any two of your units of the same tier can merge, whatever they are."
 		Kind.TIER_GIFT:

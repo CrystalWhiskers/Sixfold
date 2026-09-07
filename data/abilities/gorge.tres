@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_ov21i"]
+
+[resource]
+script = ExtResource("1_ov21i")
+id = &"gorge"
+display_name = "Gorge"
+description = "The first full bar splits it open: two and a half times the health, half again the attack speed, and a third quicker on its feet. Every bar it fills after that arms the next swing to kill outright, whatever it hits and however much health that thing has left."
+kind = 14
+cast_time = 0.4
+ascend_hp_mult = 2.5
+ascend_attack_speed_mult = 1.5
+ascend_move_mult = 0.66
+ascend_mana_per_attack = 20.0

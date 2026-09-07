@@ -9,6 +9,6 @@ display_name = "Shadowcraft"
 unit_id = &"assassin"
 bronze = Vector2(0.1, 0.15)
 silver = Vector2(0.2, 0.3)
-gold = Vector2(0.4, 0.6)
+gold = Vector2(0.3, 0.45)
 stat_a = 2
 uses_second_stat = true

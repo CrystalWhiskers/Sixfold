@@ -518,12 +518,21 @@ const MAP_TABLE := [
 ]
 
 const UNIT_TABLE := [
+
+
 	{
 		id = &"warden", name = "Warden", hp = 220.0, dmg = 34.0, spd = 0.35,
 		move = 0.85, range = "MELEE", sight = 3, type = "MELEE",
 		accent = Color(0.38, 0.47, 0.60),
 		ability = &"bulwark_shield", mana = 20.0, opens = true,
 		note = "Slow to swing and slower to walk, but hits like a truck behind a shield bigger than itself.",
+	},
+	{
+		id = &"archer", name = "Archer", hp = 55.0, dmg = 19.0, spd = 1.05,
+		move = 0.50, range = "LONG", sight = 5, type = "RANGED",
+		accent = Color(0.55, 0.62, 0.32),
+		ability = &"quickdraw", mana = 25.0,
+		note = "Charges fastest of anyone and never stops speeding up. Fold if reached.",
 	},
 	{
 		id = &"lancer", name = "Lancer", hp = 95.0, dmg = 16.0, spd = 1.1,
@@ -533,11 +542,11 @@ const UNIT_TABLE := [
 		note = "Every swing already cuts through two. The ability makes it three, harder.",
 	},
 	{
-		id = &"archer", name = "Archer", hp = 55.0, dmg = 19.0, spd = 1.05,
-		move = 0.50, range = "LONG", sight = 5, type = "RANGED",
-		accent = Color(0.55, 0.62, 0.32),
-		ability = &"quickdraw", mana = 25.0,
-		note = "Charges fastest of anyone and never stops speeding up. Fold if reached.",
+		id = &"reaver", name = "Reaver", hp = 95.0, dmg = 34.0, spd = 1.15,
+		move = 0.34, range = "MELEE", sight = 4, type = "MELEE",
+		accent = Color(0.74, 0.26, 0.30),
+		ability = &"execute", mana = 20.0,
+		note = "The hardest, fastest swing in the game, and the fastest legs, behind less health than a Lancer. Everything it does is on the front foot: it wins any exchange it starts and loses any exchange it is caught in.",
 	},
 	{
 		id = &"vexer", name = "Vexer", hp = 85.0, dmg = 6.0, spd = 2.4,
@@ -554,11 +563,25 @@ const UNIT_TABLE := [
 		note = "Ordinary attacks are feeble. Everything rides on landing the burst.",
 	},
 	{
-		id = &"assassin", name = "Assassin", hp = 60.0, dmg = 12.0, spd = 1.2,
-		move = 0.34, range = "MELEE", sight = 6, type = "MELEE",
-		accent = Color(0.42, 0.30, 0.48),
-		ability = &"shadowstep", mana = 25.0, opens = true,
-		note = "Opens behind someone, hits once for a fortune, then nobody can find it.",
+		id = &"aegis", name = "Aegis", hp = 210.0, dmg = 20.0, spd = 0.45,
+		move = 0.80, range = "MELEE", sight = 3, type = "MELEE",
+		accent = Color(0.48, 0.52, 0.66),
+		ability = &"retribution", mana = 22.0, resist = 0.15,
+		note = "Shrugs off 15% of everything before anything else is counted, and answers whatever is standing next to it with twice what it was given. It does not out-damage anything; it makes hitting it a bad idea.",
+	},
+	{
+		id = &"tyrant", name = "Tyrant", hp = 240.0, dmg = 40.0, spd = 0.9,
+		move = 0.55, range = "MELEE", sight = 4, type = "MELEE",
+		accent = Color(0.55, 0.16, 0.22),
+		mana = 0.0, burden_radius = 2, burden = 0.30,
+		note = "Plainly stronger than anything else you can field, and every one of your own units standing within two tiles of it takes 30% more damage. It wants to be alone, which is also where a single strong unit is easiest to surround.",
+	},
+	{
+		id = &"seraph", name = "Seraph", hp = 95.0, dmg = 8.0, spd = 0.95,
+		move = 0.48, range = "MEDIUM", sight = 4, type = "RANGED",
+		accent = Color(0.55, 0.80, 0.75),
+		ability = &"benediction", mana = 34.0,
+		note = "Fills its bar fast and dumps it all into whoever is closest to dying.",
 	},
 	{
 		id = &"herald", name = "Herald", hp = 110.0, dmg = 7.0, spd = 0.8,
@@ -575,18 +598,25 @@ const UNIT_TABLE := [
 		note = "A coin flip on every death, and it comes back whole. Kill it twice, or thrice.",
 	},
 	{
-		id = &"seraph", name = "Seraph", hp = 95.0, dmg = 8.0, spd = 0.95,
-		move = 0.48, range = "MEDIUM", sight = 4, type = "RANGED",
-		accent = Color(0.55, 0.80, 0.75),
-		ability = &"benediction", mana = 34.0,
-		note = "Fills its bar fast and dumps it all into whoever is closest to dying.",
+		id = &"assassin", name = "Assassin", hp = 60.0, dmg = 12.0, spd = 1.2,
+		move = 0.34, range = "MELEE", sight = 6, type = "MELEE",
+		accent = Color(0.42, 0.30, 0.48),
+		ability = &"shadowstep", mana = 25.0, opens = true,
+		note = "Opens behind someone, hits once for a fortune, then nobody can find it.",
 	},
 	{
-		id = &"conjurer", name = "Conjurer", hp = 150.0, dmg = 5.0, spd = 0.6,
-		move = 0.50, range = "MEDIUM", sight = 4, type = "SPELL",
-		accent = Color(0.62, 0.48, 0.78),
-		ability = &"call_wisp", mana = 26.0, opens = true,
-		note = "Tanky and feeble on its own. Its wisps match its tier and do the work.",
+		id = &"wellspring", name = "Wellspring", hp = 120.0, dmg = 9.0, spd = 0.75,
+		move = 0.52, range = "MEDIUM", sight = 4, type = "SPELL",
+		accent = Color(0.40, 0.68, 0.72),
+		ability = &"overflow", mana = 0.0, regen = 6.0, opens = true,
+		note = "Opens a pool of mana around itself on the first beat. Everyone standing in it casts sooner.",
+	},
+	{
+		id = &"amalgam", name = "Amalgam", hp = 190.0, dmg = 15.0, spd = 0.8,
+		move = 0.50, range = "MELEE", sight = 4, type = "MELEE",
+		accent = Color(0.46, 0.52, 0.38),
+		mana = 0.0, wild = true,
+		note = "Merges with anything you own, whatever it is. Thick, steady, and never quite the same twice.",
 	},
 	{
 		id = &"transcendence", name = "Transcendence", hp = 165.0, dmg = 22.0, spd = 0.45,
@@ -598,11 +628,33 @@ const UNIT_TABLE := [
 		note = "No ability, no tricks, and slower to swing than anything else on the board. Every merge it touches comes out Transcendence, and at tier 6 it fires a beam across the whole board that takes the rank behind the target with it — once every four seconds, so what it is aimed at matters more than how often.",
 	},
 	{
-		id = &"amalgam", name = "Amalgam", hp = 190.0, dmg = 15.0, spd = 0.8,
-		move = 0.50, range = "MELEE", sight = 4, type = "MELEE",
-		accent = Color(0.46, 0.52, 0.38),
-		mana = 0.0, wild = true,
-		note = "Merges with anything you own, whatever it is. Thick, steady, and never quite the same twice.",
+		id = &"conjurer", name = "Conjurer", hp = 150.0, dmg = 5.0, spd = 0.6,
+		move = 0.50, range = "MEDIUM", sight = 4, type = "SPELL",
+		accent = Color(0.62, 0.48, 0.78),
+		ability = &"call_wisp", mana = 26.0, opens = true,
+		note = "Tanky and feeble on its own. Its wisps match its tier and do the work.",
+	},
+	{
+		id = &"vigil", name = "Vigil", hp = 130.0, dmg = 10.0, spd = 0.7,
+		move = 0.72, range = "MEDIUM", sight = 4, type = "SPELL",
+		accent = Color(0.56, 0.60, 0.70),
+		ability = &"lament", mana = 0.0, grief = 25.0,
+		note = "Its bar does not move when it swings and does not move when it kills. It fills only when your own side loses someone, four deaths to a cast — so it is dead weight in a fight you are winning and the reason you win the one you are losing. Every tier is one more body it hands back.",
+	},
+	{
+		id = &"paragon", name = "Paragon", hp = 150.0, dmg = 20.0, spd = 0.75,
+		move = 0.52, range = "MELEE", sight = 4, type = "MELEE",
+		accent = Color(0.86, 0.74, 0.36),
+		ability = &"last_stand", mana = 30.0,
+		solo = true, solo_hp = 2.5, solo_dmg = 4.0, solo_splash = 1, solo_spd = 0.35,
+		note = "Field exactly one and it arrives empowered — and empowered it stops being a soldier and becomes a siege engine. Two and a half times the health, four times the damage, and every swing lands on the whole square around what it hit, but it winds up for nearly four seconds between blows. Almost anything out-trades it over ten seconds; almost nothing survives being in the wrong square when it lands. Field two and you get two ordinary Paragons, swinging at ordinary speed. Nothing summoned or merged into one after the bell is ever empowered.",
+	},
+	{
+		id = &"devourer", name = "Devourer", hp = 120.0, dmg = 20.0, spd = 0.9,
+		move = 0.44, range = "MELEE", sight = 4, type = "MELEE",
+		accent = Color(0.52, 0.24, 0.34),
+		ability = &"gorge", mana = 0.0, grief = 25.0,
+		note = "Ordinary until your side starts dying. Five of your own buys the change, and after that it is a different unit: far more health, faster hands, faster legs, and every bar it fills from then on arms a swing that deletes whatever it touches, however much health that thing has. It cannot start this itself — something of yours has to fall first.",
 	},
 	{
 		id = &"spire", name = "Spire", hp = 200.0, dmg = 0.0, spd = 0.5,
@@ -613,20 +665,6 @@ const UNIT_TABLE := [
 		note = "Cannot move, cannot swing, and never loses the progress it made last round. When it finally raises its host, that is the end of it.",
 	},
 	{
-		id = &"wellspring", name = "Wellspring", hp = 120.0, dmg = 9.0, spd = 0.75,
-		move = 0.52, range = "MEDIUM", sight = 4, type = "SPELL",
-		accent = Color(0.40, 0.68, 0.72),
-		ability = &"overflow", mana = 0.0, regen = 6.0, opens = true,
-		note = "Opens a pool of mana around itself on the first beat. Everyone standing in it casts sooner.",
-	},
-	{
-		id = &"tyrant", name = "Tyrant", hp = 240.0, dmg = 40.0, spd = 0.9,
-		move = 0.55, range = "MELEE", sight = 4, type = "MELEE",
-		accent = Color(0.55, 0.16, 0.22),
-		mana = 0.0, burden_radius = 2, burden = 0.30,
-		note = "Plainly stronger than anything else you can field, and every one of your own units standing within two tiles of it takes 30% more damage. It wants to be alone, which is also where a single strong unit is easiest to surround.",
-	},
-	{
 		id = &"engineer", name = "Engineer", hp = 130.0, dmg = 8.0, spd = 0.7,
 		move = 0.50, range = "MELEE", sight = 4, type = "MELEE",
 		accent = Color(0.72, 0.62, 0.30),
@@ -635,18 +673,18 @@ const UNIT_TABLE := [
 		note = "Opens every round building a Sentry where it stands, exposed while it works, then steps off and leaves it standing there. Barely fights. It repairs an adjacent friendly Mechanical unit every second, and it will go to a damaged one rather than advance — so it tends its turret instead of dying on someone's spear.",
 	},
 	{
-		id = &"sentry", name = "Sentry", hp = 90.0, dmg = 45.0, spd = 0.3,
-		move = 0.60, range = "UNLIMITED", sight = 6, type = "RANGED",
-		accent = Color(0.48, 0.55, 0.62),
-		mana = 0.0, rooted = true, mechanical = true, hidden = true,
-		note = "Built, not drawn. It cannot move and it cannot be moved, it sees the whole board, and it fires rarely and enormously. Stone still stops its shot like anyone else's.",
-	},
-	{
 		id = &"wisp", name = "Wisp", hp = 34.0, dmg = 7.0, spd = 1.3,
 		move = 0.40, range = "MELEE", sight = 3, type = "MELEE",
 		accent = Color(0.70, 0.62, 0.86),
 		mana = 0.0, hidden = true,
 		note = "Summoned only. Never drawn, never merged, gone when the round ends.",
+	},
+	{
+		id = &"sentry", name = "Sentry", hp = 110.0, dmg = 80.0, spd = 0.3,
+		move = 0.60, range = "UNLIMITED", sight = 6, type = "RANGED",
+		accent = Color(0.48, 0.55, 0.62),
+		mana = 0.0, rooted = true, mechanical = true, hidden = true,
+		note = "Built, not drawn, and the ten seconds it costs to raise are paid for here. It cannot move and it cannot be moved, it sees the whole board, and it fires rarely and enormously. Stone still stops its shot like anyone else's.",
 	},
 ]
 
@@ -709,11 +747,38 @@ const ABILITY_TABLE := [
 		guards_caster = true, summon_instacasts = true,
 	},
 	{
-		id = &"assemble", name = "Assemble", kind = "SUMMON", cast_time = 2.5,
+		id = &"execute", name = "Execute", kind = "FOCUS_BURST", cast_time = 0.35,
+		desc = "A single committed swing at whatever it is already fighting, for four times its own attack damage. Because it is a multiple of its attack rather than a fixed number, it grows with every tier and with everything that sharpens the blade.",
+		burst_attack_multiple = 4.0, splash_damage = 0.0, splash_radius = 0,
+	},
+	{
+		id = &"retribution", name = "Retribution", kind = "REFLECT", cast_time = 0.5,
+		desc = "Sets itself and waits. For five seconds it shrugs off half again of everything that lands, and anything striking it from an adjacent tile — a swing or an ability — takes 200% of that damage straight back. A bow across the board is untouched by it.",
+		reflect_resist = 0.50, reflect_percent = 2.0, reflect_duration = 5.0,
+	},
+	{
+		id = &"last_stand", name = "Last Stand", kind = "TAUNT", cast_time = 0.6,
+		desc = "Plants itself and roars. Every enemy within three tiles drops whatever it was doing and comes for it, and for four seconds it takes 90% less damage — but it cannot move and cannot swing while it holds. Only an empowered Paragon can do it.",
+		taunt_radius = 3, taunt_duration = 4.0, taunt_damage_taken = 0.10,
+		requires_empowered = true,
+	},
+	{
+		id = &"assemble", name = "Assemble", kind = "SUMMON", cast_time = 10.0,
 		desc = "Spends the opening of the round bolting a Sentry together on the tile it is standing on, then steps aside and leaves it there. It is head-down while it works and takes double damage the whole time. If its Sentry is destroyed it will build another once its bar is full, and it will not start a build it has no room to finish.",
 		summon = &"sentry", summon_max = 1, summon_cap_by_tier = false,
 		summon_retinue = true, summon_at_caster = true,
 		opener_takes_time = true, exposes_caster = 1.0, holds_when_capped = true,
+	},
+	{
+		id = &"lament", name = "Lament", kind = "RAISE", cast_time = 0.8,
+		desc = "Calls your dead back onto the field — one for every tier it has, chosen at random from everyone who has fallen, each standing up on its own grave at 85% health. It gathers the charge for this from those deaths themselves, so it can only give an army back after it has watched one die.",
+		raise_per_tier = 1, raise_hp_percent = 0.85,
+	},
+	{
+		id = &"gorge", name = "Gorge", kind = "ASCEND", cast_time = 0.4,
+		desc = "The first full bar splits it open: two and a half times the health, half again the attack speed, and a third quicker on its feet. Every bar it fills after that arms the next swing to kill outright, whatever it hits and however much health that thing has left.",
+		ascend_hp_mult = 2.5, ascend_attack_speed_mult = 1.5,
+		ascend_move_mult = 0.66, ascend_mana_per_attack = 20.0,
 	},
 	{
 		id = &"overflow", name = "Overflow", kind = "MANA_AURA", cast_time = 0.4,
@@ -724,71 +789,90 @@ const ABILITY_TABLE := [
 
 const BUFF_TABLE = [
 	{id = &"mending_wind", name = "Mending Wind", kind = "REGEN", weight = 1.0,
-		b = Vector2(0.01, 0.0), s = Vector2(0.02, 0.0), g = Vector2(0.04, 0.0)},
+		b = Vector2(0.01, 0.0), s = Vector2(0.02, 0.0), g = Vector2(0.03, 0.0)},
 	{id = &"rupture", name = "Rupture", kind = "PERCENT_HP_DAMAGE", weight = 1.0,
-		b = Vector2(0.01, 0.0), s = Vector2(0.02, 0.0), g = Vector2(0.04, 0.0)},
+		b = Vector2(0.01, 0.0), s = Vector2(0.02, 0.0), g = Vector2(0.03, 0.0)},
 	{id = &"windfall", name = "Windfall", kind = "MERGE_EXTRA_UNIT", weight = 1.0,
-		b = Vector2(0.10, 0.0), s = Vector2(0.20, 0.0), g = Vector2(0.40, 0.0)},
+		b = Vector2(0.10, 0.0), s = Vector2(0.20, 0.0), g = Vector2(0.3, 0.0)},
 	{id = &"promotion", name = "Promotion", kind = "MERGE_EXTRA_TIER", weight = 1.0,
-		b = Vector2(0.04, 0.0), s = Vector2(0.08, 0.0), g = Vector2(0.16, 0.0)},
+		b = Vector2(0.04, 0.0), s = Vector2(0.08, 0.0), g = Vector2(0.12, 0.0)},
 	{id = &"full_muster", name = "Full Muster", kind = "FULL_ROSTER", weight = 1.0,
 		stat_a = "MAX_HP", stat_b = "ATTACK_DAMAGE", two = true,
-		b = Vector2(0.30, 0.30), s = Vector2(0.60, 0.60), g = Vector2(1.20, 1.20)},
+		b = Vector2(0.30, 0.30), s = Vector2(0.60, 0.60), g = Vector2(0.9, 0.9)},
 	{id = &"war_drums", name = "War Drums", kind = "STAT", weight = 1.0,
 		stat_a = "ATTACK_SPEED",
-		b = Vector2(0.15, 0.0), s = Vector2(0.30, 0.0), g = Vector2(0.60, 0.0)},
+		b = Vector2(0.15, 0.0), s = Vector2(0.30, 0.0), g = Vector2(0.45, 0.0)},
 
 	{id = &"ironwall", name = "Ironwall", kind = "STAT", weight = 1.0,
 		unit = &"warden", stat_a = "MAX_HP",
-		b = Vector2(0.50, 0.0), s = Vector2(1.00, 0.0), g = Vector2(2.00, 0.0)},
+		b = Vector2(0.50, 0.0), s = Vector2(1.00, 0.0), g = Vector2(1.5, 0.0)},
 	{id = &"marksmanship", name = "Marksmanship", kind = "STAT", weight = 1.0,
 		unit = &"archer", stat_a = "ATTACK_DAMAGE", stat_b = "ATTACK_SPEED", two = true,
-		b = Vector2(0.25, 0.15), s = Vector2(0.50, 0.30), g = Vector2(1.00, 0.60)},
+		b = Vector2(0.25, 0.15), s = Vector2(0.50, 0.30), g = Vector2(0.75, 0.45)},
 	{id = &"vigor", name = "Vigor", kind = "STAT", weight = 1.0,
 		unit = &"lancer", stat_a = "MAX_HP", stat_b = "ATTACK_DAMAGE", two = true,
-		b = Vector2(0.30, 0.20), s = Vector2(0.60, 0.40), g = Vector2(1.20, 0.80)},
+		b = Vector2(0.30, 0.20), s = Vector2(0.60, 0.40), g = Vector2(0.9, 0.6)},
 	{id = &"conflagration", name = "Conflagration", kind = "STAT", weight = 1.0,
 		unit = &"pyre", stat_a = "ATTACK_DAMAGE", stat_b = "ATTACK_SPEED", two = true,
-		b = Vector2(0.40, 0.10), s = Vector2(0.80, 0.20), g = Vector2(1.60, 0.40)},
+		b = Vector2(0.40, 0.10), s = Vector2(0.80, 0.20), g = Vector2(1.2, 0.3)},
 	{id = &"swarm", name = "Swarm", kind = "STAT", weight = 1.0,
 		unit = &"vexer", stat_a = "ATTACK_SPEED",
-		b = Vector2(0.50, 0.0), s = Vector2(1.00, 0.0), g = Vector2(2.00, 0.0)},
+		b = Vector2(0.50, 0.0), s = Vector2(1.00, 0.0), g = Vector2(1.5, 0.0)},
 
 	{id = &"shadowcraft", name = "Shadowcraft", kind = "STAT", weight = 1.0,
 		unit = &"assassin", stat_a = "ATTACK_SPEED", stat_b = "ATTACK_DAMAGE", two = true,
-		b = Vector2(0.10, 0.15), s = Vector2(0.20, 0.30), g = Vector2(0.40, 0.60)},
+		b = Vector2(0.10, 0.15), s = Vector2(0.20, 0.30), g = Vector2(0.3, 0.45)},
 	{id = &"fanfare", name = "Fanfare", kind = "STAT", weight = 1.0,
 		unit = &"herald", stat_a = "ATTACK_DAMAGE", stat_b = "MAX_HP", two = true,
 		stat_c = "AURA_POWER", three = Vector3(0.25, 0.50, 1.00),
-		b = Vector2(0.20, 0.25), s = Vector2(0.40, 0.50), g = Vector2(0.80, 1.00)},
+		b = Vector2(0.20, 0.25), s = Vector2(0.40, 0.50), g = Vector2(0.6, 0.75)},
 	{id = &"undying", name = "Undying", kind = "STAT", weight = 1.0,
 		unit = &"revenant", stat_a = "MAX_HP", stat_b = "ATTACK_DAMAGE", two = true,
-		b = Vector2(0.50, 0.50), s = Vector2(1.00, 1.00), g = Vector2(2.00, 2.00)},
+		b = Vector2(0.50, 0.50), s = Vector2(1.00, 1.00), g = Vector2(1.5, 1.5)},
 	{id = &"grace", name = "Grace", kind = "STAT", weight = 1.0,
 		unit = &"seraph", stat_a = "MAX_HP", stat_b = "HEAL_POWER", two = true,
-		b = Vector2(0.35, 0.10), s = Vector2(0.70, 0.20), g = Vector2(1.40, 0.40)},
+		b = Vector2(0.35, 0.10), s = Vector2(0.70, 0.20), g = Vector2(1.05, 0.3)},
 	{id = &"covenant", name = "Covenant", kind = "STAT", weight = 1.0,
 		unit = &"conjurer", also = [&"wisp"],
 		stat_a = "MAX_HP", stat_b = "ATTACK_DAMAGE", two = true,
-		b = Vector2(0.50, 0.30), s = Vector2(1.00, 0.60), g = Vector2(2.00, 1.20)},
+		b = Vector2(0.50, 0.30), s = Vector2(1.00, 0.60), g = Vector2(1.5, 0.9)},
 	{id = &"cohesion", name = "Cohesion", kind = "STAT", weight = 1.0,
 		unit = &"amalgam", stat_a = "MAX_HP",
 		b = Vector2(1.00, 0.0), s = Vector2(2.00, 0.0), g = Vector2(3.00, 0.0)},
 	{id = &"incubation", name = "Incubation", kind = "STAT", weight = 1.0,
 		unit = &"spire", stat_a = "MANA_REGEN", stat_b = "MAX_HP", two = true,
 		flat = true,
-		b = Vector2(3.0, 0.50), s = Vector2(6.0, 1.00), g = Vector2(9.0, 2.00)},
+		b = Vector2(3.0, 0.50), s = Vector2(6.0, 1.00), g = Vector2(9.0, 1.5)},
 	{id = &"confluence", name = "Confluence", kind = "STAT", weight = 1.0,
 		unit = &"wellspring", stat_a = "MANA_REGEN", stat_b = "MAX_HP", two = true,
 		flat = true,
 		b = Vector2(3.0, 0.30), s = Vector2(6.0, 0.60), g = Vector2(9.0, 0.90)},
 	{id = &"dominion", name = "Dominion", kind = "STAT", weight = 1.0,
 		unit = &"tyrant", stat_a = "MAX_HP", stat_b = "ATTACK_DAMAGE", two = true,
-		b = Vector2(0.40, 0.40), s = Vector2(0.80, 0.80), g = Vector2(1.60, 1.60)},
+		b = Vector2(0.40, 0.40), s = Vector2(0.80, 0.80), g = Vector2(1.2, 1.2)},
 	{id = &"fabrication", name = "Fabrication", kind = "STAT", weight = 1.0,
 		unit = &"engineer", also = [&"sentry"],
 		stat_a = "MAX_HP", stat_b = "ATTACK_DAMAGE", two = true,
-		b = Vector2(0.50, 0.40), s = Vector2(1.00, 0.80), g = Vector2(2.00, 1.60)},
+		b = Vector2(0.50, 0.40), s = Vector2(1.00, 0.80), g = Vector2(1.5, 1.2)},
+	{id = &"retaliation", name = "Retaliation", kind = "STAT", weight = 1.0,
+		unit = &"aegis", stat_a = "MAX_HP", stat_b = "RESIST", two = true,
+		flat_b = true,
+		b = Vector2(0.25, 0.15), s = Vector2(0.50, 0.30), g = Vector2(0.75, 0.45)},
+	{id = &"whetstone", name = "Whetstone", kind = "STAT", weight = 1.0,
+		unit = &"reaver", stat_a = "ATTACK_DAMAGE", stat_b = "ATTACK_SPEED",
+		two = true,
+		b = Vector2(0.50, 0.25), s = Vector2(1.00, 0.50), g = Vector2(1.5, 0.75)},
+	{id = &"solitude", name = "Solitude", kind = "STAT", weight = 1.0,
+		unit = &"paragon", stat_a = "MAX_HP", stat_b = "ATTACK_DAMAGE", two = true,
+		empowered_cap_at_gold = 2,
+		b = Vector2(0.50, 0.50), s = Vector2(1.00, 1.00), g = Vector2(1.50, 1.50)},
+	{id = &"remembrance", name = "Remembrance", kind = "STAT", weight = 1.0,
+		unit = &"vigil", stat_a = "MAX_HP",
+		extra_raises = Vector3(1, 2, 3),
+		b = Vector2(0.50, 0.0), s = Vector2(1.00, 0.0), g = Vector2(1.50, 0.0)},
+	{id = &"gluttony", name = "Gluttony", kind = "STAT", weight = 1.0,
+		unit = &"devourer", stat_a = "MAX_HP", stat_b = "ATTACK_SPEED", two = true,
+		b = Vector2(0.50, 0.20), s = Vector2(1.00, 0.40), g = Vector2(1.50, 0.60)},
 	{id = &"ascension", name = "Ascension", kind = "STAT", weight = 1.0,
 		unit = &"transcendence", stat_a = "MAX_HP", stat_b = "ATTACK_DAMAGE", two = true,
 		b = Vector2(0.50, 0.50), s = Vector2(1.00, 1.00), g = Vector2(1.50, 1.50)},
@@ -798,7 +882,7 @@ const BUFF_TABLE = [
 		b = Vector2(1.0, 0.0), s = Vector2(1.0, 0.0), g = Vector2(1.0, 0.0)},
 	{id = &"levy", name = "Levy", kind = "BOARD_FILL", weight = 0.8,
 		only = "GOLD",
-		b = Vector2(1.0, 0.0), s = Vector2(1.0, 0.0), g = Vector2(1.0, 0.0)},
+		b = Vector2(30.0, 0.0), s = Vector2(30.0, 0.0), g = Vector2(30.0, 0.0)},
 	{id = &"alchemy", name = "Alchemy", kind = "WILD_MERGE", weight = 0.9,
 		only = "GOLD",
 		b = Vector2(1.0, 0.0), s = Vector2(1.0, 0.0), g = Vector2(1.0, 0.0)},
@@ -946,8 +1030,14 @@ func _make_abilities() -> Dictionary:
 				"summon_persists", "consumes_caster", "summon_adjacent",
 				"guards_caster", "summon_instacasts", "summon_retinue",
 				"opener_takes_time", "exposes_caster", "summon_at_caster",
-				"holds_when_capped",
+				"raise_per_tier", "raise_hp_percent",
+				"ascend_hp_mult", "ascend_attack_speed_mult", "ascend_move_mult",
+				"ascend_mana_per_attack",
+				"holds_when_capped", "taunt_radius", "taunt_duration",
+				"taunt_damage_taken", "requires_empowered",
+				"reflect_resist", "reflect_percent", "reflect_duration",
 				"dot_damage", "dot_ticks", "dot_interval", "burst_damage",
+				"burst_attack_multiple",
 				"splash_damage", "splash_radius", "pierce_targets", "pierce_damage_mult"]:
 			if row.has(key):
 				a.set(key, row[key])
@@ -1001,6 +1091,7 @@ func _make_units(abilities: Dictionary) -> LoadoutData:
 			u.accent = row.accent
 			u.note = row.get("note", "")
 			u.mana_per_attack = row.get("mana", 25.0)
+			u.mana_per_ally_death = row.get("grief", 0.0)
 			u.mana_per_charge = row.get("regen", 0.0)
 			u.mana_charge_time = row.get("charge", 1.0)
 			u.keeps_mana = row.get("banks", false)
@@ -1019,6 +1110,12 @@ func _make_units(abilities: Dictionary) -> LoadoutData:
 				float(row.get("repair", 0.0)) * mult_hp, 0.5)
 			u.burden_radius = row.get("burden_radius", 0)
 			u.burden_percent = row.get("burden", 0.0)
+			u.damage_resist = row.get("resist", 0.0)
+			u.solo_empower = row.get("solo", false)
+			u.empower_hp_mult = row.get("solo_hp", 1.0)
+			u.empower_damage_mult = row.get("solo_dmg", 1.0)
+			u.empower_splash_radius = row.get("solo_splash", 0)
+			u.empower_attack_speed_mult = row.get("solo_spd", 1.0)
 			if t == TIERS and row.has("apex"):
 				var apex: Dictionary = row.apex
 				u.max_hp = snappedf(u.max_hp * float(apex.get("hp", 1.0)), 1.0)
@@ -1084,6 +1181,8 @@ func _make_buffs() -> void:
 		if row.has("three"):
 			b.third = row.three
 			b.uses_third_stat = true
+		b.empowered_cap_at_gold = row.get("empowered_cap_at_gold", 0)
+		b.extra_raises = row.get("extra_raises", Vector3.ZERO)
 		_save(b, "%s/%s.tres" % [BUFF_DIR, row.id])
 
 

@@ -295,6 +295,19 @@ func _draw() -> void:
 	rim.a = (0.30 + 0.13 * float(tier - 1)) * alpha
 	draw_rect(body.grow(-3.5), rim, false, 1.0 + 0.7 * float(tier - 1))
 
+	# An empowered unit has to look different from an ordinary one of the same
+	# name and tier, because it is the same name and tier — the difference is
+	# entirely in the stats, so the board has to say so.
+	if unit.empowered:
+		var glow := Color(1.00, 0.86, 0.42, 0.85 * alpha)
+		draw_rect(body.grow(2.5), glow, false, 2.0)
+		draw_rect(body.grow(5.0), Color(glow, 0.35 * alpha), false, 2.0)
+	if unit.is_taunting():
+		# A ring outside everything: it is the loudest thing on the board while
+		# it lasts, and it should read that way.
+		draw_arc(Vector2.ZERO, half - 1.0, 0.0, TAU, 28,
+			Color(0.98, 0.78, 0.30, 0.90 * alpha), 3.0)
+
 	if hidden_unit:
 		draw_rect(body.grow(3.0), Color(0.62, 0.52, 0.85, 0.75 * alpha), false, 2.0)
 	if reviving:

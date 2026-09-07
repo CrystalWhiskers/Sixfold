@@ -13,6 +13,10 @@ enum Stat {
 	DAMAGE_TAKEN,
 	LIFESTEAL,
 	MANA_REGEN,
+	## Fraction of incoming damage shrugged off. Higher is better, unlike
+	## DAMAGE_TAKEN, which is a multiplier — a buff that reads "+15% resist"
+	## should not have to be written as a negative number to work.
+	RESIST,
 }
 
 enum Mode {
