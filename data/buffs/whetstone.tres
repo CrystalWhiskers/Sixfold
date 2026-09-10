@@ -6,7 +6,7 @@
 script = ExtResource("1_qmke6")
 id = &"whetstone"
 display_name = "Whetstone"
-unit_id = &"swordman"
+unit_id = &"reaver"
 bronze = Vector2(0.5, 0.25)
 silver = Vector2(1, 0.5)
 gold = Vector2(1.5, 0.75)

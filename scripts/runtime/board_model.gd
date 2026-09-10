@@ -17,7 +17,32 @@ static var map_name := "Standard"
 static var _walls: Dictionary = {}
 static var _voids: Dictionary = {}
 static var _high: Dictionary = {}
+static var _stairs: Dictionary = {}
 static var _edges: Dictionary = {}
+
+# Terrain the battle itself changed. `_rubble` is which of the map's walls may be
+# knocked down at all; `_broken` and `_raised` are this round's damage and
+# building. The map resource is never touched — clear_changes() at the round
+# boundary puts the board back exactly as it was drawn, so a map is still a
+# static, shareable thing and a *battle* is what makes it mutable.
+static var _rubble: Dictionary = {}
+static var _broken: Dictionary = {}
+# cell -> the team that raised it, or NOBODY for one with no owner. The owner is
+# what makes a Mason's wall a membrane: its own side shoots straight through and
+# the other side does not. Map stone has no owner and blocks everybody.
+static var _raised: Dictionary = {}
+const NOBODY := -1
+
+# What is left of each standing breakable wall. A wall is no longer something one
+# cast deletes — it is a thing with health that anybody can chew through, given
+# long enough. Cells appear here lazily on the first hit, so a map with a hundred
+# breakable tiles costs nothing until somebody starts digging.
+static var _wall_hp: Dictionary = {}
+static var _wall_full: Dictionary = {}
+
+# The default toughness of map stone. A Sapper is meant to take a few swings over
+# it and an ordinary unit is meant to regret starting.
+const WALL_HP := 240.0
 
 const TEAM_A := 0
 const TEAM_B := 1
@@ -52,16 +77,26 @@ static func use_map(m: MapData) -> void:
 	_walls = {}
 	_voids = {}
 	_high = {}
+	_stairs = {}
+	_rubble = {}
+	_broken = {}
+	_raised = {}
+	_wall_hp = {}
+	_wall_full = {}
 	_edges = m.edge_keys()
 	for y in HEIGHT:
 		for x in WIDTH:
 			var c := Vector2i(x, y)
 			if m.is_wall(c):
 				_walls[c] = true
+				if m.is_breakable(c):
+					_rubble[c] = true
 			elif m.is_void(c):
 				_voids[c] = true
 			elif m.is_high(c):
 				_high[c] = true
+			elif m.is_stairs(c):
+				_stairs[c] = true
 
 
 static func reset_map() -> void:
@@ -73,6 +108,12 @@ static func reset_map() -> void:
 	_walls = {}
 	_voids = {}
 	_high = {}
+	_stairs = {}
+	_rubble = {}
+	_broken = {}
+	_raised = {}
+	_wall_hp = {}
+	_wall_full = {}
 	_edges = {}
 
 
@@ -91,7 +132,86 @@ func in_bounds(c: Vector2i) -> bool:
 
 
 static func is_wall(c: Vector2i) -> bool:
-	return _walls.has(c)
+	if _raised.has(c):
+		return true
+	return _walls.has(c) and not _broken.has(c)
+
+
+static func is_breakable(c: Vector2i) -> bool:
+	# A raised wall can be knocked back down: whoever put it there does not get
+	# to make it permanent, and the Mason/Sapper pair has to answer each other.
+	if _raised.has(c):
+		return true
+	return _rubble.has(c) and not _broken.has(c)
+
+
+static func wall_hp(c: Vector2i) -> float:
+	if not is_breakable(c):
+		return 0.0
+	return float(_wall_hp.get(c, WALL_HP))
+
+
+static func wall_fraction(c: Vector2i) -> float:
+	# For the view: how much of it is left, so a wall visibly crumbles rather than
+	# vanishing without warning.
+	if not is_breakable(c):
+		return 0.0
+	var full: float = float(_wall_full.get(c, WALL_HP))
+	if full <= 0.0:
+		return 0.0
+	return clampf(wall_hp(c) / full, 0.0, 1.0)
+
+
+static func damage_wall(c: Vector2i, amount: float) -> bool:
+	# Returns true only on the blow that brings it down, so a caller can react to
+	# the hole appearing without having to check afterwards.
+	if not is_breakable(c) or amount <= 0.0:
+		return false
+	var left := wall_hp(c) - amount
+	if left > 0.0:
+		_wall_hp[c] = left
+		if not _wall_full.has(c):
+			_wall_full[c] = WALL_HP
+		return false
+	_wall_hp.erase(c)
+	_wall_full.erase(c)
+	if _raised.has(c):
+		_raised.erase(c)
+	else:
+		_broken[c] = true
+	return true
+
+
+static func break_wall(c: Vector2i) -> bool:
+	# The instant version. Kept because "take this wall down now" is a clearer
+	# thing to say in a test than "hit it for more than it could possibly have".
+	if not is_breakable(c):
+		return false
+	return damage_wall(c, wall_hp(c))
+
+
+static func raise_wall(c: Vector2i, hp := WALL_HP, team := NOBODY) -> bool:
+	# Only onto ground that is genuinely open. Never over a hole in the board —
+	# a void is not a tile you can build on, it is a tile that is not there.
+	if not is_playable(c) or _voids.has(c) or _raised.has(c):
+		return false
+	_raised[c] = team
+	# A raised wall carries the toughness its builder gave it, which is what the
+	# Mason's buff actually buys.
+	_wall_hp[c] = maxf(hp, 1.0)
+	_wall_full[c] = maxf(hp, 1.0)
+	return true
+
+
+static func changed_terrain() -> Dictionary:
+	return {broken = _broken.keys(), raised = _raised.keys()}
+
+
+static func clear_changes() -> void:
+	_broken = {}
+	_raised = {}
+	_wall_hp = {}
+	_wall_full = {}
 
 
 static func is_void(c: Vector2i) -> bool:
@@ -102,8 +222,27 @@ static func is_high(c: Vector2i) -> bool:
 	return _high.has(c)
 
 
+static func is_stairs(c: Vector2i) -> bool:
+	return _stairs.has(c)
+
+
+static func can_climb(from: Vector2i, to: Vector2i) -> bool:
+	# High ground is a second layer everywhere, on every map, with no exceptions —
+	# the eleven older maps that predate stairs all had them cut in rather than
+	# being grandfathered out of the rule. The builder refuses to produce a map
+	# with a plateau no staircase touches, which is what makes "no exceptions"
+	# safe to rely on here.
+	#
+	# Getting DOWN off a plateau is free — you can step off an edge anywhere — and
+	# only getting UP is restricted, which is what makes a terrace a place you
+	# retreat to rather than a box you get stuck in.
+	if not is_high(to):
+		return true
+	return is_high(from) or is_stairs(from)
+
+
 static func is_blocked(c: Vector2i) -> bool:
-	return _walls.has(c) or _voids.has(c)
+	return is_wall(c) or _voids.has(c)
 
 
 static func is_playable(c: Vector2i) -> bool:
@@ -111,18 +250,30 @@ static func is_playable(c: Vector2i) -> bool:
 		and not is_blocked(c))
 
 
-static func blocks_sight(c: Vector2i) -> bool:
+static func blocks_sight(c: Vector2i, team := NOBODY) -> bool:
 	# Solid walls stop a shot. Holes in the board do not — you can fire across a
 	# gap, you just cannot stand in it. Barriers are waist-high: they stop bodies
-	# and nothing else.
-	return _walls.has(c)
+	# and nothing else. A wall knocked down this round stops nothing.
+	#
+	# A raised wall is the exception, and the only team-aware terrain in the game:
+	# the side that built it shoots straight through its own, and everybody else
+	# is stopped. It still blocks MOVEMENT for both sides — is_blocked() does not
+	# take a team — so a Mason's wall is a firing slit, not a door.
+	if _raised.has(c) and team != NOBODY and int(_raised[c]) == team:
+		return false
+	return is_wall(c)
 
 
-static func line_of_fire(from: Vector2i, to: Vector2i) -> bool:
-	if from == to or _walls.is_empty():
+static func line_of_fire(from: Vector2i, to: Vector2i, team := NOBODY) -> bool:
+	# _raised has to be in the early-out too, or a Mason's wall on an otherwise
+	# open map would block nothing at all.
+	if from == to or (_walls.is_empty() and _raised.is_empty()):
 		return true
 	# Walk the line from a fixed end, so "A can shoot B" and "B can shoot A" can
-	# never disagree over a tie.
+	# never disagree over a tie. That symmetry is about rounding, not about teams:
+	# with a team given, the two directions are SUPPOSED to disagree across a
+	# Mason's wall, and they do, because the swap only fixes which end the walk
+	# starts from and not which tiles are on the line.
 	var a := from
 	var b := to
 	if b.y < a.y or (b.y == a.y and b.x < a.x):
@@ -138,7 +289,7 @@ static func line_of_fire(from: Vector2i, to: Vector2i) -> bool:
 	var err := dx - dy
 	while true:
 		var c := Vector2i(x, y)
-		if c != a and c != b and blocks_sight(c):
+		if c != a and c != b and blocks_sight(c, team):
 			return false
 		if c == b:
 			return true
@@ -161,7 +312,8 @@ static func blocks_between(a: Vector2i, b: Vector2i) -> bool:
 
 static func has_terrain() -> bool:
 	return not (_walls.is_empty() and _voids.is_empty()
-		and _high.is_empty() and _edges.is_empty())
+		and _high.is_empty() and _stairs.is_empty()
+		and _edges.is_empty() and _raised.is_empty())
 
 
 func is_neutral(c: Vector2i) -> bool:
@@ -229,6 +381,36 @@ static func tile_distance(a: Vector2i, b: Vector2i) -> int:
 	if DIAGONAL_RANGE:
 		return maxi(d.x, d.y)
 	return d.x + d.y
+
+
+static func box_distance(a: Vector2i, b: Vector2i) -> int:
+	# Chebyshev: how many rings out b sits from a. Always 1 for any of the eight
+	# tiles touching a, corners included.
+	var d := (a - b).abs()
+	return maxi(d.x, d.y)
+
+
+static func is_beside(a: Vector2i, b: Vector2i) -> bool:
+	return a != b and box_distance(a, b) <= 1
+
+
+static func in_reach(from: Vector2i, to: Vector2i, tiles: int) -> bool:
+	# The melee band is the eight tiles around you, not the four. Movement is
+	# still four-way — nothing walks diagonally — but a unit can obviously hit the
+	# one standing at its shoulder, and before this it could not, which is why
+	# melee units used to shuffle around each other in corners without swinging.
+	#
+	# Only the melee band changes. Every longer band still measures in Manhattan
+	# steps, so a "medium" unit reaches a diamond and not a 5x5 box.
+	# Zero reach is a refusal, not a short range, and it has to be checked before
+	# the melee branch below or "cannot reach this at all" quietly becomes "can
+	# hit anything at its shoulder". Nothing produced a zero here until high
+	# ground did: reach_on() floors at the melee band, which is one.
+	if tiles <= 0:
+		return false
+	if tiles <= 1:
+		return is_beside(from, to)
+	return tile_distance(from, to) <= tiles
 
 
 static func mirror(c: Vector2i) -> Vector2i:
@@ -561,6 +743,8 @@ func _ascii_terrain(c: Vector2i) -> String:
 		return "#"
 	if is_high(c):
 		return "^"
+	if is_stairs(c):
+		return "/"
 	return "~" if is_neutral(c) else "."
 
 

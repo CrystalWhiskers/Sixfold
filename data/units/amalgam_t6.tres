@@ -1,9 +1,10 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="1_j0w3d"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="1_ep461"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="2_negx0"]
 
 [resource]
-script = ExtResource("1_j0w3d")
+script = ExtResource("1_ep461")
 id = &"amalgam"
 display_name = "Amalgam VI"
 tier = 6
@@ -14,4 +15,5 @@ move_time = 0.5
 mana_per_attack = 0.0
 wild_merge = true
 note = "Merges with anything you own, whatever it is. Thick, steady, and never quite the same twice."
+sprite = ExtResource("2_negx0")
 accent = Color(0.46, 0.52, 0.38, 1)

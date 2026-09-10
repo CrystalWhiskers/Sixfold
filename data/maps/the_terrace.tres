@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="MapData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/map_data.gd" id="1_fewno"]
+
+[resource]
+script = ExtResource("1_fewno")
+id = &"the_terrace"
+display_name = "The Terrace"
+rank = 34
+width = 9
+height = 15
+rows = PackedStringArray(".........", ".^^^^^^^.", ".^^^^^^^.", "..//.//..", ".........", ".........", ".........", ".........", ".........", ".........", ".........", "..//.//..", ".^^^^^^^.", ".^^^^^^^.", ".........")
+note = "A second layer, and each side gets one. Put your shooters on the terrace and they cannot be touched by any melee unit standing on the ground — not at a penalty, at all — while anything shooting up at them loses a band of range, so a Long-ranged Archer has to walk to Medium to reach. The four staircases in front of each terrace are the only way up, and they are wide enough for two. Everything about this map is the question of whether the assault gets up the stairs before the shooters on top of them win."

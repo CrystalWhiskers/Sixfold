@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_by6ix"]
+
+[resource]
+script = ExtResource("1_by6ix")
+id = &"demolition"
+display_name = "Demolition"
+unit_id = &"sapper"
+bronze = Vector2(0.15, 0.75)
+silver = Vector2(0.3, 1.5)
+gold = Vector2(0.45, 2.25)
+stat_a = 2
+uses_second_stat = true

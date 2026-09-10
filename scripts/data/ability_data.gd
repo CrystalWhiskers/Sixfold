@@ -17,6 +17,11 @@ enum Kind {
 	REFLECT,
 	RAISE,
 	ASCEND,
+	SAP,
+	BUILD,
+	SHELL,
+	DRAIN,
+	FREEZE,
 }
 
 @export var id: StringName = &""
@@ -37,6 +42,53 @@ enum Kind {
 @export var dot_damage: float = 9.0
 @export var dot_ticks: int = 5
 @export var dot_interval: float = 0.5
+
+## Extra damage the poisoned unit takes from EVERY source while the dot is on it,
+## per tier of the caster: 0.05 on a tier 3 Vexer is +15%. Read off the caster at
+## the moment of the cast and then frozen into that dot, so the number is the one
+## the Vexer had when it poisoned you — killing the Vexer afterwards does not
+## un-poison the target, and buffing it mid-round does not retroactively deepen a
+## poison already ticking.
+##
+## Per tier rather than flat because an AbilityData is ONE resource shared by all
+## six tiers of a unit (which is why `dot_damage` does not scale and
+## `burst_attack_multiple` exists). Multiplying by the caster's tier here is the
+## cheap version of that fix, for a value that is a percentage to begin with.
+@export var dot_vulnerability_per_tier: float = 0.0
+
+## The FIRST tick's damage as a fraction of the victim's CURRENT health, on top
+## of the flat `dot_damage`. Blight is written entirely this way — `dot_damage` is
+## zero on it.
+##
+## Current health, not maximum, and the difference is the whole character of the
+## unit. A share of what is left can never actually kill: sixty percent of sixty
+## percent of sixty percent approaches zero and never reaches it. So the Vexer
+## cannot finish anything, at any tier, ever — it takes a great bite out of
+## whatever is healthiest and hands it to somebody else to put down. It also
+## scales for free, the same way a share of maximum did.
+@export var dot_current_hp_percent: float = 0.0
+
+## What the share is multiplied by after every tick. 0.5 halves it each time, so
+## a poison that opens at 25% goes 25, 12.5, 6.25, 3.1... — it cripples on landing
+## and is nearly spent by the end. 1.0 would make every tick equal.
+@export var dot_falloff: float = 1.0
+
+## While this dot is on a unit, the unit gains NOTHING: no healing, no shields, no
+## new haste stacks, no aura from an ally, no mana from a Wellspring. It is the
+## other half of what makes the poison worth casting on the thing that is winning.
+@export var dot_suppresses: bool = false
+
+@export_group("Freeze")
+## Seconds of freeze per tier of the caster, so a tier 1 lands a moment and a
+## tier 6 lands six times that. Per tier for the same reason
+## `dot_vulnerability_per_tier` is: an AbilityData is ONE resource shared by all
+## six tiers, so a flat number here would not scale at all.
+@export var freeze_seconds_per_tier: float = 0.0
+
+## Extra damage the frozen unit takes, per tier of the caster. 0.10 on a tier 3
+## is +30%. Added, not multiplied, so reading the number off the card and
+## multiplying by the tier gives you the real figure.
+@export var freeze_amp_per_tier: float = 0.0
 
 @export_group("Focus burst")
 ## When above zero, the burst is this many times the caster's *current* attack
@@ -151,6 +203,50 @@ enum Kind {
 ## its own — and what makes every execute after that its own work.
 @export var ascend_mana_per_attack: float = 0.0
 
+@export_group("Terrain")
+## How far from the caster it will reach to break or raise. 1 is the eight tiles
+## around it — the same reach a melee unit swings at.
+@export var terrain_reach: int = 1
+## How many tiles one cast changes.
+@export var terrain_tiles: int = 1
+## A sapping charge is worth this many of the caster's ordinary wall swings. It
+## multiplies attack damage rather than being a flat number, so a tier 6 charge
+## is 32 times a tier 1 one and the unit's attack buff reaches it.
+@export var sap_burst_multiple: float = 4.0
+## How tough a raised wall is before any buff. Map stone is BoardModel.WALL_HP.
+@export var wall_hp: float = 240.0
+## Build on the tile the caster is standing on and step it aside, the way the
+## Engineer bolts its Sentry together underfoot. It puts the wall exactly where
+## the builder chose to stand, which makes placing the Mason the decision rather
+## than guessing which way it happens to be facing.
+@export var terrain_at_caster: bool = false
+
+@export_group("Shell")
+## The shell's damage, as a multiple of the caster's attack. Written this way for
+## the same reason as Execute: a flat number would not scale with tier and no buff
+## would ever reach it.
+@export var shell_attack_multiple: float = 3.0
+## What the tile it lands on takes, as a fraction of the shell. 1.5 is 150%.
+@export var shell_direct: float = 1.5
+## What each arm of the cross takes. 1.0 is 100%.
+@export var shell_splash: float = 1.0
+## Seconds between firing and impact. The whole character of the unit: long
+## enough that the shell can be seen coming and walked out from under.
+@export var shell_flight: float = 1.6
+## How many tiles out each arm of the cross reaches. 1 is a five-tile plus sign.
+@export var shell_arm: int = 1
+## Damage a second to enemies standing in what it leaves behind, as a fraction of
+## the shell, and how long the ground burns for.
+@export var field_damage: float = 0.35
+@export var field_seconds: float = 5.0
+
+@export_group("Drain")
+## Fraction of the victim's MAX health taken every second. Max health, not
+## current, so it does not tail off — and deliberately not counting shields, so
+## a Warden cannot hide behind one.
+@export var drain_percent: float = 0.025
+@export var drain_interval: float = 1.0
+
 @export_group("Mana aura")
 @export var mana_aura_radius: int = 1
 
@@ -165,9 +261,24 @@ func describe() -> String:
 		Kind.SHIELD:
 			return "Gains a shield worth %d%% of max health. It absorbs damage first and cannot be healed." % [
 				roundi(shield_percent * 100.0)]
+		Kind.FREEZE:
+			return "Freezes one enemy for %.1fs per tier. While it is frozen it cannot move, swing or cast, it takes %d%% more damage per tier from everything, and if it dies frozen nothing it would have done on death happens at all." % [
+				freeze_seconds_per_tier, roundi(freeze_amp_per_tier * 100.0)]
 		Kind.DOT:
-			return "Poisons one enemy for %d damage every %.1fs, %d times." % [
-				roundi(dot_damage), dot_interval, dot_ticks]
+			var line := ""
+			if dot_current_hp_percent > 0.0:
+				line = "Poisons one enemy. The first tick takes %.0f%% of the health it has left, and every %.1fs after that takes %.0f%% of what the last one did, %d ticks in all." % [
+					dot_current_hp_percent * 100.0, dot_interval,
+					dot_falloff * 100.0, dot_ticks]
+			else:
+				line = "Poisons one enemy for %d damage every %.1fs, %d times." % [
+					roundi(dot_damage), dot_interval, dot_ticks]
+			if dot_suppresses:
+				line += " While it lasts the target cannot be healed, cannot gain shields, and gains nothing from allies."
+			if dot_vulnerability_per_tier > 0.0:
+				line += " While poisoned it takes %d%% more damage per tier from everything." % [
+					roundi(dot_vulnerability_per_tier * 100.0)]
+			return line
 		Kind.FOCUS_BURST:
 			return "%d damage to the target, %d to everything within %d tiles of it." % [
 				roundi(burst_damage), roundi(splash_damage), splash_radius]
@@ -212,6 +323,19 @@ func describe() -> String:
 		Kind.RAISE:
 			return "Calls %d of your fallen back per tier, chosen at random, at %d%% health." % [
 				raise_per_tier, roundi(raise_hp_percent * 100.0)]
+		Kind.SHELL:
+			return "Lobs a shell worth %.0fx its own attack at the thickest cluster it can see. %.0f%% to the tile it lands on, %.0f%% to each arm of the cross, and the ground burns for %.0fs afterwards. It takes %.1fs to arrive." % [
+				shell_attack_multiple, shell_direct * 100.0, shell_splash * 100.0,
+				field_seconds, shell_flight]
+		Kind.DRAIN:
+			return "Attaches to the highest-health enemy anywhere on the board and takes %.1f%% of its maximum health every second until it dies. Shields do not count toward that maximum. Several of them stack." % [
+				drain_percent * 100.0]
+		Kind.SAP:
+			return "A charge worth %.0f of its own swings against %d breakable wall(s) within %d tile(s). Scales with tier, so the higher it merges the fewer blows a wall survives." % [
+				sap_burst_multiple, terrain_tiles, terrain_reach]
+		Kind.BUILD:
+			return "Raises %d wall(s) worth %d damage on empty ground within %d tile(s), for the rest of the round. It blocks both sides, and anything can chew through it eventually." % [
+				terrain_tiles, roundi(wall_hp), terrain_reach]
 		Kind.ASCEND:
 			return "The first full bar changes it: %.1fx health, %.0f%% faster swings, %.0f%% faster on its feet. Every bar after that arms the next swing to kill outright, whatever it hits." % [
 				ascend_hp_mult,

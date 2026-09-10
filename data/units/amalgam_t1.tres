@@ -1,10 +1,11 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Resource" path="res://data/units/amalgam_t2.tres" id="1_vmsyk"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_5tn56"]
+[ext_resource type="Resource" path="res://data/units/amalgam_t2.tres" id="1_5tn56"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_ltm43"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="3_jwrwv"]
 
 [resource]
-script = ExtResource("2_5tn56")
+script = ExtResource("2_ltm43")
 id = &"amalgam"
 display_name = "Amalgam"
 max_hp = 190.0
@@ -13,6 +14,7 @@ attack_speed = 0.8
 move_time = 0.5
 mana_per_attack = 0.0
 wild_merge = true
-next_tier = ExtResource("1_vmsyk")
+next_tier = ExtResource("1_5tn56")
 note = "Merges with anything you own, whatever it is. Thick, steady, and never quite the same twice."
+sprite = ExtResource("3_jwrwv")
 accent = Color(0.46, 0.52, 0.38, 1)

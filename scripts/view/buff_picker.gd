@@ -137,6 +137,7 @@ func _make_card(buff: BuffData, index: int, tint: Color) -> Control:
 	take.text = "Take"
 	take.custom_minimum_size = Vector2(64.0, 0.0)
 	take.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	take.pressed.connect(Audio.play_confirm)
 	take.pressed.connect(_on_take.bind(index))
 	row.add_child(take)
 

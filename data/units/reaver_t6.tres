@@ -1,10 +1,11 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Resource" path="res://data/abilities/execute.tres" id="1_s7jo2"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_eqvqa"]
+[ext_resource type="Resource" path="res://data/abilities/execute.tres" id="1_eqvqa"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_a6j3m"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="3_sorfe"]
 
 [resource]
-script = ExtResource("2_eqvqa")
+script = ExtResource("2_a6j3m")
 id = &"reaver"
 display_name = "Reaver VI"
 tier = 6
@@ -12,7 +13,8 @@ max_hp = 3040.0
 attack_damage = 1088.0
 attack_speed = 1.15
 move_time = 0.34
-ability = ExtResource("1_s7jo2")
+ability = ExtResource("1_eqvqa")
 mana_per_attack = 20.0
 note = "The hardest, fastest swing in the game, and the fastest legs, behind less health than a Lancer. Everything it does is on the front foot: it wins any exchange it starts and loses any exchange it is caught in."
+sprite = ExtResource("3_sorfe")
 accent = Color(0.74, 0.26, 0.3, 1)

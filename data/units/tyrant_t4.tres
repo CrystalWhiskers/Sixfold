@@ -1,10 +1,11 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Resource" path="res://data/units/tyrant_t5.tres" id="1_xi8eb"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_tax45"]
+[ext_resource type="Resource" path="res://data/units/tyrant_t5.tres" id="1_tax45"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_mprrc"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="3_klrx4"]
 
 [resource]
-script = ExtResource("2_tax45")
+script = ExtResource("2_mprrc")
 id = &"tyrant"
 display_name = "Tyrant IV"
 tier = 4
@@ -15,6 +16,7 @@ move_time = 0.55
 mana_per_attack = 0.0
 burden_radius = 2
 burden_percent = 0.3
-next_tier = ExtResource("1_xi8eb")
+next_tier = ExtResource("1_tax45")
 note = "Plainly stronger than anything else you can field, and every one of your own units standing within two tiles of it takes 30% more damage. It wants to be alone, which is also where a single strong unit is easiest to surround."
+sprite = ExtResource("3_klrx4")
 accent = Color(0.55, 0.16, 0.22, 1)

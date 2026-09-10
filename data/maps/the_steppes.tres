@@ -9,5 +9,5 @@ display_name = "The Steppes"
 rank = 8
 width = 11
 height = 13
-rows = PackedStringArray("^^^^^^^^^^^", "...........", "..^^^^^^^..", "...........", "....^^^....", "...........", "...........", "...........", "....^^^....", "...........", "..^^^^^^^..", "...........", "^^^^^^^^^^^")
+rows = PackedStringArray("^^^^^^^^^^^", "..//...//..", "..^^^^^^^..", "....//.....", "....^^^....", "....//.....", "...........", "....//.....", "....^^^....", "....//.....", "..^^^^^^^..", "..//...//..", "^^^^^^^^^^^")
 note = "Wide open ground in terraces. Every ridge is a range band for whoever gets to it, and the back rank of each side is the highest ground on the board."

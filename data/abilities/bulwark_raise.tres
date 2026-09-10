@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_0cjd6"]
+
+[resource]
+script = ExtResource("1_0cjd6")
+id = &"bulwark_raise"
+display_name = "Emplace"
+description = "Raises a wall on the tile it is standing on and steps off it, up at the opening bell and again on every full bar — so where you place the Mason is where the wall goes. It blocks movement and sight for both sides equally — including yours — so where it goes matters more than how often. It is stone like any other: a Sapper goes through it quickly, anything else slowly."
+kind = 16
+cast_time = 1.0
+terrain_at_caster = true

@@ -1,10 +1,11 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Resource" path="res://data/abilities/last_stand.tres" id="1_cxf5g"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_ns4p6"]
+[ext_resource type="Resource" path="res://data/abilities/last_stand.tres" id="1_ns4p6"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_nf3vc"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="3_47cxj"]
 
 [resource]
-script = ExtResource("2_ns4p6")
+script = ExtResource("2_nf3vc")
 id = &"paragon"
 display_name = "Paragon VI"
 tier = 6
@@ -12,7 +13,7 @@ max_hp = 4800.0
 attack_damage = 640.0
 attack_speed = 0.75
 move_time = 0.52
-ability = ExtResource("1_cxf5g")
+ability = ExtResource("1_ns4p6")
 mana_per_attack = 30.0
 solo_empower = true
 empower_hp_mult = 2.5
@@ -20,4 +21,5 @@ empower_damage_mult = 4.0
 empower_attack_speed_mult = 0.35
 empower_splash_radius = 1
 note = "Field exactly one and it arrives empowered — and empowered it stops being a soldier and becomes a siege engine. Two and a half times the health, four times the damage, and every swing lands on the whole square around what it hit, but it winds up for nearly four seconds between blows. Almost anything out-trades it over ten seconds; almost nothing survives being in the wrong square when it lands. Field two and you get two ordinary Paragons, swinging at ordinary speed. Nothing summoned or merged into one after the bell is ever empowered."
+sprite = ExtResource("3_47cxj")
 accent = Color(0.86, 0.74, 0.36, 1)

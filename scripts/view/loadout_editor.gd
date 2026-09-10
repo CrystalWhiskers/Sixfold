@@ -97,12 +97,14 @@ func _ready() -> void:
 	var reset := Button.new()
 	reset.text = "Reset both"
 	reset.custom_minimum_size = Vector2(150, 46)
+	reset.pressed.connect(Audio.play_confirm)
 	reset.pressed.connect(_on_reset)
 	buttons.add_child(reset)
 
 	var done := Button.new()
 	done.text = "Done"
 	done.custom_minimum_size = Vector2(150, 46)
+	done.pressed.connect(Audio.play_confirm)
 	done.pressed.connect(_on_done)
 	buttons.add_child(done)
 
@@ -151,6 +153,7 @@ func _build_map_block() -> Control:
 		var chip := MapChip.new()
 		chip.button_group = _map_group
 		chip.set_map(GameSetup.maps[i])
+		chip.pressed.connect(Audio.play_confirm)
 		chip.pressed.connect(_on_pick_map.bind(i))
 		_map_grid.add_child(chip)
 		_chips.append(chip)
@@ -250,6 +253,9 @@ func _build_team_block(team: int) -> Control:
 		var left := Button.new()
 		left.text = "<"
 		left.custom_minimum_size = Vector2(44.0, ROW_HEIGHT)
+		# The cycle arrows get the tap, not the confirm: they are how you browse
+		# the roster, and you click them a dozen times to cross it.
+		left.pressed.connect(Audio.play_select)
 		left.pressed.connect(_on_cycle.bind(team, i, -1))
 		row.add_child(left)
 
@@ -274,6 +280,7 @@ func _build_team_block(team: int) -> Control:
 		var right := Button.new()
 		right.text = ">"
 		right.custom_minimum_size = Vector2(44.0, ROW_HEIGHT)
+		right.pressed.connect(Audio.play_select)
 		right.pressed.connect(_on_cycle.bind(team, i, 1))
 		row.add_child(right)
 

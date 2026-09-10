@@ -1,10 +1,11 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Resource" path="res://data/abilities/war_horn.tres" id="1_vlsou"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_xh80g"]
+[ext_resource type="Resource" path="res://data/abilities/war_horn.tres" id="1_xh80g"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_scxve"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="3_ppl5g"]
 
 [resource]
-script = ExtResource("2_xh80g")
+script = ExtResource("2_scxve")
 id = &"herald"
 display_name = "Herald VI"
 tier = 6
@@ -13,8 +14,9 @@ attack_damage = 224.0
 attack_speed = 0.8
 move_time = 0.52
 attack_type = 1
-ability = ExtResource("1_vlsou")
+ability = ExtResource("1_xh80g")
 mana_per_attack = 30.0
 casts_at_battle_start = true
 note = "Weak alone. Its whole value is who you park it next to."
+sprite = ExtResource("3_ppl5g")
 accent = Color(0.85, 0.78, 0.42, 1)

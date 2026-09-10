@@ -6,7 +6,7 @@
 script = ExtResource("1_kd40p")
 id = &"the_gauntlet"
 display_name = "The Gauntlet"
-rank = 18
+rank = 19
 width = 7
 height = 13
 rows = PackedStringArray(".......", ".......", "#####..", ".......", "..#####", ".......", ".......", ".......", "..#####", ".......", "#####..", ".......", ".......")

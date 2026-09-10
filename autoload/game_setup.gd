@@ -15,6 +15,14 @@ var maps: Array[MapData] = []
 var debug_seed := 0
 var map_index := 0
 
+## Which battle tracks are in rotation, one bool per track, chosen in the menu.
+## Empty until the first read, because Audio has to have counted the files first.
+var battle_playlist: Array[bool] = []
+
+## Its own stream so which track you get is not decided by how many other random
+## numbers the match happened to draw.
+var _music_rng := RandomNumberGenerator.new()
+
 
 func _ready() -> void:
 	reload_catalogue()
@@ -42,6 +50,61 @@ func reload_maps() -> int:
 	map_index = clampi(map_index, 0, maxi(maps.size() - 1, 0))
 	apply_map()
 	return maps.size()
+
+
+func playlist() -> Array[bool]:
+	# Grown, never rebuilt: a track dropped into assets/music turns up switched on
+	# and the choices already made about the others are kept.
+	while battle_playlist.size() < Audio.battle_track_count:
+		battle_playlist.append(true)
+	return battle_playlist
+
+
+func toggle_track(index: int) -> void:
+	# One-based, matching the file names. The last track on cannot be switched
+	# off — silence is a setting, but it is not one you should be able to reach by
+	# clicking things off one at a time without noticing.
+	var list := playlist()
+	if index < 1 or index > list.size():
+		return
+	if list[index - 1] and tracks_on() <= 1:
+		return
+	list[index - 1] = not list[index - 1]
+
+
+func tracks_on() -> int:
+	var n := 0
+	for on in playlist():
+		if on:
+			n += 1
+	return n
+
+
+func roll_battle_track() -> String:
+	# Called at the top of every round, so a long match moves through the
+	# playlist instead of sitting on whatever it opened with. play_music() is a
+	# no-op when the roll lands on the track already playing, which is what keeps
+	# a one-track playlist from restarting every round.
+	var live: Array[int] = []
+	var list := playlist()
+	for i in list.size():
+		if list[i]:
+			live.append(i + 1)
+	if live.is_empty():
+		return Audio.battle_track(1)
+	return Audio.battle_track(live[_music_rng.randi_range(0, live.size() - 1)])
+
+
+func playlist_summary() -> String:
+	var on: Array[String] = []
+	for i in playlist().size():
+		if playlist()[i]:
+			on.append(Audio.battle_track_name(i + 1))
+	if on.is_empty():
+		return "none"
+	if on.size() == playlist().size():
+		return "all %d" % on.size()
+	return ", ".join(on)
 
 
 func current_map() -> MapData:

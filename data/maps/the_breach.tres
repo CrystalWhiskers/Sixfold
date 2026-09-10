@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="MapData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/map_data.gd" id="1_bhbwv"]
+
+[resource]
+script = ExtResource("1_bhbwv")
+id = &"the_breach"
+display_name = "The Breach"
+rank = 17
+width = 11
+height = 13
+rows = PackedStringArray("...........", "...........", "...........", ".%%%#%#%%%.", ".%%%%%%%%%.", ".%%%#%#%%%.", ".%%%%%%%%%.", ".%%%#%#%%%.", ".%%%%%%%%%.", ".%%%#%#%%%.", "...........", "...........", "...........")
+note = "A slab of breakable stone filling the whole middle of the board, with permanent pillars through it that nothing can shift. Without a Sapper there are two narrow lanes round the outside and a very long walk; with one you cut your own road through the middle and decide where the fight happens. The pillars mean the slab never fully disappears."

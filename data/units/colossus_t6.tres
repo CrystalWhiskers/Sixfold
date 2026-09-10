@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="1_t3iag"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="2_0ljdh"]
+
+[resource]
+script = ExtResource("1_t3iag")
+id = &"colossus"
+display_name = "Colossus VI"
+tier = 6
+max_hp = 8000.0
+attack_damage = 3040.0
+attack_speed = 0.25
+move_time = 0.9
+sight_range = 3
+mana_per_attack = 0.0
+shield_on_hit = 0.03
+note = "The slowest thing on the board in both senses — one swing every four seconds, and the longest stride of anyone — for the heaviest ordinary attack in the game. Every single hit it takes adds 3% of its maximum health to its shield, and that is per HIT rather than per point of damage, so a dozen small attacks arm it faster than one enormous one. Feed it a Vexer and it will stand there all day. Hit it once with a Culverin and the shield is gone."
+sprite = ExtResource("2_0ljdh")
+accent = Color(0.54, 0.56, 0.62, 1)

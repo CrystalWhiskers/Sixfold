@@ -1,9 +1,10 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="1_jxa4c"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="1_v7kj1"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="2_wobg8"]
 
 [resource]
-script = ExtResource("1_jxa4c")
+script = ExtResource("1_v7kj1")
 id = &"transcendence"
 display_name = "Transcendence VI"
 tier = 6
@@ -11,7 +12,7 @@ max_hp = 21120.0
 attack_damage = 2816.0
 attack_speed = 0.23
 move_time = 0.62
-attack_range = 5
+attack_range = 7
 attack_type = 1
 mana_per_attack = 0.0
 pierce_targets = 100
@@ -20,4 +21,5 @@ beam_attack = true
 beam_splash = 0.5
 beam_endless = true
 note = "No ability, no tricks, and slower to swing than anything else on the board. Every merge it touches comes out Transcendence, and at tier 6 it fires a beam across the whole board that takes the rank behind the target with it — once every four seconds, so what it is aimed at matters more than how often."
+sprite = ExtResource("2_wobg8")
 accent = Color(0.58, 0.56, 0.44, 1)

@@ -6,7 +6,7 @@
 script = ExtResource("1_xvk8o")
 id = &"the_keep"
 display_name = "The Keep"
-rank = 20
+rank = 21
 width = 9
-rows = PackedStringArray(".........", ".........", ".........", "..#####..", "..#^^^#..", "...^^^...", "..#^^^#..", "..#####..", ".........", ".........", ".........")
+rows = PackedStringArray(".........", ".........", ".........", "..#####..", "..#^^^#..", "../^^^/..", "..#^^^#..", "..#####..", ".........", ".........", ".........")
 note = "One fortress, dead centre, two doors on the neutral row, nine tiles of high ground inside and stone on every other side. Whoever gets in first owns the middle of the board."

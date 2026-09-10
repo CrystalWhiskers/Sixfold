@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/abilities/bombardment.tres" id="1_64xjo"]
+[ext_resource type="Resource" path="res://data/units/culverin_t6.tres" id="2_1p68r"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_dhnb0"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="4_du3bb"]
+
+[resource]
+script = ExtResource("3_dhnb0")
+id = &"culverin"
+display_name = "Culverin V"
+tier = 5
+max_hp = 1680.0
+attack_damage = 672.0
+attack_speed = 0.4
+move_time = 0.58
+attack_range = 4
+sight_range = 5
+attack_type = 1
+ability = ExtResource("1_64xjo")
+mana_per_attack = 30.0
+next_tier = ExtResource("2_1p68r")
+note = "The heaviest single shot on the board and the slowest hands holding it — four tiles of reach and one swing every two and a half seconds. Its shell is aimed at whichever enemy has the most company, lands a second and a half later on the tile rather than the unit, and leaves the ground burning behind it. It wants a target that cannot afford to move and hates one that can."
+sprite = ExtResource("4_du3bb")
+accent = Color(0.7, 0.58, 0.36, 1)

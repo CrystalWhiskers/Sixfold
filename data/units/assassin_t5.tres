@@ -1,11 +1,12 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Resource" path="res://data/abilities/shadowstep.tres" id="1_1mgi0"]
-[ext_resource type="Resource" path="res://data/units/assassin_t6.tres" id="2_bmm18"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_r58xh"]
+[ext_resource type="Resource" path="res://data/abilities/shadowstep.tres" id="1_bmm18"]
+[ext_resource type="Resource" path="res://data/units/assassin_t6.tres" id="2_r58xh"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_0p76s"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="4_xojnp"]
 
 [resource]
-script = ExtResource("3_r58xh")
+script = ExtResource("3_0p76s")
 id = &"assassin"
 display_name = "Assassin V"
 tier = 5
@@ -14,8 +15,9 @@ attack_damage = 192.0
 attack_speed = 1.2
 move_time = 0.34
 sight_range = 6
-ability = ExtResource("1_1mgi0")
+ability = ExtResource("1_bmm18")
 casts_at_battle_start = true
-next_tier = ExtResource("2_bmm18")
+next_tier = ExtResource("2_r58xh")
 note = "Opens behind someone, hits once for a fortune, then nobody can find it."
+sprite = ExtResource("4_xojnp")
 accent = Color(0.42, 0.3, 0.48, 1)

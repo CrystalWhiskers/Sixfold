@@ -6,7 +6,7 @@
 script = ExtResource("1_0pgv8")
 id = &"the_hourglass"
 display_name = "The Hourglass"
-rank = 26
+rank = 27
 width = 9
-rows = PackedStringArray(".........", ".........", "X.......X", "XX..^..XX", "XXX...XXX", "XXX...XXX", "XXX...XXX", "XX..^..XX", "X.......X", ".........", ".........")
+rows = PackedStringArray(".........", ".........", "X.......X", "XX./^..XX", "XXX...XXX", "XXX...XXX", "XXX...XXX", "XX./^..XX", "X.......X", ".........", ".........")
 note = "Wide at both ends and three tiles across in the middle, with the pinch overlooked from either side."

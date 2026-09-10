@@ -60,6 +60,13 @@ func round_seed(salt: int = 0) -> int:
 func record_round(winner: int) -> void:
 	if winner >= 0:
 		wins[winner] += 1
+	else:
+		# A drawn round costs BOTH sides a life. A life is spent by giving the
+		# other player a win, so a draw gives one to each — which keeps the
+		# scoreline honest and means a timeout neither side won is never a free
+		# round for the player who was losing on the board.
+		wins[0] += 1
+		wins[1] += 1
 	EventBus.round_ended.emit(winner, wins)
 	if is_match_over():
 		set_phase(Phase.MATCH_END)
@@ -81,9 +88,16 @@ func is_match_over() -> bool:
 
 
 func match_winner() -> int:
-	if wins[0] >= WINS_NEEDED:
+	# Both can cross the line at once now, because a drawn round advances both
+	# scores. Whoever is ahead takes it; dead level is a drawn match, and -1 is
+	# what the rest of the game already reads as "nobody".
+	var over_a := wins[0] >= WINS_NEEDED
+	var over_b := wins[1] >= WINS_NEEDED
+	if over_a and over_b:
+		return -1 if wins[0] == wins[1] else (0 if wins[0] > wins[1] else 1)
+	if over_a:
 		return 0
-	if wins[1] >= WINS_NEEDED:
+	if over_b:
 		return 1
 	return -1
 

@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_wdp2j"]
+
+[resource]
+script = ExtResource("1_wdp2j")
+id = &"permafrost"
+display_name = "Permafrost"
+unit_id = &"stasis"
+bronze = Vector2(0.5, 0.25)
+silver = Vector2(0.75, 0.5)
+gold = Vector2(1, 1)
+stat_a = 12
+stat_b = 13
+uses_second_stat = true

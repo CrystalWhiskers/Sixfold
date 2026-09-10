@@ -48,8 +48,29 @@ var summoned_by: int = -1
 # wiped by reset_for_battle(), so empowerment is re-decided from scratch every
 # round against whatever the board looks like then.
 var empowered: bool = false
+
+# The Pariah's condition, and like empowerment it is answered once at the bell
+# and then left alone. It has to be: the unit is melee, so a live check would
+# switch it off the instant it walked up to something, and it is meant to be a
+# reward for where you PUT it during prep, not for where the fight drifts.
+var isolated: bool = false
+
+## Seconds since this unit last swung at anything. Grows while it walks, resets
+## the moment it attacks. Only one thing reads it — see IMPATIENT_AFTER in
+## CombatSim — but it is real state about the unit, so it lives on the unit.
+var dry_spell: float = 0.0
+
 var taunt_left: float = 0.0
 var reflect_left: float = 0.0
+
+# Frozen solid: cannot move, cannot swing, cannot cast, and takes `frozen_amp`
+# times the damage while it lasts. The multiplier is baked in when the freeze
+# lands rather than read live, for the same reason the Vexer's vulnerability is:
+# it is the number the caster had at the moment it cast, so killing the caster
+# afterwards does not thaw anything and buffing it does not deepen a freeze that
+# is already running.
+var frozen_left: float = 0.0
+var frozen_amp: float = 1.0
 
 # The Devourer's two states. `ascended` is the transformation, which is one-way
 # and lasts the round; `executes_next` is the armed swing, which is spent the
@@ -100,10 +121,16 @@ func _base(s: StatModifier.Stat) -> float:
 			return 1.0
 		StatModifier.Stat.AURA_POWER:
 			return 1.0
+		StatModifier.Stat.FREEZE_POWER:
+			return 1.0
+		StatModifier.Stat.FREEZE_AMP:
+			return 1.0
 		StatModifier.Stat.DAMAGE_TAKEN:
 			return 1.0
 		StatModifier.Stat.RESIST:
 			return data.damage_resist
+		StatModifier.Stat.LIFESTEAL:
+			return data.lifesteal
 		StatModifier.Stat.MANA_REGEN:
 			return data.mana_per_charge
 	return 0.0
@@ -178,14 +205,23 @@ func is_reflecting() -> bool:
 	return reflect_left > 0.0
 
 
+func is_frozen() -> bool:
+	return frozen_left > 0.0
+
+
+func frozen_damage_taken() -> float:
+	return maxf(frozen_amp, 1.0) if is_frozen() else 1.0
+
+
 func can_move_now() -> bool:
 	# Holding still is the price of the taunt: it plants itself, and it cannot
-	# swing while it is doing it either.
-	return data.can_move and not is_taunting()
+	# swing while it is doing it either. Being frozen is the same shape and none
+	# of the payoff.
+	return data.can_move and not is_taunting() and not is_frozen()
 
 
 func can_attack_now() -> bool:
-	return data.can_attack and not is_taunting()
+	return data.can_attack and not is_taunting() and not is_frozen()
 
 
 func taunt_damage_taken() -> float:
@@ -290,6 +326,11 @@ func spend_mana() -> void:
 
 
 func add_shield(amount: float, cap: float) -> void:
+	# Same reasoning as heal(). Note this stops shields being GAINED and does not
+	# strip the ones already there: a Warden that opened with its bulwark keeps it
+	# and simply cannot top it up.
+	if is_suppressed():
+		return
 	shield = minf(maxf(shield, 0.0) + amount, cap)
 
 
@@ -297,15 +338,47 @@ func add_battle_modifier(m: StatModifier) -> void:
 	battle_modifiers.append(m)
 
 
-func apply_dot(dmg: float, ticks: int, interval: float, source_uid: int) -> void:
+func apply_dot(dmg: float, ticks: int, interval: float, source_uid: int,
+		vuln := 0.0, hp_share := 0.0, falloff := 1.0, suppress := false) -> void:
+	# The vulnerability rides on the dot entry rather than being a separate timed
+	# effect, so its lifetime IS the poison's lifetime with nothing to expire, no
+	# cleanup at the round boundary, and correct stacking for free when two
+	# Vexers poison the same target.
 	dots.append({
 		dmg = dmg, ticks_left = ticks, interval = interval,
-		timer = interval, source_uid = source_uid,
+		timer = interval, source_uid = source_uid, vuln = maxf(vuln, 0.0),
+		hp_share = maxf(hp_share, 0.0), falloff = clampf(falloff, 0.0, 1.0),
+		suppress = suppress,
 	})
 
 
+func vulnerability() -> float:
+	# Additive across poisons, applied as one multiplier. Two tier 3 Vexers at
+	# 5%/tier make you take 30% more, not 32.25% more — additive keeps a second
+	# Vexer worth exactly as much as the first, which is what "stacks" should
+	# mean for a number a player is asked to reason about.
+	var total := 0.0
+	for d in dots:
+		total += float(d.get("vuln", 0.0))
+	return 1.0 + total
+
+
+func is_suppressed() -> bool:
+	# Any poison that suppresses is enough; they do not need to agree. Like the
+	# vulnerability, this rides on the dot entries, so it ends exactly when the
+	# last suppressing poison does and there is nothing to expire or clean up.
+	for d in dots:
+		if bool(d.get("suppress", false)):
+			return true
+	return false
+
+
 func heal(amount: float) -> void:
-	if amount <= 0.0 or not is_alive():
+	# The gate lives HERE rather than at each of the six call sites — regen, the
+	# Seraph, the Engineer's repair, lifesteal — because "cannot be healed" has to
+	# mean all of them, and a rule enforced in six places is a rule with five
+	# chances to be forgotten when a seventh healer is written.
+	if amount <= 0.0 or not is_alive() or is_suppressed():
 		return
 	current_hp = minf(current_hp + amount, stat(StatModifier.Stat.MAX_HP))
 
@@ -326,6 +399,10 @@ func reset_for_battle() -> void:
 	has_opened = false
 	pending_target_uid = -1
 	empowered = false
+	isolated = false
+	dry_spell = 0.0
+	frozen_left = 0.0
+	frozen_amp = 1.0
 	taunt_left = 0.0
 	reflect_left = 0.0
 	ascended = false

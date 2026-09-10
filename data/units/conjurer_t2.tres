@@ -1,22 +1,25 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Resource" path="res://data/abilities/call_wisp.tres" id="1_ekvjf"]
-[ext_resource type="Resource" path="res://data/units/conjurer_t3.tres" id="2_g1r4i"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_xpe3e"]
+[ext_resource type="Resource" path="res://data/abilities/call_wisp.tres" id="1_g1r4i"]
+[ext_resource type="Resource" path="res://data/units/conjurer_t3.tres" id="2_xpe3e"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_cvndc"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="4_df848"]
 
 [resource]
-script = ExtResource("3_xpe3e")
+script = ExtResource("3_cvndc")
 id = &"conjurer"
 display_name = "Conjurer II"
 tier = 2
-max_hp = 300.0
+max_hp = 380.0
+attack_damage = 14.0
 attack_speed = 0.6
 move_time = 0.5
 attack_range = 2
 attack_type = 2
-ability = ExtResource("1_ekvjf")
+ability = ExtResource("1_g1r4i")
 mana_per_attack = 26.0
 casts_at_battle_start = true
-next_tier = ExtResource("2_g1r4i")
+next_tier = ExtResource("2_xpe3e")
 note = "Tanky and feeble on its own. Its wisps match its tier and do the work."
+sprite = ExtResource("4_df848")
 accent = Color(0.62, 0.48, 0.78, 1)

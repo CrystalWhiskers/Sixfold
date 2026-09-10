@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_j7tmr"]
+
+[resource]
+script = ExtResource("1_j7tmr")
+id = &"arrest"
+display_name = "Arrest"
+description = "Stops one enemy dead. It cannot move, swing or cast for 0.9s per tier, it takes 15% more damage per tier from absolutely everything while it stands there, and if it dies frozen then nothing it would have done on death happens at all — no revival, no body to raise, no mana for whatever was waiting to feed on it. Whatever it was in the middle of is dropped, including a cast it had already paid for."
+kind = 19
+freeze_seconds_per_tier = 0.9
+freeze_amp_per_tier = 0.15

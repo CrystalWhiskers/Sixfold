@@ -1,11 +1,12 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Resource" path="res://data/abilities/second_wind.tres" id="1_4xewq"]
-[ext_resource type="Resource" path="res://data/units/revenant_t6.tres" id="2_5ws8k"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_rnff4"]
+[ext_resource type="Resource" path="res://data/abilities/second_wind.tres" id="1_5ws8k"]
+[ext_resource type="Resource" path="res://data/units/revenant_t6.tres" id="2_rnff4"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_o50df"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="4_b1jej"]
 
 [resource]
-script = ExtResource("3_rnff4")
+script = ExtResource("3_o50df")
 id = &"revenant"
 display_name = "Revenant V"
 tier = 5
@@ -13,7 +14,8 @@ max_hp = 1680.0
 attack_damage = 208.0
 attack_speed = 0.85
 move_time = 0.46
-ability = ExtResource("1_4xewq")
-next_tier = ExtResource("2_5ws8k")
+ability = ExtResource("1_5ws8k")
+next_tier = ExtResource("2_rnff4")
 note = "A coin flip on every death, and it comes back whole. Kill it twice, or thrice."
+sprite = ExtResource("4_b1jej")
 accent = Color(0.5, 0.55, 0.5, 1)

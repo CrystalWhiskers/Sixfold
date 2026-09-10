@@ -59,6 +59,106 @@ func _ready() -> void:
 	call_deferred("_run")
 
 
+func _check_playlist(_buttons_unused: Array) -> void:
+	# Read the toggles off the menu rather than sniffing button text: the labels
+	# are bare numbers now, and matching "ends with 1" against every Button on the
+	# screen finds things that are not tracks.
+	var toggles: Array[Button] = _menu._track_buttons
+	var count: int = Audio.battle_track_count
+	_check("there is a toggle for every battle track",
+		toggles.size() == count and count >= 2,
+		"%d buttons for %d tracks" % [toggles.size(), count])
+	if toggles.size() < 2:
+		return
+	var numbered := true
+	for i in toggles.size():
+		if String(toggles[i].text) != str(i + 1):
+			numbered = false
+	_check("and each one is labelled with its number and nothing else", numbered,
+		"first three read %s, %s, %s" % [
+			toggles[0].text, toggles[1].text, toggles[2].text])
+
+	var screen := Rect2(Vector2.ZERO, _menu.get_viewport_rect().size)
+	var spilled := 0
+	for b in toggles:
+		if not screen.encloses(Rect2(b.global_position, b.size)):
+			spilled += 1
+	# Ten in a single row would be 1500 pixels wide. The grid is what keeps them
+	# on the screen, and this is the check that says so.
+	_check("every track toggle fits on the screen", spilled == 0,
+		"%d of %d are off the edge" % [spilled, toggles.size()])
+
+	_check("every track starts in the rotation", GameSetup.tracks_on() == count,
+		"%d of %d" % [GameSetup.tracks_on(), count])
+	var rolled := {}
+	for i in count * 40:
+		rolled[GameSetup.roll_battle_track()] = true
+	_check("and a round can roll any of them", rolled.size() == count,
+		"only ever rolled %d of %d" % [rolled.size(), count])
+
+	toggles[0].pressed.emit()
+	_check("switching one off takes it out of the rotation",
+		GameSetup.tracks_on() == count - 1, "%d still on" % GameSetup.tracks_on())
+	var gone := Audio.battle_track(1)
+	var after := {}
+	for i in count * 40:
+		after[GameSetup.roll_battle_track()] = true
+	_check("and it is never rolled again", not after.has(gone),
+		"%s came up anyway" % gone)
+
+	# Switch off everything except the last one, then try that one too.
+	for i in range(1, toggles.size() - 1):
+		toggles[i].pressed.emit()
+	_check("they can all be switched off but one", GameSetup.tracks_on() == 1,
+		"%d on" % GameSetup.tracks_on())
+	var last := toggles[toggles.size() - 1]
+	last.pressed.emit()
+	_check("and the last one standing cannot be switched off",
+		GameSetup.tracks_on() == 1, "%d on" % GameSetup.tracks_on())
+	_check("it is greyed out so the refusal is visible rather than mysterious",
+		last.disabled)
+
+	for i in toggles.size() - 1:
+		toggles[i].pressed.emit()
+	_check("switching them back on restores the whole rotation",
+		GameSetup.tracks_on() == count, "%d on" % GameSetup.tracks_on())
+
+
+func _check_drawn_rounds() -> void:
+	# MatchState is an autoload, so this cannot live in the headless suite.
+	var before_a := MatchState.wins[0]
+	var before_b := MatchState.wins[1]
+	var lives_a := MatchState.lives_left(0)
+	var lives_b := MatchState.lives_left(1)
+	MatchState.record_round(CombatSim.RESULT_DRAW)
+	_check("both scores move", MatchState.wins[0] == before_a + 1
+		and MatchState.wins[1] == before_b + 1,
+		"%d/%d became %d/%d" % [before_a, before_b,
+			MatchState.wins[0], MatchState.wins[1]])
+	_check("which is a life off each of them",
+		MatchState.lives_left(0) == lives_a - 1
+		and MatchState.lives_left(1) == lives_b - 1,
+		"%d and %d left" % [MatchState.lives_left(0), MatchState.lives_left(1)])
+
+	# A real win still only costs the loser.
+	var was := MatchState.wins[1]
+	MatchState.record_round(0)
+	_check("a won round still only takes from the loser",
+		MatchState.wins[0] == before_a + 2 and MatchState.wins[1] == was)
+
+	# Both sides can now cross the line together, so match_winner has to have an
+	# answer for it rather than picking whoever is checked first.
+	MatchState.wins[0] = MatchState.WINS_NEEDED
+	MatchState.wins[1] = MatchState.WINS_NEEDED
+	_check("a match that ends dead level has no winner",
+		MatchState.is_match_over() and MatchState.match_winner() < 0,
+		"winner %d" % MatchState.match_winner())
+	MatchState.wins[0] = MatchState.WINS_NEEDED + 1
+	_check("but ahead on the line still wins it",
+		MatchState.match_winner() == 0, "winner %d" % MatchState.match_winner())
+	MatchState.wins = [0, 0]
+
+
 func _run() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -78,6 +178,8 @@ func _run() -> void:
 		if not screen.encloses(Rect2(b.global_position, b.size)):
 			spilled.append(b.text)
 	_check("every menu button is on screen", spilled.is_empty(), "; ".join(spilled))
+	_check_playlist(buttons)
+	_check_drawn_rounds()
 
 	GameSetup.mode = GameSetup.Mode.VS_COMPUTER
 	_check("vs computer means only you are human",

@@ -1,11 +1,12 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Resource" path="res://data/abilities/overflow.tres" id="1_u3ote"]
-[ext_resource type="Resource" path="res://data/units/wellspring_t5.tres" id="2_nrn2n"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_av2nh"]
+[ext_resource type="Resource" path="res://data/abilities/overflow.tres" id="1_nrn2n"]
+[ext_resource type="Resource" path="res://data/units/wellspring_t5.tres" id="2_av2nh"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_p5q5i"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="4_y2fgs"]
 
 [resource]
-script = ExtResource("3_av2nh")
+script = ExtResource("3_p5q5i")
 id = &"wellspring"
 display_name = "Wellspring IV"
 tier = 4
@@ -15,10 +16,11 @@ attack_speed = 0.75
 move_time = 0.52
 attack_range = 2
 attack_type = 2
-ability = ExtResource("1_u3ote")
+ability = ExtResource("1_nrn2n")
 mana_per_attack = 0.0
 mana_per_charge = 6.0
 casts_at_battle_start = true
-next_tier = ExtResource("2_nrn2n")
+next_tier = ExtResource("2_av2nh")
 note = "Opens a pool of mana around itself on the first beat. Everyone standing in it casts sooner."
+sprite = ExtResource("4_y2fgs")
 accent = Color(0.4, 0.68, 0.72, 1)

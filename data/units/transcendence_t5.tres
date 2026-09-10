@@ -1,10 +1,11 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Resource" path="res://data/units/transcendence_t6.tres" id="1_5r36m"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_cpda1"]
+[ext_resource type="Resource" path="res://data/units/transcendence_t6.tres" id="1_cpda1"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_7etak"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="3_khrpy"]
 
 [resource]
-script = ExtResource("2_cpda1")
+script = ExtResource("2_7etak")
 id = &"transcendence"
 display_name = "Transcendence V"
 tier = 5
@@ -17,6 +18,7 @@ attack_type = 1
 mana_per_attack = 0.0
 merge_magnet = true
 beam_attack = true
-next_tier = ExtResource("1_5r36m")
+next_tier = ExtResource("1_cpda1")
 note = "No ability, no tricks, and slower to swing than anything else on the board. Every merge it touches comes out Transcendence, and at tier 6 it fires a beam across the whole board that takes the rank behind the target with it — once every four seconds, so what it is aimed at matters more than how often."
+sprite = ExtResource("3_khrpy")
 accent = Color(0.58, 0.56, 0.44, 1)

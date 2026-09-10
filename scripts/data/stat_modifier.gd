@@ -17,6 +17,13 @@ enum Stat {
 	## DAMAGE_TAKEN, which is a multiplier — a buff that reads "+15% resist"
 	## should not have to be written as a negative number to work.
 	RESIST,
+	## How long a freeze this unit lands, and how much extra the frozen thing
+	## takes. Both are multipliers with a base of 1.0, exactly like HEAL_POWER and
+	## AURA_POWER: the ability owns the real number and these scale it, so a buff
+	## that wants "+50% freeze time" is an ordinary PERCENT modifier and needs no
+	## machinery of its own.
+	FREEZE_POWER,
+	FREEZE_AMP,
 }
 
 enum Mode {

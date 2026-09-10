@@ -1,11 +1,12 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Resource" path="res://data/abilities/gorge.tres" id="1_y78rn"]
-[ext_resource type="Resource" path="res://data/units/devourer_t5.tres" id="2_3wvvk"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_7rroo"]
+[ext_resource type="Resource" path="res://data/abilities/gorge.tres" id="1_3wvvk"]
+[ext_resource type="Resource" path="res://data/units/devourer_t5.tres" id="2_7rroo"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_nd0dr"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="4_mcltx"]
 
 [resource]
-script = ExtResource("3_7rroo")
+script = ExtResource("3_nd0dr")
 id = &"devourer"
 display_name = "Devourer IV"
 tier = 4
@@ -13,9 +14,10 @@ max_hp = 960.0
 attack_damage = 160.0
 attack_speed = 0.9
 move_time = 0.44
-ability = ExtResource("1_y78rn")
+ability = ExtResource("1_3wvvk")
 mana_per_attack = 0.0
 mana_per_ally_death = 25.0
-next_tier = ExtResource("2_3wvvk")
+next_tier = ExtResource("2_7rroo")
 note = "Ordinary until your side starts dying. Five of your own buys the change, and after that it is a different unit: far more health, faster hands, faster legs, and every bar it fills from then on arms a swing that deletes whatever it touches, however much health that thing has. It cannot start this itself — something of yours has to fall first."
+sprite = ExtResource("4_mcltx")
 accent = Color(0.52, 0.24, 0.34, 1)

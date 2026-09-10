@@ -65,24 +65,88 @@ because the Warden rework pushed a full 7v7 past the old 45s cap).
 
 ### Sound
 
-Nothing is wired yet — deliberately, so you can put it where you want it.
-The natural hook is `autoload/event_bus.gd`, which already emits everything
-worth hearing (`unit_placed`, `unit_merged`, `battle_started`, `battle_finished`,
-`round_ended`, `match_ended`).
+Everything that makes a noise lives in `autoload/audio.gd`, and every file it wants
+is a fixed name in `assets/`. **Replacing a sound is replacing a file** — no code
+change, no table edit:
 
-For combat sounds, `scripts/view/battle_player.gd::_apply()` is the one place
-where every `attack`, `damage`, `cast_resolve` and `death` event passes through
-during playback. Add an `AudioStreamPlayer` there and switch on `e.kind`.
+| file | plays when |
+|---|---|
+| `music/battle_1.ogg` … `battle_10.ogg` | the battle playlist — one is rolled at the top of every round from whatever is switched on in the menu |
+| `music/menu_theme.ogg` | the menus |
+| `sfx/melee_1.wav` … `melee_6.wav` | a melee unit swings (one picked at random) |
+| `sfx/ranged_1.wav`, `ranged_2.wav` | anything that is not a melee swing or a beam — shots and spells |
+| `sfx/laser.wav` | Transcendence, and nothing else |
+| `sfx/critical.wav` | the 5% doubling lands |
+| `sfx/death.wav` | a body drops, either team |
+| `sfx/round_start.wav` | the Fight button — the press itself, not the bell after the hold |
+| `sfx/select.wav` | cycling a slot in the loadout editor |
+| `sfx/pickup.wav` | lifting a unit off the board to move or merge it |
+| `sfx/confirm.wav` | a button that commits to something |
+| `sfx/merge.wav` | you merge two units |
+| `sfx/promotion.wav` | that merge came out a tier higher |
+| `sfx/windfall.wav` | that merge threw off a free extra unit |
+
+Volumes are the `*_DB` constants at the top of the same file, and the mix is
+explained under [Sound, portraits and criticals](#sound-portraits-and-criticals).
+Music must be **Ogg Vorbis with `loop=true` in its `.import`** — Godot's importer
+defaults to `false`, so a track that has not been told to loop simply stops. There
+is a test asserting every battle track loops, because that failure is silent.
+
+**Tracks are numbered, never named.** `battle_track_name()` returns the index and
+the menu shows "1", "2", "3". A name in code has to be kept in step with a file on
+disk by hand and drifts the first time a placeholder is swapped; `battle_7.ogg is
+track 7` needs no upkeep. Adding an eleventh track is dropping `battle_11.ogg`
+into `assets/music` — `Audio` counts upward from `battle_1` until a file is
+missing, and the menu builds one toggle per track it finds, so no code changes at
+all. The toggles are a wrapping grid rather than a row for the same reason: ten
+of them in a line would be wider than the window, and there is a menu-suite check
+that none of them ends up off the screen.
 
 Do **not** put audio in `scripts/combat/` — that layer runs thousands of times a
-second during headless balance runs.
+second during headless balance runs. The view layer is where sound belongs, and
+`scripts/view/battle_player.gd::_apply()` is the one place every `attack`,
+`damage`, `cast_resolve` and `death` event passes through during playback.
+
+---
+
+## Placeholder assets, and how to pull them out
+
+Two things in this project are borrowed material standing in until your own art
+and audio arrive. Neither is safe to hand in as part of a graded project, and
+both are deliberately isolated so removing them is deleting files:
+
+| What | Where | What breaks when it's gone |
+|---|---|---|
+| The Warden portrait | `assets/portraits/warden.png` | The unit falls back to a coloured block, like the other twenty-nine. |
+| The Warden's death lines | `assets/voice/warden_*.wav` | Wardens die to the ordinary death thump, like the other twenty-nine. |
+
+Delete the files (and their `.import` siblings) and nothing else needs editing.
+`Audio` looks its voice pools up by counting files on disk, so a unit with none
+is simply a unit that doesn't speak — there is no list of unit ids anywhere in
+the code to keep in step. The one thing that *will* notice is the smoke test,
+which asserts the Warden currently has six death lines and three overkill lines;
+those two checks in `tools/smoke_test.gd::_check_voice_lines()` go with the files.
+
+### How the voice system works
+
+Files are named `<unit_id>_<kind>_<n>.wav` in `assets/voice/`, numbered from 1.
+`kind` is either `death` or `overkill`. Giving the Reaver a voice is dropping
+`reaver_death_1.wav` in that folder — no code change.
+
+**Overkill** means the killing blow was larger than the victim's *entire* health
+bar, not larger than whatever was left of it. `CombatSim.is_overkill()` decides
+it at the moment damage lands, because that is the only place the number exists,
+and stamps the answer onto the `death` event. Chipping a unit down and finishing
+it with a tap is not an overkill — that is the most common death in the game and
+it must not be the loudest. The two pools are exclusive: an overkill plays an
+overkill line *instead of* a death line, never both.
 
 ---
 
 ## Running things
 
 ```
-godot --headless --script res://tools/run_tests.gd      # 1220 model + sim tests
+godot --headless --script res://tools/run_tests.gd      # 1569 model + sim tests
 godot --headless res://tools/smoke_test.tscn            # vs-computer match, start to finish
 godot --headless res://tools/pvp_smoke_test.tscn        # local PvP: turn taking and the blind
 godot --headless res://tools/menu_smoke_test.tscn       # menu, loadout editor, map grid
@@ -204,13 +268,13 @@ doubles from bronze to silver and doubles again to gold.
 
 | Buff | Who | Effect |
 |---|---|---|
-| Mending Wind | Heal 1 / 2 / 3% of max health every second |
+| Mending Wind | Heal 5 / 7 / 10% of max health every second |
 | Rupture | Attacks deal an extra 1 / 2 / 3% of the target's max health |
 | Windfall | 10 / 20 / 30% chance on merge to summon one extra random unit |
 | Promotion | 4 / 8 / 12% chance on merge for the result to gain a tier |
 | Full Muster | While all five types are on the board: +30 / 60 / 90% health **and** attack |
-| War Drums | +15 / 30 / 45% attack speed |
-| Ironwall | Warden | +50 / 100 / 150% max health — the shield scales off max health |
+| War Drums | +20 / 40 / 60% attack speed |
+| Ironwall | Warden | +100 / 150 / 200% max health — the shield scales off max health |
 | Marksmanship | Archer | +25 / 50 / 75% attack, +15 / 30 / 45% attack speed |
 | Vigor | Lancer | +30 / 60 / 90% health, +20 / 40 / 60% attack |
 | Conflagration | Pyre | +40 / 80 / 120% attack, +10 / 20 / 30% attack speed |
@@ -301,10 +365,16 @@ with an ellipsis only once the row genuinely runs out of room. `BAR_HEIGHT` and
 
 ### Gold is three times bronze, not four
 
+**Two deliberate exceptions, added later.** War Drums now runs **20/40/60%** and
+Ironwall **100/150/200%** — Ironwall on a flat +50 step rather than a multiple of
+bronze, because a Warden's shield is a share of its max health and the doubling
+version made the bronze pick feel like nothing next to the gold one. Everything
+else still follows the rule below.
+
 Every buff that scaled used to run **1x / 2x / 4x** across bronze, silver and
 gold. That makes the last pick of a match worth more than the three before it put
-together, and a gold Ironwall at +200% health or a gold Swarm at +200% attack
-speed was less a buff than a different game.
+together, and a gold Swarm at +200% attack speed was less a buff than a different
+game.
 
 They now run **1x / 2x / 3x**. Twenty buffs changed. The ones already linear —
 Cohesion, Conscription, Bloodletting, Confluence, Solitude, Ascension — were left
@@ -1297,7 +1367,8 @@ undercut the positioning game the whole design rests on.
 | Warden | Bulwark | Shield worth **125% of max health**, absorbed before health, **never healed**. Up before the first tick. | 20 |
 | Lancer | Impale | Strike through 3 enemies at 210% damage. **Passive: ordinary swings already hit 2.** | 25 |
 | Archer | Quickdraw | +16% attack speed, permanent, stacking to 6. | 25 |
-| Vexer | Blight | 11 damage every 0.5s, 6 times, on one enemy. Keeps ticking while the Vexer shoots elsewhere. | 12 |
+| Stasis | Arrest | Freezes one enemy for 0.9s per tier — it cannot move, swing or cast — while it takes +15% damage per tier from everything, and dies leaving nothing behind. | 14 |
+| Vexer | Blight | 11 damage every 0.5s, 6 times, on one enemy, **and +5% damage taken from every source per tier of the Vexer while it lasts**. Keeps ticking while the Vexer shoots elsewhere. | 12 |
 | Pyre | Cinder Lance | 78 to the main target, 16 to everything within 1 tile of it. | 34 |
 | Assassin | Shadowstep | Blinks behind the **deepest enemy on the board** for 46 damage, doubling every tier (1472 at tier 6), then cannot be targeted for 3.5s. | 25 |
 | Herald | War Horn | The **four orthogonally adjacent** allies at the opening bell gain 12% attack speed per tier, all battle. | 30 |
@@ -1442,6 +1513,9 @@ boards cut up by holes, then the three awkward ones at the end.
 | The Bridge | 7 x 11 | yes | holes, high ground | Two shores and a three-wide crossing, overlooked from both banks. |
 | The Hourglass | 9 x 11 | yes | holes, high ground | Wide at the ends, three tiles across in the middle. |
 | The Chasm | 9 x 11 | yes | holes, high ground | A trench end to end, crossable only at the two flanks. |
+| The Terrace | 9 x 15 | yes | **second layer** | A plateau each side with four staircases in front of it. Melee cannot touch the top from the ground. |
+| The Crown | 9 x 13 | yes | **second layer** | One hill in the middle. You get a row of it, they get a row, and the crown belongs to nobody. |
+| The Defile | 9 x 13 | yes | **second layer** | A one-tile gap in the middle and two raised roads beside it. There is no third option. |
 | The Shoals | 11 x 11 | yes | holes | Islands joined by one-tile necks, every one of them in plain sight. |
 | The Causeway | 7 x 15 | yes | holes | Single file for eight rows, in full view of both shores. |
 | The Cage | 7 x 11 | yes | barriers | Every barrier waist-high: shoot the whole board, walk almost nowhere. |
@@ -2062,6 +2136,1046 @@ fails if the multiplier is applied unconditionally.
 Unchanged, in other words — the same unit strength arriving in a completely
 different rhythm, which was the whole point. Across tiers, one empowered Paragon
 reads 70% at tier 1, 63% at tier 3, 55% at tier 6.
+
+## Two fixes that made everything fight more
+
+### A unit that could not walk did nothing at all
+
+`_begin_move()` returned silently on every one of its four failure paths —
+nowhere to step, a friend in the way, a failed shove — and `_decide()` returned
+straight after calling it. So a unit whose chosen target was unreachable spent the
+tick standing still, even with an enemy at its elbow. That is the "sometimes they
+just don't attack" you were seeing.
+
+`_begin_move()` now returns whether it actually moved, and a `false` falls through
+to `_swing_at_hand()`, which re-picks a target from whatever is genuinely in reach
+and swings at that. It deliberately does **not** use `u.target` — the whole point
+is that the unit it wanted is unreachable and something else is not.
+
+Writing a test for this took three attempts, and the first two passed for the
+wrong reason:
+
+1. **Boxing it in with Spires does not box it in.** `_begin_move()` trades places
+   with a rooted neighbour on purpose, so a wall of Spires is a wall you walk
+   through.
+2. **Boxing it in with movable friends works, but then it simply targets the
+   adjacent enemy** through the ordinary path and attacks. The test passed without
+   the fix and proved nothing.
+3. **A taunt is the honest case.** `_mark_for()` overrides distance entirely, so
+   the unit is committed to something across the board while being elbowed. That
+   version fails on the old code and passes on the new.
+
+### Melee reaches the corners
+
+`BoardModel.in_reach()` is new and replaces a bare `tile_distance <= reach`. For
+the melee band it uses Chebyshev — all eight surrounding tiles — and for every
+longer band it still uses Manhattan, so a "medium" unit reaches a diamond and not
+a 5x5 box. Movement is still strictly four-way; nothing walks diagonally.
+
+Two knock-ons that had to move with it:
+
+- **The Aegis's reflect** uses `is_beside()` now. "Arm's length" has to mean the
+  same eight tiles a melee unit can swing across, or a Reaver at its corner hits
+  it for free.
+- **`_has_shot()` no longer waves melee through unconditionally.** A diagonal
+  swing can cross a barrier, so anything that is not orthogonally adjacent gets
+  the line-of-fire check.
+
+### What both did to the numbers
+
+This is the part worth reading. Measured at tier 3, two of the unit plus six
+random against eight random:
+
+| | Before | Stuck fix only | Both |
+|---|---|---|---|
+| Warden | 57% | 68% | **73%** |
+| Reaver | 50% | 70% | **68%** |
+| Lancer | 47% | — | **55%** |
+| Archer | 38% | 45% | **37%** |
+| Vexer | 30% | — | **30%** |
+
+The stuck fix is the big mover and it lifts everybody — units simply spend more
+ticks fighting. Diagonal reach is the one that opens a gap: it takes the Archer
+from 45% back down to 37%, because melee now closes and engages far more reliably.
+
+Net effect: **melee is now clearly the stronger class.** That is a real
+consequence of two changes that were both asked for and both fix genuine
+problems, and it is not obviously wrong — but it is a decision, not a side effect,
+and the lever if you want it back is ranged base damage or the `TARGET_SLACK`
+band.
+
+## Mutable terrain: the Sapper and the Mason
+
+A fifth glyph, `%`, is breakable stone. It behaves exactly like `#` for movement,
+sight and deployment — the only difference is that it can stop existing mid-battle.
+It is a second glyph rather than a flag on the first because a map built around
+Sappers needs walls they cannot touch.
+
+`BoardModel` keeps the change as a per-battle overlay alongside the map's own
+tables: `_rubble` (which walls may be broken at all), `_broken` and `_raised`
+(this round's damage and building), and `_wall_hp` (what is left of each standing
+one). **The map resource is never touched.** `clear_changes()` runs at the top of
+`CombatSim.setup()`, so a map stays a static, shareable thing and a *battle* is
+what makes it mutable. Every terrain query — `is_wall`, `is_blocked`,
+`blocks_sight` — reads through the overlay, so pathfinding, targeting and the beam
+all update for free the moment a wall comes down.
+
+### Walls have health, and anyone can dig
+
+A wall is not something one cast deletes. Map stone is `WALL_HP = 240`, and
+`UnitData.wall_damage_mult` says what fraction of a unit's attack damage a swing
+does to stone. At **0.15** an ordinary unit *can* chew out of a sealed room and
+badly wants not to — a tier 1 Warden needs 47 swings. A Sapper is at **6.0**.
+
+Because it is a multiple of attack damage rather than a flat number, digging speed
+**doubles with every tier for free**, and the Sapper's attack buff reaches the
+stone. That is the same shape as Reaver's Execute, and the opposite of the mistake
+Cinder Lance still has.
+
+### One number does the "go round, unless you can't" rule
+
+This is the part I am happiest with. The weighted Dijkstra field built for
+congestion already prices a tile rather than banning it, so a breakable wall is
+just an expensive tile:
+
+```gdscript
+const WALL_COST := 40          # everyone else
+const SAPPER_WALL_COST := 2    # a unit that digs for a living
+```
+
+At 40 an ordinary unit walks a very long way round rather than start digging —
+breaking a wall is a last resort, not a shortcut. But it is **not infinite**, and
+that is the whole trick: when a side is genuinely sealed in, the route through the
+stone becomes the *only* route, the field prices it, and the army digs its way out.
+No "is everything walled off?" check exists anywhere, because none is needed. At 2
+a Sapper goes at the stone almost every time.
+
+Permanent stone and holes stay impassable, so a map can still say "never through
+here".
+
+One thing this needed that was not obvious: `_downhill()` skipped anything that
+was not an empty tile, so the field could price a route through a wall and then no
+step would ever be taken along it — a unit standing still forever in a sealed room.
+A wall is now a legal step for the *chooser* even though it is not a legal tile to
+stand on, and `_begin_move()` turns a step into stone into a swing at it.
+
+### The two units
+
+- **Sapper.** 150 health, 26 damage, and it goes at stone the way everything else
+  goes at flesh. Its charge is worth four of its own wall swings, so even a tier 1
+  opens a map wall in one cast. Its ordinary combat stats are deliberately good:
+  once the walls are down its utility is spent, and it has to still be worth its
+  tile in round six. Measured **53% on Three Roads, 47% on the open board** —
+  against the Warden's 57% and 68%. That gap between the two boards is the unit.
+- **Mason.** 165 health, and it puts its first wall up **on the opening bell**
+  before anyone has moved, then another on every full bar. The wall blocks
+  movement and sight **for both armies, yours included**, and it never builds on a
+  tile with a unit on it — walling a live unit into stone is not something the
+  rest of the simulation is prepared for.
+
+### The buffs
+
+- **Demolition** (Sapper): +15/30/45% attack speed, +75/150/225% attack. It reaches
+  the stone too, because wall damage is a multiple of attack.
+- **Bastion** (Mason): +50/100/150% max health, and its walls are +100/200/300%
+  tougher. That rider is what the buff actually buys — a tougher wall, not a bigger
+  builder.
+
+### A Mason's wall is a firing slit
+
+`_raised` stores **who built each wall**, and `blocks_sight()` takes a team. A wall
+is transparent to the side that raised it and opaque to everyone else. Map stone
+has no owner and stops everybody.
+
+This is the only team-aware terrain in the game, and it is deliberately only half
+of the membrane from the original spec: **movement is unchanged**. `is_blocked()`
+takes no team, so neither army walks through a Mason's wall. Yours shoots over it;
+nobody strolls through it. That half is cheap — one dictionary value and one
+parameter — while making movement team-aware would touch the pathfinder, the
+distance field and the view all at once.
+
+It breaks one long-standing invariant on purpose. `line_of_fire()` swaps its ends
+so "A can shoot B" and "B can shoot A" never disagree over a rounding tie — but
+across a membrane the two directions are *supposed* to disagree, and they do,
+because the swap only fixes which end the walk starts from and not which tiles lie
+on the line. There is a test asserting exactly that asymmetry, so nobody later
+"fixes" it back.
+
+It is also what the Mason was missing. It probed at **33%** as a plain wall and
+**43%** as a firing slit — a full ten points, and from below the roster median to
+sitting on it. A wall that blocked your own archers was most of why the unit read
+badly at random placement.
+
+### And it builds underfoot
+
+`terrain_at_caster` puts the wall on the tile the Mason is standing on and steps
+the Mason off it, the way the Engineer bolts its Sentry together under its own
+feet. That makes **placing the Mason** the decision, rather than guessing which
+way it happens to be facing when its bar fills.
+
+Boxed in with nowhere to step, it falls through to building beside itself rather
+than burning the whole bar — being unable to move is not a reason to produce
+nothing. That is the Engineer's `holds_when_capped` lesson applied to a different
+unit: a builder standing there achieving nothing is a trap, not pressure.
+
+Net of both changes it reads **42%**, against 33% before either.
+
+### Stone is battle state, and the round boundary is `_restore_roster()`
+
+`clear_changes()` already ran at the top of `CombatSim.setup()`, so a *battle*
+always began from the map as drawn. That was not enough. Between rounds — the
+whole prep phase — last round's walls and holes were still standing, which meant
+a Mason's wall from round two was sitting on tiles you were trying to deploy into
+in round three. The usable board quietly shrank a little every round.
+
+It now clears in `main.gd`'s `_restore_roster()` as well, and specifically
+**before** deploy cells are worked out. The `setup()` call stays as the belt to
+that braces: the sim guarantees a clean board even for a test that never went
+through the round loop.
+
+### One builder rule, in one function
+
+`_vacate_for_build()` is the rule both builders follow: **what gets built takes
+the builder's tile, and the builder steps off.** Never the other way round — a
+Sentry that shuffled over to make room would be a turret in a place nobody chose,
+and the whole point of both units is that where you stand them is where the thing
+goes.
+
+The Engineer already worked this way; the Mason was doing the same thing through a
+second copy of the logic I had written separately. Now there is one function, and
+the Conjurer is **deliberately not on it** — its wisps are a retinue that arrives
+around it, not a thing it puts down, so it never moves for them. There is a test
+asserting all three at once, so the exemption reads as a decision rather than as
+an oversight in the Conjurer's data.
+
+Boxed in with nowhere to step, both fall back to building beside themselves rather
+than wasting the cast. Being unable to move is not a reason to produce nothing.
+
+**Three Roads now degrades.** The middle five rows of both dividing walls are
+breakable; the stone nearest each base is permanent, so nobody digs straight into
+your back line. **The Breach** is a slab of breakable stone filling the whole
+middle of the board with permanent pillars through it.
+
+## The Culverin and the Parasite
+
+### A shell that is actually in the air
+
+Every other ability in the game resolves the instant its cast finishes. The
+Culverin's does not: `_resolve_shell()` puts an entry in `_shells` and
+`_tick_shells()` lands it 1.5 seconds later. That delay is the unit.
+
+The important detail is that the shell is aimed at a **tile**, not at a unit.
+Once it is in the air it is committed to a piece of ground, so anything that walks
+off in the meantime is simply not there when it lands. Aim is picked by
+`_thickest_cluster()` — whichever enemy has the most of its friends sharing a
+cross with it, ties broken by closeness, so on a spread-out board it reads as an
+ordinary sniper and only becomes a bomb when a clump forms.
+
+Damage is a **cross**, not a box: 150% to the tile it lands on and 100% down each
+arm. Corners are untouched, which is why *which axis* the clump lies along
+matters. It is `shell_attack_multiple × attack damage`, so it scales with tier and
+Enfilade reaches it.
+
+Then the ground burns for six seconds. `field_at()` answers "what would this tile
+do to a unit of that team", which is one function doing two jobs: `_tick_fields()`
+uses it to deal the damage, and `_distance_field()` asks it and prices a burning
+tile at `FIELD_COST = 3`. So units are **dissuaded, not forbidden** — they walk two
+tiles round if they can and take the burn if they cannot. Making fire impassable
+would let one shell wall off a corridor, which is a different and much stronger
+unit than the one asked for.
+
+**Enemies only.** Your own line walks through its own fire, which keeps the unit
+usable when it is badly placed — the failure mode the Mason has.
+
+Measured at **62%**, exactly level with the Warden.
+
+### Siphon, and what "until death" costs
+
+The Parasite reaches across the whole board — no range check at all — and fastens
+onto whichever enemy has the largest **maximum** health. From then it loses 2.5%
+of that maximum every second until it dies. Three deliberate properties:
+
+- **Max, not current.** The bite does not shrink as the victim wears down, so it
+  genuinely finishes what it starts.
+- **Shields do not count.** A Warden's shield is worth more than its health; if
+  the drain counted it, the Warden would become the thing the Parasite is *best*
+  against rather than merely another big body.
+- **It stacks.** Two Parasites, or one casting twice, drain twice as fast.
+
+It runs through `_damage()` rather than subtracting health directly, which is how
+the innate lifesteal applies to every tick of it for free. `lifesteal` is now a
+real `UnitData` field feeding `_base(LIFESTEAL)`, the same shape as
+`damage_resist` → RESIST, so Bloodletting adds to it rather than replacing it.
+
+### An honest problem with the counter
+
+You asked for this to answer high-health units like Transcendence. At tier 3 it
+does — but so does everything else, by the same amount:
+
+| | Alone | Against 2 Transcendences | Lift |
+|---|---|---|---|
+| Parasite | 48% | 58% | +10 |
+| Warden | 62% | 72% | +10 |
+| Culverin | 62% | 60% | −2 |
+
+The Parasite gains exactly what the Warden gains, which means at tier 3 it is not
+a *differentiated* counter — a tier 3 Transcendence has 660 health and 2.5% of
+that is 16 a second.
+
+At tier 6 the arithmetic is much better — 528 a second, about 75% of an apex
+Transcendence's health over a 30-second round — but **it still does not finish one
+alone**: 40 seconds to solo-kill against a round that hits sudden death at 30. Two
+apex Transcendences beat everything regardless (Warden 0%, Parasite 2%).
+
+There is also a design wrinkle worth deciding on: **the drain does not scale with
+the Parasite's own tier at all.** A tier 1 Parasite drains an apex Transcendence
+exactly as fast as a tier 6 one. Every other ability in the game scales, so this
+stands out. I left 2.5% as specified rather than quietly changing it — the levers
+are raising `drain_percent`, or multiplying it by the caster's tier so merging
+Parasites actually sharpens the counter.
+
+### The buffs
+
+- **Enfilade** (Culverin): +20/40/60% attack speed, +75/150/225% attack. It reaches
+  the shell, since shell damage is a multiple of attack.
+- **Hunger** (Parasite): +25/50/75% attack speed and **+1/+2/+3 range bands, flat**.
+  That is the one buff that can push a unit into Sniper and Unlimited — see below.
+
+### The range ladder got two more rungs
+
+The band ladder had a structural problem, not a rules problem. `RangeBand`'s
+**value is the tile count** — `band_tiles()` returns the enum value directly — and
+the top two rungs, Sniper and Unlimited, were reserved for buffs to reach. That
+left Melee, Medium and Long as the only bands a unit could be printed at, so
+"long range" had exactly one legal spelling and the Culverin was illegal at the
+range it was designed for.
+
+Fixed by making the ladder longer rather than by lifting the rule:
+
+| Band | Tiles | |
+|---|---|---|
+| Melee | 1 | |
+| Medium | 2 | |
+| Long | 3 | |
+| Sniper | 4 | **highest a unit may be printed at** |
+| Siege | 5 | buffs only |
+| Horizon | 6 | buffs only |
+| Unlimited | 100 | buffs only |
+
+`MAX_PRINTED_BAND` names the cutoff instead of the test hard-coding two band
+names, so moving it later is a one-line change.
+
+**New bands may only ever be appended at the top.** Inserting one in the middle
+would silently hand a tile of reach to every unit above it — making Medium 3
+would re-arm the Vexer, Pyre, Seraph, Conjurer and Wellspring in one edit. There
+is now a test asserting Medium is still 2 and Long still 3, precisely so that
+mistake fails loudly.
+
+The Culverin sits at **Sniper**. Four tiles cost it a little rather than gaining
+it: **58%**, down from 62% at Long, against the Warden's 62%. It reaches further
+and therefore stops further out, which suits the shell less than it sounds — its
+aim wants a clump, and a clump seen from four tiles has longer to disperse before
+the shell lands. Still comfortably mid-upper, and it is the right band for what
+the unit is.
+
+Buffs now have real headroom: Hunger at gold takes the Parasite from Long to
+Horizon, and Far Sight's single band means something at every tier of the ladder
+rather than instantly maxing out.
+
+## The Pariah, and a number I had to argue with twice
+
+Five damage a swing — less than a Wisp — 230 health, no ability and no mana bar.
+`alone_hp_damage` is the whole unit: while it is **isolated**, every hit also tears
+out 12% of the target's maximum health.
+
+It hangs off the same line as the Rupture buff, which already added a fraction of
+the victim's max health to every hit, so the sum is one expression:
+
+```gdscript
+var frac: float = _hp_damage[source.team] + last_stand_share(source)
+```
+
+Being a fraction of the victim's maximum means it never needs to scale with tier —
+it already does, and it is as dangerous against a tier 6 Transcendence as against
+a Wisp. That is the point of the unit.
+
+### Isolation: a 3×3, answered once, at placement
+
+The condition used to be "last one of yours standing", asked live on every hit. It
+is now **elbow room**, asked once:
+
+```gdscript
+const ISOLATION_RADIUS := 1   # a square, not a cross — the eight tiles around it
+```
+
+`_decide_isolation()` runs next to `_decide_empowerment()` in `setup()` and writes
+a single bool onto the unit. Three consequences, all deliberate:
+
+- **Diagonals count.** It is a 3×3 square, not a plus. `absi(d.x) <= R and
+  absi(d.y) <= R`, not `absi(d.x) + absi(d.y) <= R`. The test that pins this is the
+  one a player will try first, by tucking an ally into the corner.
+- **It cannot change during the round.** Your line advancing past it does not
+  switch it off; the ally crowding it dying does not switch it on. The Pariah is
+  melee — a live check would disarm it the instant it walked up to something — and
+  more importantly the player paid for this verdict at placement, so the game may
+  not revise it afterwards.
+- **Nothing that arrives after the bell is ever isolated.** Merge results, Mimic
+  copies, Conjurer minions: same rule as the Paragon's `solo_empower`, and for the
+  same reason. Placement is the whole cost, and a summon is not placement.
+
+**Allies only, and that is a narrowing of what was asked for.** The brief said "no
+units within a 3×3". Enemy placement happens behind fog, so counting enemies would
+make the condition one whose inputs you cannot see — un-plannable, which is the
+opposite of a placement puzzle. On the standard map it makes no difference at all
+(the neutral row leaves the halves two tiles apart at the bell) but on a map with
+`has_neutral = false` the front ranks start touching, and there it is the whole
+unit. One line in `_isolation_clear()` reverses it if that call was wrong.
+
+The player is told at the bell: an `ISOLATED` label, cold grey-blue, at the moment
+they can still learn something from it.
+
+### The tuning, redone from scratch
+
+The old 30% was priced against "seven of your units have died". A tile in the
+corner is nothing like that price, so the number had to come down a long way. Probe
+is one Pariah at tier 3 plus seven random tier 3s against eight random tier 3s,
+**200 seeds per row**, the two arms differing only in where the Pariah stands:
+
+| `alone_hp_damage` | isolated | crowded |
+|---|---|---|
+| 3% | 50.5% | 46.5% |
+| 5% | 53.0% | — |
+| 8% | 52.5% | — |
+| **12%** | **56.0%** | **46.5%** |
+| 20% | 63.5% | — |
+| 30% | 68.5% | — |
+
+The crowded arm is flat at 46.5% at every share, which is the check that the
+condition is actually gating: a misplaced Pariah is a unit with no ability, no bar,
+and five damage a swing, and the number on it is irrelevant.
+
+**12%.** Isolated it reads 56%, which sits with the Culverin (58%) and under the
+Paragon (63%) and Colossus (62%) — a strong unit, not the best one. The ten-point
+swing between the two arms is the largest thing placement alone buys in this game,
+which is the point. 20% and 30% both make it the best unit on the board for the
+cost of standing in a corner.
+
+It is no longer four swings to kill anything; it is about eight. The old line was
+correct for a condition that cost you the round, and wrong for one that costs you
+a tile.
+
+### And it climbs with tier
+
+12% is the **tier 3** figure. The share now runs 7 / 9.5 / 12 / 14.5 / 17 / 19.5%
+across the ladder, written per tier into the `.tres` files by the builder rather
+than scaled at runtime.
+
+A **flat step**, not the doubling every other stat gets, and the README used to
+argue this should not scale at all: the share is a fraction of the victim's
+*maximum* health, so the damage it deals already doubles per tier on its own.
+Doubling the fraction on top of that compounds straight back into the
+four-swings-kills-anything version. Tier 6 takes under three times what tier 1
+does, and there is a test pinning both the evenness of the step and that ratio.
+
+**Spite** gives +25/50/75% attack speed and +50/100/150% max health. Attack speed
+is deliberately the offensive half: the share comes off **per hit**, so swinging
+faster is the only thing that makes it come off quicker. An attack-damage buff
+would do almost nothing here, which is why it does not have one — and there is a
+test saying so.
+
+## The Colossus, and why "per hit" is the whole unit
+
+250 health, **95 damage** — the heaviest ordinary attack on the roster — one swing
+every four seconds, and the longest stride of anything in the game. No ability, no
+mana bar. Every time it is hit, `shield_on_hit` adds **3% of its maximum health**
+to its shield, capped at one full health bar.
+
+The load-bearing word is **per hit**, not per point of damage. That one choice is
+the entire unit:
+
+| Feeding it | Shield gained |
+|---|---|
+| Ten hits for 1 damage each | 10 x 3% = 30% of its health |
+| One hit for 10 damage | 3% of its health |
+
+So a dozen small attacks arm it faster than one enormous one, which is exactly the
+brief. It hardens **after** the blow lands, too — there is no free first hit; what
+a hit buys is protection from the *next* one.
+
+### The trade-off is measurable, not just flavour
+
+| Enemy team | Colossus | Warden |
+|---|---|---|
+| Random | 62% | 62% |
+| Four Vexers (fastest, weakest) | **98%** | 92% |
+| Four Culverins (slowest, heaviest) | **38%** | 42% |
+
+Identical overall, six points better against rapid weak fire and four points worse
+against slow heavy blows. A ten-point swing across the matchup, against the
+tankiest unit already in the game — a real rock-paper-scissors axis rather than a
+note on a card.
+
+### Why it has a cap
+
+Without `shield_cap` an attacker whose per-hit damage is smaller than 3% of the
+Colossus's health could never out-pace the gain, and the unit would simply stop
+dying — forever, not just for a while. The cap bounds how much it can hold at
+once; **sudden death** is what eventually breaks a genuine stalemate, since
+`pressure()` scales all damage upward after 30 seconds. The game already had the
+answer to unkillable, so the unit did not need to invent one.
+
+**Tempering** gives +75/150/225% max health and **+2.5/5/7.5% more of max health
+per hit**. Both halves compound — a bigger pool makes every plate bigger *and* the
+share itself goes up — so a gold pick more than triples the shield it gains per
+hit, on top of more than tripling its health.
+
+One test bug worth recording: the first version compared a buffed Colossus against
+an unbuffed one **on the same team**, and the buff covers the unit *type* rather
+than the individual, so both picked it up and the comparison was a unit against
+itself. It passed while proving nothing. The unbuffed one now sits on the other
+team.
+
+## The round clock
+
+A round runs **two minutes**, and if it gets there it is decided on **units still
+standing**. Level on bodies is a draw, and a drawn round costs **both** players a
+life.
+
+Three pieces, and two of them are corrections to things that were already there:
+
+**`_decide_timeout()` counts bodies, not health.** It used to total everyone's
+remaining health as a fraction of their maximum. That is a fairer measure of who
+was winning and a much worse one to play to — you cannot count it while watching,
+so the result arrived as an announcement rather than something you saw coming.
+Six units against five is a number on the screen the whole round.
+
+Worth knowing if you ever change this back: the old rule summed *fractions*, so a
+full-health tier 6 counted exactly as much as a full-health tier 1. Almost any
+test board scores identically under both rules, and the first sabotage run I did
+passed clean because of it. The case that separates them is **two healthy units
+against three badly hurt ones** — 2.0 against 1.2 on fractions, two against three
+on bodies — and that is the board the test uses.
+
+**`SUDDEN_DEATH` moved from 30s to 90s.** Escalating damage exists to stop a
+fight that would otherwise never touch. Starting it at thirty seconds meant almost
+nothing survived to the timeout and the clock never decided anything — the
+escalation did. It is the backstop now, not the rule, and it covers the last
+thirty seconds only.
+
+**A draw costs both sides a life**, which it did not before. A life is spent by
+giving the other player a win, so a draw hands one to each. That means both can
+cross the line together, so `match_winner()` needed an answer for it rather than
+returning whoever it checked first: ahead on the line wins, dead level is a drawn
+match.
+
+The countdown on screen follows the **player's** clock, not the sim's. The battle
+is fully resolved before frame one, so `sim.elapsed` is already at the end and is
+no use — and at 4x speed the clock has to run at 4x with it or it would disagree
+with what you are watching. It turns amber for the last thirty seconds, which is
+also exactly when hits start escalating; one colour change for both facts,
+because they arrive together.
+
+## The second layer
+
+Two maps use it — **The Terrace** (one plateau per side, four staircases each)
+and **The Crown** (one hill in the middle that neither side wholly owns). Three
+rules, and they live in two functions.
+
+### Every map, with no exemptions
+
+The eleven maps that had high ground *before* stairs existed all had staircases
+cut into them rather than being grandfathered out of the rule — Killing Field, The
+Steppes, The Cauldron, The Highlands, The Keep, The Anvil, Ramparts, The Bridge,
+The Hourglass, The Chasm and The Compound. `^` means the same thing everywhere
+now.
+
+That is only safe because the builder refuses to produce a map it would break.
+`_unreachable_high()` floods every connected patch of `^` and fails the build if
+no `/` touches it, because a plateau with no way up is not difficult terrain —
+it is a place nothing can stand, nothing can reach, and no melee unit could ever
+attack into, and it is completely invisible in the map source unless you trace
+the patch by eye. Two of the retrofits also broke the mirror-symmetry check that
+was already there, which caught them immediately.
+
+There is a matching test that walks every `.tres` in `data/maps` and asserts the
+same thing about what actually shipped.
+
+### `reach_against(attacker, target)`
+
+Reach stopped being a property of a unit the moment the board got a second layer,
+so it is now a property of the pair:
+
+- **A melee unit standing on the ground cannot touch anything on high ground.**
+  Not at a penalty — at all. It returns `0`, and `in_reach` now treats zero as a
+  refusal rather than a short range. That guard is new and it had to be: the
+  melee band is written as `if tiles <= 1: return is_beside(...)`, so a zero
+  quietly meant "can hit anything at its shoulder" until this was added. Nothing
+  had ever produced a zero before, because `reach_on()` floors at the melee band.
+- **Shooting from high ground is worth a band**, which it always has been.
+- **Shooting at high ground costs a band.** A Long-ranged Archer has to walk to
+  Medium to touch the terrace.
+
+The two ranged adjustments cancel, so a duel across two terraces is fought at
+exactly the range it would be on flat ground — there is a test for that, because
+it is the property that stops the rule quietly rewriting every ranged matchup on
+a high-ground map.
+
+Stairs are **ground**, not high ground. A melee unit standing on a staircase
+still cannot hit the terrace above it; the stairs are how you get up, not up.
+
+### `BoardModel.can_climb(from, to)`
+
+```gdscript
+if not is_high(to):
+    return true
+return is_high(from) or is_stairs(from)
+```
+
+Getting **down** off a plateau is free from any edge, and only getting up is
+restricted — which is what makes a terrace a place you retreat to rather than a
+box you get stuck in.
+
+It is checked in four places, and the fiddly one is the distance field: that is
+built **backwards from the goal**, so the step under consideration is the one from
+`n` to `c` and the climb is checked that way round. Getting it the wrong way about
+prices a staircase as if you were coming down it, and melee units walk to the foot
+of a cliff and stop. The other three are `_downhill`, `_greedy_step`, and
+`_begin_move` itself — the last purely as belt and braces, since that is the one
+place every move actually happens.
+
+The pathing needs no other help. A melee unit told to reach something on a terrace
+finds the staircase on its own, because a weighted distance field with the climb
+edges removed has exactly one route and finds it; there is a test that watches a
+Reaver do it and asserts it passed over a stair tile on the way.
+
+## The Stasis, and a death that leaves nothing
+
+The Vexer's colder cousin: weak hits, a bar that fills fast, and an ability worth
+more to everyone else than to itself. Full mana freezes one enemy for **0.9s per
+tier** while it takes **+15% damage per tier** from every source — and if it dies
+frozen, **nothing it would have done on death happens at all.**
+
+### The freeze is three refusals, in three places
+
+```gdscript
+func _decide(u: UnitInstance) -> void:
+    if u.is_frozen():
+        return
+```
+
+Before the target is picked and before the full-mana cast, so a bar that filled
+the tick before the freeze landed is **held rather than spent**. It does not act
+less often — it does not act. `can_move_now()` and `can_attack_now()` also refuse,
+which is what stops the consolation swing in `_swing_at_hand` from sneaking one
+through, and `frozen_damage_taken()` joins the other multipliers in `_damage()`.
+
+Both numbers are **read off the caster at the moment of the cast and frozen into
+the victim**, the same rule the Vexer's vulnerability follows: killing the caster
+does not thaw anything, and a buff picked mid-round does not deepen a freeze
+already running. Two casters take the **longer** of the two rather than adding —
+stacking freezes into a permanent lock is the one outcome nobody enjoys being on
+the wrong end of.
+
+### The second half is one branch in `_fell()`
+
+```gdscript
+var frozen := victim.is_frozen()
+...
+if frozen:
+    return   # no revive roll, no body in the pile, no mana for the scavengers
+```
+
+That is the whole "disables on-death effects" clause, and it is one branch because
+`_fell` is the single funnel every death goes through — an ordinary swing, a
+spell, a Devourer execute. The three things it skips are the three things a death
+in this game can trigger: the Revenant's revive, the corpse joining `_fallen` for
+a Vigil to raise, and `_feed_on_death` charging the dead unit's own side's
+scavengers. There is a test for each.
+
+### Permafrost, and a buff with no machinery
+
+The buff wants "+50% freeze time, +25% amp" and neither is a stat. Rather than
+build a bespoke path, `FREEZE_POWER` and `FREEZE_AMP` were added to
+`StatModifier.Stat` as base-1.0 multipliers — exactly what `HEAL_POWER` and
+`AURA_POWER` already are — so Permafrost is an ordinary two-component STAT buff
+and the whole existing buff system applies unchanged.
+
+It runs **50/25, 75/50, 100/100**, which is neither the 1x/2x/3x rule nor a
+straight line: the amp is deliberately behind at bronze and catches all the way up
+at gold. The amp buff scales the **share**, not the multiplier — doubling x1.45
+gives x1.90, not x2.90 — and there is a test that says so, because the other
+reading is an easy mistake to make and a catastrophic one to ship.
+
+### What it is worth
+
+Two Stasis plus six random against eight random, tier 3, 150 seeds. The second
+column is the matchup it exists for: eight Revenants, an army whose entire trick
+is dying and getting back up.
+
+| freeze | vs random | vs Revenants |
+|---|---|---|
+| ability off | 36.0% | 73.3% |
+| 0.5s / 8% a tier | 36.7% | 79.3% |
+| **0.9s / 15% a tier** | **38.7%** | **84.0%** |
+
+Against a random field the ability is worth under three points. Against the army
+it answers it is worth eleven. That gap is the unit — and it is the reason the
+general win rate is the wrong number to tune it by.
+
+The body was then raised from 130/7 to **160/8**, having learned the lesson the
+Vexer taught:
+
+| base hp/dmg | vs random | vs Revenants |
+|---|---|---|
+| 130 / 7 | 38.7% | 84.0% |
+| **160 / 8** | **44.7%** | **90.7%** |
+| 175 / 9 | 47.3% | 95.3% |
+| 200 / 10 | 54.0% | 96.7% |
+
+175 and 200 both push the counter matchup past 95%, which stops being a counter
+and starts being a lockout. 160/8 leaves it a little under median in general —
+correct for a unit whose value is in what it lets everything else do, which a
+probe with random allies systematically under-measures — and a strong answer
+rather than an automatic one.
+
+## The Vexer's poison, and the one field that could scale
+
+The Vexer was the weakest thing on the roster and the reason is structural rather
+than a tuning miss: **an `AbilityData` is one resource shared by all six tiers of
+a unit.** A tier 6 Cinder Lance hits for the same 78 as a tier 1 because
+`burst_damage` is a number on a resource that does not know which tier is holding
+it. `burst_attack_multiple` exists to route around exactly this — it says "this
+many times the caster's own attack damage" instead of a flat figure — and Blight's
+`dot_damage` has the same problem and no such escape.
+
+Rather than fix that here, Blight gained a second effect that *does* scale, in the
+cheapest way available:
+
+```gdscript
+target.apply_dot(ab.dot_damage, ab.dot_ticks, ab.dot_interval, u.uid,
+    ab.dot_vulnerability_per_tier * float(u.data.tier))
+```
+
+Multiplying by the caster's tier at the moment of the cast. 5% per tier: a tier 1
+Vexer opens its mark up 5%, a tier 6 opens it 30%, and the number is frozen into
+that poison — killing the Vexer afterwards does not un-poison the target, and
+buffing it mid-round does not retroactively deepen a poison already ticking.
+
+**It rides on the dot entry, not on a separate timed effect.** `dots` is already
+a list with a managed lifetime, so putting `vuln` in the dict means the
+vulnerability's lifetime *is* the poison's, with nothing to expire, no cleanup at
+the round boundary, and correct stacking for free.
+
+Stacking is **additive**, and that is a decision: two tier 3 Vexers make a target
+take 30% more, not 32.25% more. Multiplying would make the second Vexer worth more
+than the first, which is not what someone reading "+15% damage taken" expects to
+happen when they field another one.
+
+It sits in `_damage()` with the other damage-taken multipliers, which means it
+amplifies **the poison's own ticks** as well. That is deliberate: "from all
+sources" cannot carve out the one source that applied it without becoming a
+special case with nothing behind it.
+
+### Then the dot itself was rewritten
+
+`dot_damage` is now **zero** on Blight. The poison takes a share of the victim's
+**current** health — 25% on the first tick, halving every tick after
+(`dot_current_hp_percent` and `dot_falloff`):
+
+| tick | share of what is left |
+|---|---|
+| 1 | 25% |
+| 2 | 12.5% |
+| 3 | 6.25% |
+| 4 | 3.1% |
+| 5 | 1.6% |
+| 6 | 0.8% |
+
+It front-loads **twice over**, and only one of those is the falloff: a share of
+what remains is naturally largest on the first tick, because the most health the
+target will ever have is what it has when the poison lands. There is a test that
+the opening tick alone outweighs every later tick put together.
+
+**Current health, not maximum**, and that is the unit's whole character. A share
+of what is left approaches zero and never reaches it, so **Blight cannot kill
+anything, at any tier, ever** — there is a test that re-applies it sixty times
+against a lone target and checks the target is still standing. The Vexer takes a
+great bite out of whatever is healthiest and hands it to somebody else to finish.
+It also solves the scaling problem for free, the same way a share of maximum
+would: no per-tier table, and proportionally identical against a tier 1 and a
+tier 6.
+
+`burst_damage` not scaling is still there on the **Pyre** and still worth the same
+treatment.
+
+### And it shuts the target down
+
+`dot_suppresses` on Blight. While it is on, the target gains **nothing**: no
+healing, no shields, no new haste stacks, no attack-speed aura from an ally, no
+mana from a Wellspring.
+
+The gate is `UnitInstance.is_suppressed()` and it lives in `heal()` and
+`add_shield()` rather than at the call sites. That matters: "cannot be healed" has
+to cover regen, the Seraph's burst, the Engineer's repair and lifesteal, and a
+rule enforced in six places is a rule with five chances to be forgotten when a
+seventh healer gets written. The three that cannot be caught that way — haste
+stacks, the Herald's aura, the Wellspring's mana — are gated at their resolvers.
+
+It stops things being **gained**; it does not strip what is already there. A
+Warden that opened with its bulwark keeps the shield and simply cannot top it up,
+and an Archer keeps the haste stacks it earned and simply cannot add to them.
+Like the vulnerability, it rides on the dot entry, so it ends exactly when the
+last suppressing poison does.
+
+### None of which fixed the Vexer
+
+Two Vexers plus six random against eight random, tier 3, 150 seeds:
+
+| Blight | win rate |
+|---|---|
+| old flat 11 damage | 26.0% |
+| 2% of max HP a tick + shutdown | 29.3% |
+| 5% of max HP a tick + shutdown | 31.3% |
+| **25% of current, halving (shipped)** | **28.7%** |
+| 50% of current, halving | 32.7% |
+
+Three separate rewrites, measured at 150 seeds each, and every one of them lands
+inside noise of the others. Doubling the opening bite from 25% to 50% buys four
+points. The ability was never the problem. The **body** is: 85 health is the
+lowest on the roster by a distance, and a unit that dies in the first exchange
+does not get to have an ability at all.
+
+25% with a 0.5 falloff is shipped not because it measured best — nothing measured
+meaningfully different — but because it is the number that reads as the design:
+cripple, then peter out.
+
+| Vexer base | win rate |
+|---|---|
+| 85 hp / 6 dmg (shipped) | 29.3% |
+| 120 / 6 | 34.7% |
+| 120 / 8 | 38.7% |
+| 150 / 9 | 44.0% |
+| 190 / 11 | 56.0% |
+
+Roughly **170 / 10** lands it on the roster median. That is a tuning decision, not
+a code one, and the numbers are in `UNIT_TABLE`.
+
+## Units that get bored of walking
+
+A unit that has not landed a blow in `IMPATIENT_AFTER` (6 seconds) will smash a
+breakable wall next to it rather than take another step of a detour. Two pieces:
+
+```gdscript
+if is_impatient(u) and _smash_through(u):
+    return
+```
+
+placed in `_decide` immediately *before* `_begin_move`, and a floor on wall damage
+so the smashing achieves something.
+
+**The first attempt was to make stone cheaper in the distance field** — set
+`wall_cost_for()` to a low number while impatient and let the existing pathing
+route through it. That was the tidier design and it does not work, for a reason
+worth writing down: **movement here is diagonal.** Rounding the end of a Three
+Roads lane wall costs about the same as going through it — measured on the live
+field, the two routes came out at 7 and 7, an exact tie — so a price low enough to
+break that tie is lower than the Sapper's, and at that point nothing distinguishes
+a bored Warden from a Sapper. The field now stays honest about which route is
+*shorter*, and impatience overrides it on the grounds that the unit has run out of
+patience, which is not a claim about distance at all.
+
+**The damage floor is not optional.** An ordinary unit does 0.15x its attack
+damage to stone; at that rate a map wall outlasts the round several times over, so
+choosing to dig without `IMPATIENT_WALL_MULT` would be strictly worse than
+walking — a quirk that traps units against a rock. The floor (2.0x) opens a map
+wall in a handful of swings and still leaves the Sapper (6.0x) three times faster
+and, unlike anyone else, eager from the opening bell. It is a floor rather than a
+bonus, so keeping a Sapper waiting does not speed it up.
+
+`_smash_through` only takes a wall that is **closer to the target than the unit
+is**. Without that guard a unit kept waiting anywhere starts demolishing whatever
+stone is beside it, including the wall protecting its own back line.
+
+**Its real limit**, which the test says out loud: it fires for a unit stuck *next
+to* breakable stone, not for one already committed to the long way round. Three
+Roads is only breakable across its middle five rows, so a unit that spends six
+seconds walking is usually past any breakable tile by the time it gets bored.
+
+The clock is `UnitInstance.dry_spell`, reset on the **swing** rather than the hit —
+what it measures is "am I getting anywhere", and a shot that misses or is absorbed
+still means the unit is in the fight rather than walking round a rock. Digging
+does **not** reset it, so a unit that starts smashing keeps smashing until it is
+through.
+
+## Sound, portraits and criticals
+
+### The audio autoload
+
+`autoload/audio.gd` owns everything that makes a noise. Two things in it are worth
+knowing:
+
+**`play_music()` is idempotent.** Asked for the track that is already playing, it
+returns immediately. That is what "plays all the time" means here — `main.gd`
+starts the battle theme once in `_ready()` and the round loop (prep, battle, buff
+pick, next round) never touches it again, so it never restarts mid-match.
+
+**Effects are pooled, eight voices deep.** One `AudioStreamPlayer` per sound would
+cut a swing short every time a second unit swung, and a busy tick has a dozen
+units swinging. Each shot takes the next free voice; if all eight are busy it
+takes the oldest anyway, because a clipped tail beats silence on the hit that
+mattered.
+
+Sounds fire on the **swing**, not the hit — an arrow should be heard leaving the
+bow, with the crack of the hit arriving separately. Six melee samples and two
+ranged ones get a little pitch wander on top (0.94–1.06), because six sounds on a
+loop still read as a loop and the variation is what stops it. Spells draw from the
+ranged pool too. The laser is the one exception and it belongs to **Transcendence
+alone** — the branch keys off `beam_attack`, which is set on exactly one row in the
+whole unit table, so hearing that sound means Transcendence is firing and nothing
+else. There is a test asserting only one unit has the flag.
+
+Missing audio is never fatal — a warning and silence, so a bad path cannot take
+the scene down. Which is exactly why the smoke suite asserts the file list: a
+renamed `.wav` costs you a sound and nothing else, and the way you would otherwise
+find out is by slowly noticing something stopped happening.
+
+**Levels.** `MELEE_DB` is 6 dB under everything else, which is about half the
+loudness. Not a taste call — there is simply more melee than anything else, six
+units swinging on a loop three tiles apart, and at the shared level it stopped
+being feedback and became a wall. The rest of the ladder is ordered by how often a
+sound fires against how much it matters when it does:
+
+| | dB | fires |
+|---|---|---|
+| `DEATH_DB` | −14 | a few times a battle, in clumps |
+| `MELEE_DB` | −12 | constantly |
+| `MERGE_DB` | −10 | a handful a prep phase, in a quiet room |
+| `SFX_DB` | −6 | ranged, spells, the beam |
+| `PICKUP_DB` | −12 | every time you lift a unit |
+| `CONFIRM_DB` | −6 | a button that commits to something |
+| `ROUND_START_DB` | −2 | once a round, with nothing else playing |
+| `PROC_DB` | −6 | a merge that got lucky — pinned 4 dB over `MERGE_DB` |
+| `CRIT_DB` | −11 | a few times a battle |
+
+**Music is rolled once per MATCH**, in `main.gd::_ready()`, and never touched
+again. The playlist decides which track a match gets; it does not shuffle between
+rounds. A match is one piece of music from the first prep phase to the last body.
+
+**The three prep-phase sounds** — merge, promotion, windfall — hang off
+`main.gd::_celebrate_merge()` and `_show_merge_procs()`, which are reached only
+from a human drag. The AI's merges run through `_ai_merge_pass()` and never come
+here, and that is load-bearing: a merge sound behind the fog would let you count
+the opponent's units by ear.
+
+**Death** fires in `battle_player.gd::_kill()`, not `_schedule_death()` — the
+latter runs when the event is queued, which for a ranged kill is while the arrow is
+still in the air. Both teams, because the fog lifts when the battle starts. Pitch
+wander for the same reason the swings have it: a wipe kills six units in two
+seconds and six identical sounds read as one glitch.
+
+Music is converted to **Ogg Vorbis** and set to `loop=true` in the import file
+(Godot's importer defaults to false, so looping music that has not been told to
+loop simply stops). The effects stay `.wav`: short, and no decode latency.
+
+### Criticals live in `_damage()`, not in `_begin_attack()`
+
+5% for double damage, and **all damage can crit** — a swing, a spell, a shell, a
+burning tile, a poison tick, a Siphon drain. That is only true because the roll
+sits in `_damage()`, which every one of those routes through. Putting it in the
+attack path would have quietly excluded half the game.
+
+It rolls **last**, on the final figure, so a crit doubles what actually lands
+rather than doubling a number that three multipliers still have to chew on. And it
+rolls off the seeded `rng`, so a replay of the same seed crits in the same places.
+
+`crit_chance` is a var rather than a constant, defaulting to `CRIT_CHANCE`. Two
+existing tests measure exact damage totals — a dot's full duration, and the
+movement-lockout duel that turns on `move_time` alone — and a 5% doubling turned
+both into lotteries. They now set `sim.crit_chance = 0.0`. That is a real dial
+("how often does anything crit"), not a test backdoor, and there is a test
+asserting the default is still 5% and that zero really does silence it.
+
+Every damage event carries a `crit` flag so the view can react: the floater goes
+gold, bigger, marked with `!`, and lives 35% longer — measured against **its own**
+lifetime, or it snaps from opaque to gone instead of fading.
+
+### Portraits, and a child node that hid everything
+
+`UnitData.sprite` already existed and had never been populated. The builder now
+fills it from `assets/portraits/<id>.png`, falling back to `placeholder.png`, so
+adding art for one unit is dropping one PNG at one path — no code change, no table
+edit — and a unit with no art still draws its letter.
+
+The portrait is **not** drawn by the `Sprite2D` child. A child CanvasItem always
+renders above its parent's `_draw()`, which put the art on top of the team ring,
+the health bar, the mana bar and the tier pips — every readable thing on the tile.
+Setting `z_index = -1` fixed that and broke it differently: relative z put the
+portrait behind the **board's** tiles and it vanished entirely. Both were only
+invisible before because no unit had a sprite to hide anything with.
+
+It is drawn inside `_draw()` instead, between the plate and the ring, which is the
+one place with exact control over the order.
+
+The **plate** is drawn now whether or not there is art. Behind a portrait the
+unit's accent is pulled 62% toward grey and darkened — it is there to say whose
+unit this is and what tier, not to be looked at — and the art is inset inside it so
+a rim of that muted ground shows all the way round.
+
+## Zoom
+
+`BoardView` now keeps `_fit_tile` (what the window can show) and `zoom` (what you
+asked for) separately, and `tile_size` is the product. One source of truth, and a
+window resize no longer silently throws your zoom away.
+
+- **Wheel** over the board, **+ / -**, and **0** to reset.
+- 0.6x to 3x. Out is useful because the biggest maps hit the `MIN_TILE` floor and
+  overflow even when fitted.
+- The wheel zooms toward the **cursor**, not the board corner — `zoom_to()` works
+  out which board point is under the mouse, changes the scale, and puts that same
+  point back under the mouse. Without it, zooming in on a big map walks whatever
+  you were looking at off-screen.
+- The wheel anchors on the cursor when the cursor is over the board and on the
+  middle of the window when it is not. It never *refuses* — see below.
+
+### The wheel zoom that was wired up correctly and did nothing
+
+The first version gated the wheel on `view_area.has_point(event.global_position)`
+and silently failed every single scroll. `event.global_position` is in **viewport**
+coordinates; `view_area` and every other mouse test in `board_view.gd` are in
+**canvas** coordinates, which is what `get_global_mouse_position()` returns. The
+test never passed, so the branch never ran, so nothing happened and nothing
+complained.
+
+Two changes came out of it:
+
+- The cursor position for anything compared against `view_area` comes from
+  `get_global_mouse_position()`. There is a comment on `wheel_zoom()` saying so.
+- **The gate is gone.** Off the board it now zooms about the window centre instead
+  of returning. A camera control that does nothing at all is a worse failure than
+  one that zooms from slightly the wrong place, and the strict version was
+  protecting against roster strips that do not actually scroll in this scene.
+
+There is now a smoke-test check that pushes real `InputEventMouseButton` wheel
+events through the viewport with `push_input` and asserts the zoom moved. It
+tests the **delivery path**, not the zoom maths — no test of `zoom_by()` would
+ever have caught this, because `zoom_by()` was correct the whole time. Reinstating
+the old gate fails three of its checks.
+
+One thing it deliberately does not cover: headless has no real pointer, so
+`get_global_mouse_position()` does not follow a synthesised event and every scroll
+in the test anchors on the window centre. The anchor-under-the-cursor behaviour is
+not proven by it.
+
+## Enemy letters read upside down
+
+`UnitView` now knows `player_team` and draws the opposing side's initial rotated
+180 degrees. It turns out to read faster than colour alone: the board separates
+into "letters I can read" and "letters I cannot" without having to think about it.
+
+Rotated about the tile centre rather than the text baseline, or the letter walks
+off the square — and `draw_set_transform` replaces the canvas transform outright,
+so it is reset immediately afterwards. Everything below it (health bar, tier pips,
+mana) draws in plain local space.
 
 ## Queues, and the price of walking round one
 

@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/abilities/bulwark_raise.tres" id="1_cp8kv"]
+[ext_resource type="Resource" path="res://data/units/mason_t4.tres" id="2_fb75r"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_bfjr1"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="4_1smlp"]
+
+[resource]
+script = ExtResource("3_bfjr1")
+id = &"mason"
+display_name = "Mason III"
+tier = 3
+max_hp = 660.0
+attack_damage = 80.0
+attack_speed = 0.7
+move_time = 0.5
+ability = ExtResource("1_cp8kv")
+mana_per_attack = 0.0
+mana_per_charge = 7.0
+casts_at_battle_start = true
+next_tier = ExtResource("2_fb75r")
+note = "Puts its first wall up on the opening bell, before anyone has moved, then another every time its bar fills. The wall blocks movement and sight for both armies — yours included — so where it goes matters far more than how often. Nothing is sealed in forever: anything can chew through stone given long enough, and a Sapper does it in a handful of swings."
+sprite = ExtResource("4_1smlp")
+accent = Color(0.58, 0.62, 0.56, 1)

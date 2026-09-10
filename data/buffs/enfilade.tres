@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_8tpgk"]
+
+[resource]
+script = ExtResource("1_8tpgk")
+id = &"enfilade"
+display_name = "Enfilade"
+unit_id = &"culverin"
+bronze = Vector2(0.2, 0.75)
+silver = Vector2(0.4, 1.5)
+gold = Vector2(0.6, 2.25)
+stat_a = 2
+uses_second_stat = true

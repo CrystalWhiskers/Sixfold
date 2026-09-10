@@ -1,11 +1,12 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Resource" path="res://data/abilities/raise_host.tres" id="1_3xuvm"]
-[ext_resource type="Resource" path="res://data/units/spire_t5.tres" id="2_o877h"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_ba2te"]
+[ext_resource type="Resource" path="res://data/abilities/raise_host.tres" id="1_o877h"]
+[ext_resource type="Resource" path="res://data/units/spire_t5.tres" id="2_ba2te"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_v40kj"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="4_1cr08"]
 
 [resource]
-script = ExtResource("3_ba2te")
+script = ExtResource("3_v40kj")
 id = &"spire"
 display_name = "Spire IV"
 tier = 4
@@ -14,13 +15,14 @@ attack_damage = 0.0
 attack_speed = 0.5
 move_time = 0.6
 sight_range = 3
-ability = ExtResource("1_3xuvm")
+ability = ExtResource("1_o877h")
 mana_per_attack = 0.0
 mana_per_charge = 8.0
 keeps_mana = true
 chassis = 1
 can_move = false
 can_attack = false
-next_tier = ExtResource("2_o877h")
+next_tier = ExtResource("2_ba2te")
 note = "Cannot move, cannot swing, and never loses the progress it made last round. When it finally raises its host, that is the end of it."
+sprite = ExtResource("4_1cr08")
 accent = Color(0.66, 0.6, 0.5, 1)

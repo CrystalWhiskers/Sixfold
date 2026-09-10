@@ -1,11 +1,12 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Resource" path="res://data/abilities/lament.tres" id="1_2fovy"]
-[ext_resource type="Resource" path="res://data/units/vigil_t2.tres" id="2_j7f0e"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_gwpeg"]
+[ext_resource type="Resource" path="res://data/abilities/lament.tres" id="1_j7f0e"]
+[ext_resource type="Resource" path="res://data/units/vigil_t2.tres" id="2_gwpeg"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_eycon"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="4_8name"]
 
 [resource]
-script = ExtResource("3_gwpeg")
+script = ExtResource("3_eycon")
 id = &"vigil"
 display_name = "Vigil"
 max_hp = 130.0
@@ -13,9 +14,10 @@ attack_speed = 0.7
 move_time = 0.72
 attack_range = 2
 attack_type = 2
-ability = ExtResource("1_2fovy")
+ability = ExtResource("1_j7f0e")
 mana_per_attack = 0.0
 mana_per_ally_death = 25.0
-next_tier = ExtResource("2_j7f0e")
+next_tier = ExtResource("2_gwpeg")
 note = "Its bar does not move when it swings and does not move when it kills. It fills only when your own side loses someone, four deaths to a cast — so it is dead weight in a fight you are winning and the reason you win the one you are losing. Every tier is one more body it hands back."
+sprite = ExtResource("4_8name")
 accent = Color(0.56, 0.6, 0.7, 1)

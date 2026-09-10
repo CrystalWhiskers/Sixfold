@@ -55,6 +55,7 @@ func _ready() -> void:
 	_button.custom_minimum_size = Vector2(260, 56)
 	_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_button.add_theme_font_size_override("font_size", 18)
+	_button.pressed.connect(Audio.play_confirm)
 	_button.pressed.connect(_on_ready)
 	column.add_child(_button)
 

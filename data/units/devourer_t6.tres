@@ -1,10 +1,11 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Resource" path="res://data/abilities/gorge.tres" id="1_knplx"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_wxkr4"]
+[ext_resource type="Resource" path="res://data/abilities/gorge.tres" id="1_wxkr4"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_votu4"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="3_bf0d2"]
 
 [resource]
-script = ExtResource("2_wxkr4")
+script = ExtResource("2_votu4")
 id = &"devourer"
 display_name = "Devourer VI"
 tier = 6
@@ -12,8 +13,9 @@ max_hp = 3840.0
 attack_damage = 640.0
 attack_speed = 0.9
 move_time = 0.44
-ability = ExtResource("1_knplx")
+ability = ExtResource("1_wxkr4")
 mana_per_attack = 0.0
 mana_per_ally_death = 25.0
 note = "Ordinary until your side starts dying. Five of your own buys the change, and after that it is a different unit: far more health, faster hands, faster legs, and every bar it fills from then on arms a swing that deletes whatever it touches, however much health that thing has. It cannot start this itself — something of yours has to fall first."
+sprite = ExtResource("3_bf0d2")
 accent = Color(0.52, 0.24, 0.34, 1)

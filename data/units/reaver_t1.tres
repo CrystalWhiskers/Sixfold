@@ -1,19 +1,21 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Resource" path="res://data/abilities/execute.tres" id="1_ruavh"]
-[ext_resource type="Resource" path="res://data/units/reaver_t2.tres" id="2_7c2j0"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_y2m12"]
+[ext_resource type="Resource" path="res://data/abilities/execute.tres" id="1_7c2j0"]
+[ext_resource type="Resource" path="res://data/units/reaver_t2.tres" id="2_y2m12"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_birs0"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="4_i4oue"]
 
 [resource]
-script = ExtResource("3_y2m12")
+script = ExtResource("3_birs0")
 id = &"reaver"
 display_name = "Reaver"
 max_hp = 95.0
 attack_damage = 34.0
 attack_speed = 1.15
 move_time = 0.34
-ability = ExtResource("1_ruavh")
+ability = ExtResource("1_7c2j0")
 mana_per_attack = 20.0
-next_tier = ExtResource("2_7c2j0")
+next_tier = ExtResource("2_y2m12")
 note = "The hardest, fastest swing in the game, and the fastest legs, behind less health than a Lancer. Everything it does is on the front foot: it wins any exchange it starts and loses any exchange it is caught in."
+sprite = ExtResource("4_i4oue")
 accent = Color(0.74, 0.26, 0.3, 1)

@@ -40,6 +40,7 @@ var _mask: BoardMask = null
 var _last_formation: Dictionary = {}
 var _inspector: UnitInspector = null
 var _banner: Label = null
+var _clock_label: Label = null
 var _handover: HandoverScreen = null
 var _loadouts: Dictionary = {}
 var _active_team := PLAYER_TEAM
@@ -91,6 +92,10 @@ func _on_handover_ready() -> void:
 
 
 func _ready() -> void:
+	# Rolled ONCE, here, and never touched again. The playlist decides which track
+	# a match gets; it does not shuffle between rounds. A match is one piece of
+	# music from the first prep phase to the last body.
+	Audio.play_music(GameSetup.roll_battle_track())
 	# The map decides the board's shape, so it has to be chosen before anything
 	# asks the board how big it is.
 	if GameSetup.maps.is_empty():
@@ -133,8 +138,14 @@ func _ready() -> void:
 	_board_view.cell_pressed.connect(_on_cell_pressed)
 	_board_view.drag_dropped.connect(_on_drag_dropped)
 
+	# Fight gets the bell rather than the confirm click: it IS the round starting,
+	# and two sounds on one press is one too many. Menu keeps the confirm; the
+	# speed toggle stays silent rather than clicking every time you cycle past a
+	# setting.
+	_fight_btn.pressed.connect(Audio.play_round_start)
 	_fight_btn.pressed.connect(_on_fight_pressed)
 	_speed_btn.pressed.connect(_cycle_speed)
+	_menu_btn.pressed.connect(Audio.play_confirm)
 	_menu_btn.pressed.connect(_on_menu_pressed)
 	_update_speed_label()
 
@@ -272,6 +283,41 @@ func _build_buff_bars() -> void:
 	_banner.add_theme_constant_override("shadow_offset_y", 2)
 	_banner.visible = false
 	$UI/Root.add_child(_banner)
+
+	# The round clock. Parked just under the board's top edge, over the opponent's
+	# half, where nothing else is drawn and it is never in the way of a drag.
+	_clock_label = Label.new()
+	_clock_label.position = Vector2(origin.x, origin.y + 4.0)
+	_clock_label.size = Vector2(board_w, 30.0)
+	_clock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_clock_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_clock_label.add_theme_font_size_override("font_size", 22)
+	_clock_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
+	_clock_label.add_theme_constant_override("shadow_offset_x", 2)
+	_clock_label.add_theme_constant_override("shadow_offset_y", 2)
+	_clock_label.visible = false
+	$UI/Root.add_child(_clock_label)
+
+
+func _process(_delta: float) -> void:
+	# The countdown, and the one thing on screen that has to be recomputed every
+	# frame rather than on an event. It follows the PLAYER's clock, not the sim's:
+	# the battle is fully resolved before frame one, so the sim's own elapsed is
+	# already at the end, and at 4x speed the clock has to run at 4x with it or it
+	# would disagree with what you are watching.
+	if _clock_label == null:
+		return
+	var showing := battle_running and _player != null and _player.is_playing()
+	_clock_label.visible = showing
+	if not showing:
+		return
+	var left := maxf(CombatSim.DEFAULT_TIMEOUT - _player.clock(), 0.0)
+	_clock_label.text = "%d:%02d" % [int(left) / 60, int(left) % 60]
+	# Amber for the last thirty seconds, which is also exactly when hits start
+	# escalating — one colour change for both facts, because they arrive together.
+	_clock_label.add_theme_color_override("font_color",
+		Color(0.98, 0.72, 0.36) if left <= CombatSim.DEFAULT_TIMEOUT - CombatSim.SUDDEN_DEATH
+		else Color(0.86, 0.90, 0.96))
 
 
 func _on_counts_changed(team_a: int, team_b: int) -> void:
@@ -503,6 +549,11 @@ func _celebrate_merge(at: Vector2i) -> void:
 	if made == null:
 		return
 	var pos := _board_view.cell_to_pos(at)
+	# Only reached from a human drag — the AI's merges run through
+	# _ai_merge_pass() and never come here, which is what keeps the opponent's
+	# prep phase silent. A merge sound behind the fog would count their units for
+	# you.
+	Audio.play_merge()
 	_board_view.flash_cells([at], Color(1.0, 0.88, 0.52, 0.55), 0.45)
 	_board_view.spawn_label(pos, "T%d" % made.data.tier, Color(1.0, 0.92, 0.62))
 	var v := _board_view.view_for(made.uid)
@@ -513,10 +564,12 @@ func _celebrate_merge(at: Vector2i) -> void:
 func _show_merge_procs(at: Vector2i) -> void:
 	var procs := board.last_merge_procs
 	if procs.get("extra_tier", false):
+		Audio.play_promotion()
 		_board_view.flash_cells([at], Color(1.0, 0.84, 0.35, 0.65), 0.9)
 		_board_view.spawn_label(_board_view.cell_to_pos(at), "PROMOTION!",
 			Color(1.0, 0.86, 0.40))
 	if procs.get("extra_unit", null) != null:
+		Audio.play_windfall()
 		var extra: UnitInstance = procs.extra_unit
 		_board_view.flash_cells([extra.cell], Color(0.55, 0.88, 0.62, 0.65), 0.9)
 		_board_view.spawn_label(_board_view.cell_to_pos(extra.cell), "WINDFALL!",
@@ -905,6 +958,16 @@ func _record_formations() -> void:
 
 func _restore_roster() -> void:
 	board.clear()
+	# The round boundary for terrain as well as for units. A Mason's wall and a
+	# Sapper's hole are battle state, exactly like shields and mana, and they have
+	# to be gone BEFORE deploy cells are worked out below — otherwise last round's
+	# stone is still standing on tiles you are trying to place into, and the map
+	# quietly shrinks a little every round.
+	#
+	# CombatSim.setup() clears it too. That is the belt to this braces: the sim
+	# guarantees a battle starts from the drawn map even in a test that never went
+	# through this function.
+	BoardModel.clear_changes()
 	for entry in _roster:
 		var u: UnitInstance = entry.unit
 		u.reset_for_battle()

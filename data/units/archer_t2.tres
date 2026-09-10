@@ -1,11 +1,12 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Resource" path="res://data/abilities/quickdraw.tres" id="1_gf5jv"]
-[ext_resource type="Resource" path="res://data/units/archer_t3.tres" id="2_um1b0"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_lmgtk"]
+[ext_resource type="Resource" path="res://data/abilities/quickdraw.tres" id="1_um1b0"]
+[ext_resource type="Resource" path="res://data/units/archer_t3.tres" id="2_lmgtk"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_1dksx"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="4_3cknk"]
 
 [resource]
-script = ExtResource("3_lmgtk")
+script = ExtResource("3_1dksx")
 id = &"archer"
 display_name = "Archer II"
 tier = 2
@@ -16,7 +17,8 @@ move_time = 0.5
 attack_range = 3
 sight_range = 5
 attack_type = 1
-ability = ExtResource("1_gf5jv")
-next_tier = ExtResource("2_um1b0")
+ability = ExtResource("1_um1b0")
+next_tier = ExtResource("2_lmgtk")
 note = "Charges fastest of anyone and never stops speeding up. Fold if reached."
+sprite = ExtResource("4_3cknk")
 accent = Color(0.55, 0.62, 0.32, 1)

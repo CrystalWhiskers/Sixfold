@@ -6,8 +6,12 @@
 script = ExtResource("1_gnxui")
 id = &"blight"
 display_name = "Blight"
-description = "Poisons one enemy. Keeps working while the Vexer shoots someone else."
+description = "Poisons one enemy and takes a quarter of the health it has left, immediately. Every half second after that it takes half as much again — a quarter, an eighth, a sixteenth — so it cripples on landing and is spent by the sixth tick. Because it is always a share of what remains, it can never actually kill: the Vexer opens things up and somebody else closes them. While it is on, everything that hits the target lands 5% harder per tier of the Vexer, and the target gains nothing at all — no healing, no shields, no new haste, nothing from its own allies' auras. Keeps working while the Vexer shoots someone else."
 kind = 2
 cast_time = 0.4
-dot_damage = 11.0
+dot_damage = 0.0
 dot_ticks = 6
+dot_vulnerability_per_tier = 0.05
+dot_current_hp_percent = 0.25
+dot_falloff = 0.5
+dot_suppresses = true

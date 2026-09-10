@@ -1,22 +1,24 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Resource" path="res://data/units/sentry_t2.tres" id="1_ut0s4"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_8cibs"]
+[ext_resource type="Resource" path="res://data/units/sentry_t2.tres" id="1_8cibs"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_48xa1"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="3_o07xn"]
 
 [resource]
-script = ExtResource("2_8cibs")
+script = ExtResource("2_48xa1")
 id = &"sentry"
 display_name = "Sentry"
 max_hp = 110.0
 attack_damage = 80.0
 attack_speed = 0.3
 move_time = 0.6
-attack_range = 5
+attack_range = 7
 sight_range = 6
 attack_type = 1
 mana_per_attack = 0.0
 chassis = 1
 can_move = false
-next_tier = ExtResource("1_ut0s4")
+next_tier = ExtResource("1_8cibs")
 note = "Built, not drawn, and the ten seconds it costs to raise are paid for here. It cannot move and it cannot be moved, it sees the whole board, and it fires rarely and enormously. Stone still stops its shot like anyone else's."
+sprite = ExtResource("3_o07xn")
 accent = Color(0.48, 0.55, 0.62, 1)

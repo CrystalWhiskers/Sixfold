@@ -1,11 +1,12 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Resource" path="res://data/abilities/assemble.tres" id="1_wed3a"]
-[ext_resource type="Resource" path="res://data/units/engineer_t3.tres" id="2_sjqik"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_layoo"]
+[ext_resource type="Resource" path="res://data/abilities/assemble.tres" id="1_sjqik"]
+[ext_resource type="Resource" path="res://data/units/engineer_t3.tres" id="2_layoo"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_flx0j"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="4_cy3du"]
 
 [resource]
-script = ExtResource("3_layoo")
+script = ExtResource("3_flx0j")
 id = &"engineer"
 display_name = "Engineer II"
 tier = 2
@@ -13,11 +14,12 @@ max_hp = 260.0
 attack_damage = 16.0
 attack_speed = 0.7
 move_time = 0.5
-ability = ExtResource("1_wed3a")
+ability = ExtResource("1_sjqik")
 mana_per_attack = 0.0
 mana_per_charge = 4.0
 casts_at_battle_start = true
 repair_per_second = 10.0
-next_tier = ExtResource("2_sjqik")
+next_tier = ExtResource("2_layoo")
 note = "Opens every round building a Sentry where it stands, exposed while it works, then steps off and leaves it standing there. Barely fights. It repairs an adjacent friendly Mechanical unit every second, and it will go to a damaged one rather than advance — so it tends its turret instead of dying on someone's spear."
+sprite = ExtResource("4_cy3du")
 accent = Color(0.72, 0.62, 0.3, 1)

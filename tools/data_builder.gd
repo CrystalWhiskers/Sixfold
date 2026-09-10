@@ -47,13 +47,13 @@ const MAP_TABLE := [
 		id = &"killing_field", name = "Killing Field", w = 13, h = 9, neutral = true,
 		rows = [
 			"^^^^^^^^^^^^^",
+			"...//...//...",
 			".............",
 			".............",
 			".............",
 			".............",
 			".............",
-			".............",
-			".............",
+			"...//...//...",
 			"^^^^^^^^^^^^^",
 		],
 		note = "Thirteen wide and shallow, with a firing step along both backs. Almost everything is in range of almost everything from the opening tick.",
@@ -62,17 +62,17 @@ const MAP_TABLE := [
 		id = &"the_steppes", name = "The Steppes", w = 11, h = 13, neutral = true,
 		rows = [
 			"^^^^^^^^^^^",
-			"...........",
+			"..//...//..",
 			"..^^^^^^^..",
-			"...........",
+			"....//.....",
 			"....^^^....",
+			"....//.....",
 			"...........",
-			"...........",
-			"...........",
+			"....//.....",
 			"....^^^....",
-			"...........",
+			"....//.....",
 			"..^^^^^^^..",
-			"...........",
+			"..//...//..",
 			"^^^^^^^^^^^",
 		],
 		note = "Wide open ground in terraces. Every ridge is a range band for whoever gets to it, and the back rank of each side is the highest ground on the board.",
@@ -80,17 +80,17 @@ const MAP_TABLE := [
 	{
 		id = &"the_cauldron", name = "The Cauldron", w = 11, h = 11, neutral = true,
 		rows = [
-			"...........",
+			"..//...//..",
 			".^^^^^^^^^.",
 			".^.......^.",
 			".^.......^.",
 			".^.......^.",
-			".^.......^.",
+			".^/...../^.",
 			".^.......^.",
 			".^.......^.",
 			".^.......^.",
 			".^^^^^^^^^.",
-			"...........",
+			"..//...//..",
 		],
 		note = "A rim of high ground all the way round a low floor. Ranged units want the wall; melee wants them off it.",
 	},
@@ -203,17 +203,36 @@ const MAP_TABLE := [
 			"...........",
 			"...#...#...",
 			"...#...#...",
-			"...#...#...",
-			"...#...#...",
-			"...#...#...",
-			"...#...#...",
-			"...#...#...",
+			"...%...%...",
+			"...%...%...",
+			"...%...%...",
+			"...%...%...",
+			"...%...%...",
 			"...#...#...",
 			"...#...#...",
 			"...........",
 			"...........",
 		],
-		note = "Three lanes, walled off from each other the whole way, meeting only behind each side's own lines. You are not fighting one battle here, you are funding three.",
+		note = "Three lanes, walled off from each other the whole way, meeting only behind each side's own lines. You are not fighting one battle here, you are funding three — unless you brought a Sapper. The middle of both dividing walls is breakable stone: knock a hole in it and the map stops being three fights and becomes one. The stone nearest each base is permanent, so nobody digs straight into your back line.",
+	},
+	{
+		id = &"the_breach", name = "The Breach", w = 11, h = 13, neutral = true,
+		rows = [
+			"...........",
+			"...........",
+			"...........",
+			".%%%#%#%%%.",
+			".%%%%%%%%%.",
+			".%%%#%#%%%.",
+			".%%%%%%%%%.",
+			".%%%#%#%%%.",
+			".%%%%%%%%%.",
+			".%%%#%#%%%.",
+			"...........",
+			"...........",
+			"...........",
+		],
+		note = "A slab of breakable stone filling the whole middle of the board, with permanent pillars through it that nothing can shift. Without a Sapper there are two narrow lanes round the outside and a very long walk; with one you cut your own road through the middle and decide where the fight happens. The pillars mean the slab never fully disappears.",
 	},
 	{
 		id = &"four_corners", name = "Four Corners", w = 11, h = 11, neutral = true,
@@ -255,12 +274,12 @@ const MAP_TABLE := [
 		id = &"the_highlands", name = "The Highlands", w = 6, h = 8, neutral = false,
 		rows = [
 			".^^^^.",
-			"......",
+			"..//..",
 			"..##..",
 			"......",
 			"......",
 			"..##..",
-			"......",
+			"..//..",
 			".^^^^.",
 		],
 		note = "No divider, a boulder in each half, and a long ridge at the back of both. Short, high and mean.",
@@ -273,7 +292,7 @@ const MAP_TABLE := [
 			".........",
 			"..#####..",
 			"..#^^^#..",
-			"...^^^...",
+			"../^^^/..",
 			"..#^^^#..",
 			"..#####..",
 			".........",
@@ -304,13 +323,13 @@ const MAP_TABLE := [
 		rows = [
 			".........",
 			".........",
-			"....^....",
-			"...X.X...",
+			"..../....",
+			"...X/X...",
 			"..X^^^X..",
 			"..X^^^X..",
 			"..X^^^X..",
-			"...X.X...",
-			"....^....",
+			"...X/X...",
+			"..../....",
 			".........",
 			".........",
 		],
@@ -320,6 +339,7 @@ const MAP_TABLE := [
 		id = &"ramparts", name = "Ramparts", w = 7, h = 11, neutral = true,
 		rows = [
 			".^^^^^.",
+			"..//...",
 			".......",
 			".......",
 			".......",
@@ -327,8 +347,7 @@ const MAP_TABLE := [
 			".......",
 			".......",
 			".......",
-			".......",
-			".......",
+			"..//...",
 			".^^^^^.",
 		],
 		lines = [
@@ -358,7 +377,7 @@ const MAP_TABLE := [
 		id = &"the_bridge", name = "The Bridge", w = 7, h = 11, neutral = true,
 		rows = [
 			".......",
-			".......",
+			"./.../.",
 			".^...^.",
 			"XX...XX",
 			"XX...XX",
@@ -366,7 +385,7 @@ const MAP_TABLE := [
 			"XX...XX",
 			"XX...XX",
 			".^...^.",
-			".......",
+			"./.../.",
 			".......",
 		],
 		note = "Two shores joined by a three-wide crossing. Everything has to funnel over it, and the high ground on each bank overlooks the whole span.",
@@ -377,11 +396,11 @@ const MAP_TABLE := [
 			".........",
 			".........",
 			"X.......X",
-			"XX..^..XX",
+			"XX./^..XX",
 			"XXX...XXX",
 			"XXX...XXX",
 			"XXX...XXX",
-			"XX..^..XX",
+			"XX./^..XX",
 			"X.......X",
 			".........",
 			".........",
@@ -394,11 +413,11 @@ const MAP_TABLE := [
 			".........",
 			".........",
 			".^^...^^.",
-			".........",
+			"./...../.",
 			".XXXXXXX.",
 			".XXXXXXX.",
 			".XXXXXXX.",
-			".........",
+			"./...../.",
 			".^^...^^.",
 			".........",
 			".........",
@@ -492,11 +511,11 @@ const MAP_TABLE := [
 		id = &"the_compound", name = "The Compound", w = 12, h = 21, neutral = true,
 		rows = [
 			"..#..#...#..",
-			"^....#.....^",
+			"^/...#..../^",
 			"..#..#...#..",
 			".###.##.###.",
 			"..#......#..",
-			"..#..#.^.#..",
+			"..#..#/^.#..",
 			".....#......",
 			"#.#.####.#.#",
 			"..#......#..",
@@ -506,14 +525,73 @@ const MAP_TABLE := [
 			"..#......#..",
 			"#.#.####.#.#",
 			".....#......",
-			"..#..#.^.#..",
+			"..#..#/^.#..",
 			"..#......#..",
 			".###.##.###.",
 			"..#..#...#..",
-			"^....#.....^",
+			"^/...#..../^",
 			"..#..#...#..",
 		],
 		note = "The biggest board there is: 81 tiles a side, cut into a warren of two- and three-tile rooms. Four gates cross the middle, so a fight here is never one fight — it is six little ones in separate rooms that cannot see each other.",
+	},
+	{
+		id = &"the_terrace", name = "The Terrace", w = 9, h = 15, neutral = true,
+		rows = [
+			".........",
+			".^^^^^^^.",
+			".^^^^^^^.",
+			"..//.//..",
+			".........",
+			".........",
+			".........",
+			".........",
+			".........",
+			".........",
+			".........",
+			"..//.//..",
+			".^^^^^^^.",
+			".^^^^^^^.",
+			".........",
+		],
+		note = "A second layer, and each side gets one. Put your shooters on the terrace and they cannot be touched by any melee unit standing on the ground — not at a penalty, at all — while anything shooting up at them loses a band of range, so a Long-ranged Archer has to walk to Medium to reach. The four staircases in front of each terrace are the only way up, and they are wide enough for two. Everything about this map is the question of whether the assault gets up the stairs before the shooters on top of them win.",
+	},
+	{
+		id = &"the_defile", name = "The Defile", w = 9, h = 13, neutral = true,
+		rows = [
+			".........",
+			".//...//.",
+			".^^...^^.",
+			".^^...^^.",
+			".^^...^^.",
+			".^^...^^.",
+			".^^#.#^^.",
+			".^^...^^.",
+			".^^...^^.",
+			".^^...^^.",
+			".^^...^^.",
+			".//...//.",
+			".........",
+		],
+		note = "One tile wide in the middle, and two raised roads either side of it. Everything on the ground has to come through that single gap; everything on the causeways walks the length of the board untouched by any melee unit below. Taking the low road means a queue. Taking the high road means being seen the whole way and having only two staircases to get off at. There is no third option.",
+	},
+	{
+		id = &"the_crown", name = "The Crown", w = 9, h = 13, neutral = true,
+		rows = [
+			".........",
+			".........",
+			".........",
+			".........",
+			"...///...",
+			"..^^^^^..",
+			"..^^^^^..",
+			"..^^^^^..",
+			"...///...",
+			".........",
+			".........",
+			".........",
+			".........",
+		],
+		note = "One hill, in the middle, and it is nobody's. You may deploy onto your own row of it and so may they, which leaves the crown of it — the middle row — empty and worth more than anything else on the board. Melee cannot reach anyone standing on it from the ground, so taking it means the stairs, and holding it means holding the stairs behind you.",
 	},
 ]
 
@@ -554,6 +632,13 @@ const UNIT_TABLE := [
 		accent = Color(0.45, 0.40, 0.66),
 		ability = &"blight", mana = 12.0,
 		note = "Weak hits, but the fastest attack rate means the bar fills constantly.",
+	},
+	{
+		id = &"stasis", name = "Stasis", hp = 160.0, dmg = 8.0, spd = 1.8,
+		move = 0.48, range = "MEDIUM", sight = 4, type = "SPELL",
+		accent = Color(0.52, 0.72, 0.82),
+		ability = &"arrest", mana = 14.0,
+		note = "The Vexer's colder cousin, and the only unit whose ability is worth more to everyone else than to itself. It hits for very little and fills its bar quickly, and every bar it fills takes one enemy out of the fight for a few seconds and makes it softer for everything you own while it is out. Kill something while it is frozen and it leaves nothing behind: no revival, no corpse to raise, nothing for the other side's scavengers. Against an army built on dying well, that is the whole game.",
 	},
 	{
 		id = &"pyre", name = "Pyre", hp = 90.0, dmg = 7.0, spd = 0.7,
@@ -628,11 +713,39 @@ const UNIT_TABLE := [
 		note = "No ability, no tricks, and slower to swing than anything else on the board. Every merge it touches comes out Transcendence, and at tier 6 it fires a beam across the whole board that takes the rank behind the target with it — once every four seconds, so what it is aimed at matters more than how often.",
 	},
 	{
-		id = &"conjurer", name = "Conjurer", hp = 150.0, dmg = 5.0, spd = 0.6,
+		id = &"conjurer", name = "Conjurer", hp = 190.0, dmg = 7.0, spd = 0.6,
 		move = 0.50, range = "MEDIUM", sight = 4, type = "SPELL",
 		accent = Color(0.62, 0.48, 0.78),
 		ability = &"call_wisp", mana = 26.0, opens = true,
 		note = "Tanky and feeble on its own. Its wisps match its tier and do the work.",
+	},
+	{
+		id = &"culverin", name = "Culverin", hp = 105.0, dmg = 42.0, spd = 0.4,
+		move = 0.58, range = "SNIPER", sight = 5, type = "RANGED",
+		accent = Color(0.70, 0.58, 0.36),
+		ability = &"bombardment", mana = 30.0,
+		note = "The heaviest single shot on the board and the slowest hands holding it — four tiles of reach and one swing every two and a half seconds. Its shell is aimed at whichever enemy has the most company, lands a second and a half later on the tile rather than the unit, and leaves the ground burning behind it. It wants a target that cannot afford to move and hates one that can.",
+	},
+	{
+		id = &"parasite", name = "Parasite", hp = 90.0, dmg = 17.0, spd = 1.4,
+		move = 0.48, range = "LONG", sight = 5, type = "RANGED",
+		accent = Color(0.48, 0.30, 0.44),
+		ability = &"siphon", mana = 18.0, lifesteal = 0.25,
+		note = "Drinks a quarter of everything it deals, from range, quickly. Its bar reaches across the whole board and fastens onto the single biggest thing the other side has — and then takes a fixed slice of that maximum every second whatever happens to it. It is the answer to a tier 6 Transcendence, and it is nearly useless against eight small ones.",
+	},
+	{
+		id = &"colossus", name = "Colossus", hp = 250.0, dmg = 95.0, spd = 0.25,
+		move = 0.90, range = "MELEE", sight = 3, type = "MELEE",
+		accent = Color(0.54, 0.56, 0.62),
+		mana = 0.0, plate = 0.03, plate_cap = 1.0,
+		note = "The slowest thing on the board in both senses — one swing every four seconds, and the longest stride of anyone — for the heaviest ordinary attack in the game. Every single hit it takes adds 3% of its maximum health to its shield, and that is per HIT rather than per point of damage, so a dozen small attacks arm it faster than one enormous one. Feed it a Vexer and it will stand there all day. Hit it once with a Culverin and the shield is gone.",
+	},
+	{
+		id = &"pariah", name = "Pariah", hp = 230.0, dmg = 5.0, spd = 0.85,
+		move = 0.50, range = "MELEE", sight = 4, type = "MELEE",
+		accent = Color(0.44, 0.42, 0.50),
+		mana = 0.0, alone_hp = 0.07, alone_hp_step = 0.025,
+		note = "Thick, and it hits like a wet rope — five damage a swing, less than a Wisp. No ability, no mana bar, nothing. What it has is this: give it room. If no ally of yours is in any of the eight tiles around it when the bell rings, every hit it lands also tears out 12% of whatever it is hitting, however enormous that thing is — and it stays switched on for the whole round whatever happens next. Crowd it and you have wasted a tile. It is the only unit in the game whose damage is decided before anyone has moved.",
 	},
 	{
 		id = &"vigil", name = "Vigil", hp = 130.0, dmg = 10.0, spd = 0.7,
@@ -650,6 +763,20 @@ const UNIT_TABLE := [
 		note = "Field exactly one and it arrives empowered — and empowered it stops being a soldier and becomes a siege engine. Two and a half times the health, four times the damage, and every swing lands on the whole square around what it hit, but it winds up for nearly four seconds between blows. Almost anything out-trades it over ten seconds; almost nothing survives being in the wrong square when it lands. Field two and you get two ordinary Paragons, swinging at ordinary speed. Nothing summoned or merged into one after the bell is ever empowered.",
 	},
 	{
+		id = &"sapper", name = "Sapper", hp = 150.0, dmg = 26.0, spd = 0.9,
+		move = 0.46, range = "MELEE", sight = 4, type = "MELEE",
+		accent = Color(0.66, 0.52, 0.34),
+		ability = &"undermine", mana = 0.0, regen = 8.0, wall_mult = 6.0,
+		note = "Goes at stone the way everything else goes at flesh: six times its own attack damage a swing, so a tier 6 Sapper puts a hole in a map wall almost as fast as it walks to it. It is the only unit that would rather dig than walk round. Once the walls are down that utility is spent, which is why its ordinary combat stats are genuinely good — it has to still be worth its tile in round six.",
+	},
+		{
+		id = &"mason", name = "Mason", hp = 165.0, dmg = 20.0, spd = 0.7,
+		move = 0.50, range = "MELEE", sight = 4, type = "MELEE",
+		accent = Color(0.58, 0.62, 0.56),
+		ability = &"bulwark_raise", mana = 0.0, regen = 7.0, opens = true,
+		note = "Puts its first wall up on the opening bell, before anyone has moved, then another every time its bar fills. The wall blocks movement and sight for both armies — yours included — so where it goes matters far more than how often. Nothing is sealed in forever: anything can chew through stone given long enough, and a Sapper does it in a handful of swings.",
+	},
+		{
 		id = &"devourer", name = "Devourer", hp = 120.0, dmg = 20.0, spd = 0.9,
 		move = 0.44, range = "MELEE", sight = 4, type = "MELEE",
 		accent = Color(0.52, 0.24, 0.34),
@@ -673,7 +800,7 @@ const UNIT_TABLE := [
 		note = "Opens every round building a Sentry where it stands, exposed while it works, then steps off and leaves it standing there. Barely fights. It repairs an adjacent friendly Mechanical unit every second, and it will go to a damaged one rather than advance — so it tends its turret instead of dying on someone's spear.",
 	},
 	{
-		id = &"wisp", name = "Wisp", hp = 34.0, dmg = 7.0, spd = 1.3,
+		id = &"wisp", name = "Wisp", hp = 70.0, dmg = 9.0, spd = 1.3,
 		move = 0.40, range = "MELEE", sight = 3, type = "MELEE",
 		accent = Color(0.70, 0.62, 0.86),
 		mana = 0.0, hidden = true,
@@ -706,8 +833,15 @@ const ABILITY_TABLE := [
 	},
 	{
 		id = &"blight", name = "Blight", kind = "DOT", cast_time = 0.4,
-		desc = "Poisons one enemy. Keeps working while the Vexer shoots someone else.",
-		dot_damage = 11.0, dot_ticks = 6, dot_interval = 0.5,
+		desc = "Poisons one enemy and takes a quarter of the health it has left, immediately. Every half second after that it takes half as much again — a quarter, an eighth, a sixteenth — so it cripples on landing and is spent by the sixth tick. Because it is always a share of what remains, it can never actually kill: the Vexer opens things up and somebody else closes them. While it is on, everything that hits the target lands 5% harder per tier of the Vexer, and the target gains nothing at all — no healing, no shields, no new haste, nothing from its own allies' auras. Keeps working while the Vexer shoots someone else.",
+		dot_damage = 0.0, dot_ticks = 6, dot_interval = 0.5,
+		dot_current_hp_percent = 0.25, dot_falloff = 0.5, dot_suppresses = true,
+		dot_vulnerability_per_tier = 0.05,
+	},
+	{
+		id = &"arrest", name = "Arrest", kind = "FREEZE", cast_time = 0.5,
+		desc = "Stops one enemy dead. It cannot move, swing or cast for 0.9s per tier, it takes 15% more damage per tier from absolutely everything while it stands there, and if it dies frozen then nothing it would have done on death happens at all — no revival, no body to raise, no mana for whatever was waiting to feed on it. Whatever it was in the middle of is dropped, including a cast it had already paid for.",
+		freeze_seconds_per_tier = 0.9, freeze_amp_per_tier = 0.15,
 	},
 	{
 		id = &"cinder_lance", name = "Cinder Lance", kind = "FOCUS_BURST", cast_time = 0.7,
@@ -781,6 +915,29 @@ const ABILITY_TABLE := [
 		ascend_move_mult = 0.66, ascend_mana_per_attack = 20.0,
 	},
 	{
+		id = &"undermine", name = "Undermine", kind = "SAP", cast_time = 1.2,
+		desc = "A shaped charge against the wall beside it, favouring the stone between its army and the enemy — worth four of its own swings, and its swings are already six times what anyone else does to stone. Every unit on the board re-paths the moment a hole appears. Permanent stone is beyond it.",
+		terrain_reach = 1, terrain_tiles = 1, sap_burst_multiple = 4.0,
+	},
+	{
+		id = &"bulwark_raise", name = "Emplace", kind = "BUILD", cast_time = 1.0,
+		desc = "Raises a wall on the tile it is standing on and steps off it, up at the opening bell and again on every full bar — so where you place the Mason is where the wall goes. It blocks movement and sight for both sides equally — including yours — so where it goes matters more than how often. It is stone like any other: a Sapper goes through it quickly, anything else slowly.",
+		terrain_reach = 1, terrain_tiles = 1, wall_hp = 240.0,
+		terrain_at_caster = true,
+	},
+	{
+		id = &"bombardment", name = "Bombardment", kind = "SHELL", cast_time = 0.8,
+		desc = "Picks whichever enemy has the most company and lobs a shell at the ground it is standing on. Three times its own attack, 150% to the tile itself and 100% down each arm of the cross, and the ground burns for six seconds afterwards. It takes a second and a half to come down, and it is aimed at the tile rather than the unit — anything that walks off in the meantime is simply not there when it lands.",
+		shell_attack_multiple = 3.0, shell_direct = 1.5, shell_splash = 1.0,
+		shell_flight = 1.5, shell_arm = 1,
+		field_damage = 0.35, field_seconds = 6.0,
+	},
+	{
+		id = &"siphon", name = "Siphon", kind = "DRAIN", cast_time = 0.5,
+		desc = "Reaches across the whole board — no range limit at all — and fastens onto whichever enemy has the largest maximum health. From then until that unit dies it loses 2.5% of that maximum every second. Shields are not counted, so nothing hides behind one, and the bite does not shrink as the victim wears down. Several Siphons stack on the same victim, and the Parasite heals off every tick of it.",
+		drain_percent = 0.025, drain_interval = 1.0,
+	},
+	{
 		id = &"overflow", name = "Overflow", kind = "MANA_AURA", cast_time = 0.4,
 		desc = "Floods the three-by-three around it. Allies standing inside gain extra mana every second, for the rest of the battle.",
 		mana_aura_radius = 1,
@@ -789,7 +946,7 @@ const ABILITY_TABLE := [
 
 const BUFF_TABLE = [
 	{id = &"mending_wind", name = "Mending Wind", kind = "REGEN", weight = 1.0,
-		b = Vector2(0.01, 0.0), s = Vector2(0.02, 0.0), g = Vector2(0.03, 0.0)},
+		b = Vector2(0.05, 0.0), s = Vector2(0.07, 0.0), g = Vector2(0.10, 0.0)},
 	{id = &"rupture", name = "Rupture", kind = "PERCENT_HP_DAMAGE", weight = 1.0,
 		b = Vector2(0.01, 0.0), s = Vector2(0.02, 0.0), g = Vector2(0.03, 0.0)},
 	{id = &"windfall", name = "Windfall", kind = "MERGE_EXTRA_UNIT", weight = 1.0,
@@ -801,11 +958,11 @@ const BUFF_TABLE = [
 		b = Vector2(0.30, 0.30), s = Vector2(0.60, 0.60), g = Vector2(0.9, 0.9)},
 	{id = &"war_drums", name = "War Drums", kind = "STAT", weight = 1.0,
 		stat_a = "ATTACK_SPEED",
-		b = Vector2(0.15, 0.0), s = Vector2(0.30, 0.0), g = Vector2(0.45, 0.0)},
+		b = Vector2(0.20, 0.0), s = Vector2(0.40, 0.0), g = Vector2(0.60, 0.0)},
 
 	{id = &"ironwall", name = "Ironwall", kind = "STAT", weight = 1.0,
 		unit = &"warden", stat_a = "MAX_HP",
-		b = Vector2(0.50, 0.0), s = Vector2(1.00, 0.0), g = Vector2(1.5, 0.0)},
+		b = Vector2(1.00, 0.0), s = Vector2(1.50, 0.0), g = Vector2(2.0, 0.0)},
 	{id = &"marksmanship", name = "Marksmanship", kind = "STAT", weight = 1.0,
 		unit = &"archer", stat_a = "ATTACK_DAMAGE", stat_b = "ATTACK_SPEED", two = true,
 		b = Vector2(0.25, 0.15), s = Vector2(0.50, 0.30), g = Vector2(0.75, 0.45)},
@@ -873,6 +1030,32 @@ const BUFF_TABLE = [
 	{id = &"gluttony", name = "Gluttony", kind = "STAT", weight = 1.0,
 		unit = &"devourer", stat_a = "MAX_HP", stat_b = "ATTACK_SPEED", two = true,
 		b = Vector2(0.50, 0.20), s = Vector2(1.00, 0.40), g = Vector2(1.50, 0.60)},
+	{id = &"demolition", name = "Demolition", kind = "STAT", weight = 1.0,
+		unit = &"sapper", stat_a = "ATTACK_SPEED", stat_b = "ATTACK_DAMAGE",
+		two = true,
+		b = Vector2(0.15, 0.75), s = Vector2(0.30, 1.50), g = Vector2(0.45, 2.25)},
+	{id = &"bastion", name = "Bastion", kind = "STAT", weight = 1.0,
+		unit = &"mason", stat_a = "MAX_HP",
+		wall_toughness = Vector3(1.0, 2.0, 3.0),
+		b = Vector2(0.50, 0.0), s = Vector2(1.00, 0.0), g = Vector2(1.50, 0.0)},
+	{id = &"enfilade", name = "Enfilade", kind = "STAT", weight = 1.0,
+		unit = &"culverin", stat_a = "ATTACK_SPEED", stat_b = "ATTACK_DAMAGE",
+		two = true,
+		b = Vector2(0.20, 0.75), s = Vector2(0.40, 1.50), g = Vector2(0.60, 2.25)},
+	{id = &"hunger", name = "Hunger", kind = "STAT", weight = 1.0,
+		unit = &"parasite", stat_a = "ATTACK_SPEED", stat_b = "ATTACK_RANGE",
+		two = true, flat_b = true,
+		b = Vector2(0.25, 1.0), s = Vector2(0.50, 2.0), g = Vector2(0.75, 3.0)},
+	{id = &"tempering", name = "Tempering", kind = "STAT", weight = 1.0,
+		unit = &"colossus", stat_a = "MAX_HP",
+		shield_on_hit = Vector3(0.025, 0.05, 0.075),
+		b = Vector2(0.75, 0.0), s = Vector2(1.50, 0.0), g = Vector2(2.25, 0.0)},
+	{id = &"permafrost", name = "Permafrost", kind = "STAT", weight = 1.0,
+		unit = &"stasis", stat_a = "FREEZE_POWER", stat_b = "FREEZE_AMP", two = true,
+		b = Vector2(0.50, 0.25), s = Vector2(0.75, 0.50), g = Vector2(1.00, 1.00)},
+	{id = &"spite", name = "Spite", kind = "STAT", weight = 1.0,
+		unit = &"pariah", stat_a = "ATTACK_SPEED", stat_b = "MAX_HP", two = true,
+		b = Vector2(0.25, 0.50), s = Vector2(0.50, 1.00), g = Vector2(0.75, 1.50)},
 	{id = &"ascension", name = "Ascension", kind = "STAT", weight = 1.0,
 		unit = &"transcendence", stat_a = "MAX_HP", stat_b = "ATTACK_DAMAGE", two = true,
 		b = Vector2(0.50, 0.50), s = Vector2(1.00, 1.00), g = Vector2(1.50, 1.50)},
@@ -901,12 +1084,21 @@ const BUFF_TABLE = [
 		only = "SILVER",
 		b = Vector2(1.0, 0.0), s = Vector2(1.0, 0.0), g = Vector2(1.0, 0.0)},
 	{id = &"mimic", name = "Mimic", kind = "MIMIC", weight = 0.9,
-		b = Vector2(1.0, 0.0), s = Vector2(1.0, 0.0), g = Vector2(2.0, 0.0)},
+		only = "GOLD",
+		b = Vector2(2.0, 0.0), s = Vector2(2.0, 0.0), g = Vector2(2.0, 0.0)},
 ]
 
 
 func build() -> String:
 	print("Generating data for Six by Eleven...")
+	var clash := _duplicate_ids()
+	if clash != "":
+		push_error(clash)
+		return "FAILED — " + clash
+	var stranded := _unreachable_high()
+	if stranded != "":
+		push_error(stranded)
+		return "FAILED — " + stranded
 	_prune_stale()
 	_make_maps()
 	var abilities := _make_abilities()
@@ -919,6 +1111,70 @@ func build() -> String:
 	return "Done. %d units (%d types x %d tiers), %d abilities, %d buffs, %d maps." % [
 		UNIT_TABLE.size() * TIERS, UNIT_TABLE.size(), TIERS,
 		ABILITY_TABLE.size(), BUFF_TABLE.size(), MAP_TABLE.size()]
+
+
+func _duplicate_ids() -> String:
+	# Every id is a FILE NAME, so two rows sharing one means the second silently
+	# overwrites the first and the count printed at the end is a lie: the build
+	# says "36 maps" and writes 35. It has happened once, and it cost an
+	# afternoon of wondering why a new map never turned up. Cheap to check.
+	for pair in [["unit", UNIT_TABLE], ["ability", ABILITY_TABLE],
+			["buff", BUFF_TABLE], ["map", MAP_TABLE]]:
+		var seen := {}
+		for row in pair[1]:
+			var id := String(row.id)
+			if seen.has(id):
+				return "two %s rows share the id '%s' — one would overwrite the other" % [
+					pair[0], id]
+			seen[id] = true
+	return ""
+
+
+func _unreachable_high() -> String:
+	# High ground is a second layer, and the only way onto one is a staircase. So
+	# every connected patch of "^" needs at least one "/" touching it, or it is a
+	# plateau nothing can ever stand on: melee cannot attack into it, nothing can
+	# walk up to it, and it is scenery that looks like terrain.
+	#
+	# Checked here rather than trusted, because it is invisible in the map source
+	# — you have to trace the patch by eye to notice — and because a map is edited
+	# by hand as ASCII, which is exactly the sort of thing that loses a stair to a
+	# stray keystroke.
+	for row in MAP_TABLE:
+		if not row.has("rows"):
+			continue
+		var rows: Array = row.rows
+		var seen := {}
+		for y in rows.size():
+			var line: String = rows[y]
+			for x in line.length():
+				if line[x] != "^" or seen.has(Vector2i(x, y)):
+					continue
+				# Flood the patch, and look for a staircase beside any of it.
+				var patch: Array[Vector2i] = [Vector2i(x, y)]
+				var open_list: Array[Vector2i] = [Vector2i(x, y)]
+				seen[Vector2i(x, y)] = true
+				var reachable := false
+				while not open_list.is_empty():
+					var c: Vector2i = open_list.pop_back()
+					for dy in [-1, 0, 1]:
+						for dx in [-1, 0, 1]:
+							var n := c + Vector2i(dx, dy)
+							if n.y < 0 or n.y >= rows.size():
+								continue
+							var nline: String = rows[n.y]
+							if n.x < 0 or n.x >= nline.length():
+								continue
+							if nline[n.x] == "/":
+								reachable = true
+							elif nline[n.x] == "^" and not seen.has(n):
+								seen[n] = true
+								patch.append(n)
+								open_list.append(n)
+				if not reachable:
+					return "map '%s' has %d high tiles around %s with no stairs touching them" % [
+						row.id, patch.size(), Vector2i(x, y)]
+	return ""
 
 
 func _prune_stale() -> void:
@@ -1030,13 +1286,21 @@ func _make_abilities() -> Dictionary:
 				"summon_persists", "consumes_caster", "summon_adjacent",
 				"guards_caster", "summon_instacasts", "summon_retinue",
 				"opener_takes_time", "exposes_caster", "summon_at_caster",
+				"terrain_reach", "terrain_tiles", "sap_burst_multiple", "wall_hp",
+				"terrain_at_caster",
+				"shell_attack_multiple", "shell_direct", "shell_splash",
+				"shell_flight", "shell_arm", "field_damage", "field_seconds",
+				"drain_percent", "drain_interval",
+				"freeze_seconds_per_tier", "freeze_amp_per_tier",
 				"raise_per_tier", "raise_hp_percent",
 				"ascend_hp_mult", "ascend_attack_speed_mult", "ascend_move_mult",
 				"ascend_mana_per_attack",
 				"holds_when_capped", "taunt_radius", "taunt_duration",
 				"taunt_damage_taken", "requires_empowered",
 				"reflect_resist", "reflect_percent", "reflect_duration",
-				"dot_damage", "dot_ticks", "dot_interval", "burst_damage",
+				"dot_damage", "dot_ticks", "dot_interval", "dot_vulnerability_per_tier",
+				"dot_current_hp_percent", "dot_falloff", "dot_suppresses",
+				"burst_damage",
 				"burst_attack_multiple",
 				"splash_damage", "splash_radius", "pierce_targets", "pierce_damage_mult"]:
 			if row.has(key):
@@ -1058,7 +1322,17 @@ func _link_summons(abilities: Dictionary) -> void:
 		if a.summon_unit == null:
 			push_error("Ability %s wants to summon '%s', which no unit row builds." % [
 				row.id, row.summon])
-		_save(a, "%s/%s.tres" % [ABILITY_DIR, row.id])
+		var path := "%s/%s.tres" % [ABILITY_DIR, row.id]
+		_save(a, path)
+		# Read it straight back. This is the one field in the whole build that is
+		# a reference to another generated file rather than a plain value, so it
+		# is the one that can be written as nothing at all without any error
+		# being raised — and a summoner whose summon quietly went null is a unit
+		# that simply stops working, several tests deep, for no visible reason.
+		# It has happened once. Cheap to check, expensive to debug.
+		var back := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE)
+		if back != null and (back as AbilityData).summon_unit == null:
+			push_error("%s saved without its summon link. Run the generator again." % path)
 
 
 func _make_units(abilities: Dictionary) -> LoadoutData:
@@ -1092,6 +1366,18 @@ func _make_units(abilities: Dictionary) -> LoadoutData:
 			u.note = row.get("note", "")
 			u.mana_per_attack = row.get("mana", 25.0)
 			u.mana_per_ally_death = row.get("grief", 0.0)
+			u.wall_damage_mult = row.get("wall_mult", 0.15)
+			# Written per tier rather than scaled at runtime, because the whole
+			# point of the tier ladder is that the .tres files say what a unit
+			# actually does. A flat step, not the doubling every other stat gets:
+			# this is already a fraction of the VICTIM's maximum health, so the
+			# damage it deals doubles per tier on its own, and doubling the
+			# fraction on top of that would compound into four swings again.
+			u.alone_hp_damage = snappedf(row.get("alone_hp", 0.0) + row.get(
+				"alone_hp_step", 0.0) * float(t - 1), 0.001)
+			u.shield_on_hit = row.get("plate", 0.0)
+			u.shield_cap = row.get("plate_cap", 1.0)
+			u.lifesteal = row.get("lifesteal", 0.0)
 			u.mana_per_charge = row.get("regen", 0.0)
 			u.mana_charge_time = row.get("charge", 1.0)
 			u.keeps_mana = row.get("banks", false)
@@ -1133,6 +1419,7 @@ func _make_units(abilities: Dictionary) -> LoadoutData:
 					u.attack_range = UnitData.RangeBand[apex.range]
 			if row.has("ability"):
 				u.ability = abilities[row.ability]
+			u.sprite = _portrait_for(row.id)
 			u.next_tier = built[0] if not built.is_empty() else null
 			_save(u, "%s/%s_t%d.tres" % [UNITS_DIR, row.id, t])
 			built.push_front(u)
@@ -1183,7 +1470,26 @@ func _make_buffs() -> void:
 			b.uses_third_stat = true
 		b.empowered_cap_at_gold = row.get("empowered_cap_at_gold", 0)
 		b.extra_raises = row.get("extra_raises", Vector3.ZERO)
+		b.wall_toughness = row.get("wall_toughness", Vector3.ZERO)
+		b.shield_on_hit = row.get("shield_on_hit", Vector3.ZERO)
 		_save(b, "%s/%s.tres" % [BUFF_DIR, row.id])
+
+
+const PORTRAIT_DIR := "res://assets/portraits"
+
+
+func _portrait_for(id: StringName) -> Texture2D:
+	# Its own art if there is any, otherwise the shared placeholder, otherwise
+	# nothing at all — and nothing at all is fine, because UnitView falls back to
+	# drawing the unit's letter when `sprite` is null. Adding art for one unit is
+	# dropping one PNG in; it needs no code change and no table edit.
+	var own := "%s/%s.png" % [PORTRAIT_DIR, id]
+	if ResourceLoader.exists(own):
+		return load(own) as Texture2D
+	var stand_in := "%s/placeholder.png" % PORTRAIT_DIR
+	if ResourceLoader.exists(stand_in):
+		return load(stand_in) as Texture2D
+	return null
 
 
 func _numeral(t: int) -> String:

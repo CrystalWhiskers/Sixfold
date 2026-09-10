@@ -21,6 +21,7 @@ config/icon="res://icon.svg"
 EventBus="*res://autoload/event_bus.gd"
 MatchState="*res://autoload/match_state.gd"
 GameSetup="*res://autoload/game_setup.gd"
+Audio="*res://autoload/audio.gd"
 
 [display]
 

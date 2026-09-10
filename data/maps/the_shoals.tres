@@ -6,7 +6,7 @@
 script = ExtResource("1_788ge")
 id = &"the_shoals"
 display_name = "The Shoals"
-rank = 28
+rank = 29
 width = 11
 rows = PackedStringArray("...XX.XX...", "...XX.XX...", "...........", "XX.XXXXX.XX", "XX.XXXXX.XX", "...........", "XX.XXXXX.XX", "XX.XXXXX.XX", "...........", "...XX.XX...", "...XX.XX...")
 note = "Islands joined by necks a single tile wide. Nothing here blocks a shot and almost everything blocks a step, so the necks are killing grounds long before anything reaches them."

@@ -1,11 +1,12 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Resource" path="res://data/abilities/benediction.tres" id="1_pen6y"]
-[ext_resource type="Resource" path="res://data/units/seraph_t2.tres" id="2_70537"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_pru1y"]
+[ext_resource type="Resource" path="res://data/abilities/benediction.tres" id="1_70537"]
+[ext_resource type="Resource" path="res://data/units/seraph_t2.tres" id="2_pru1y"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_sku24"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="4_l2vrq"]
 
 [resource]
-script = ExtResource("3_pru1y")
+script = ExtResource("3_sku24")
 id = &"seraph"
 display_name = "Seraph"
 max_hp = 95.0
@@ -14,8 +15,9 @@ attack_speed = 0.95
 move_time = 0.48
 attack_range = 2
 attack_type = 1
-ability = ExtResource("1_pen6y")
+ability = ExtResource("1_70537")
 mana_per_attack = 34.0
-next_tier = ExtResource("2_70537")
+next_tier = ExtResource("2_pru1y")
 note = "Fills its bar fast and dumps it all into whoever is closest to dying."
+sprite = ExtResource("4_l2vrq")
 accent = Color(0.55, 0.8, 0.75, 1)

@@ -50,6 +50,8 @@ func _ready() -> void:
 	add_child(_main)
 	_main._player.speed = 80.0
 	_check_unbound_board_survives()
+	_check_every_sound_loaded()
+	_check_aura_zone_overlay()
 
 
 func _process(_delta: float) -> void:
@@ -121,7 +123,13 @@ func _process(_delta: float) -> void:
 				return
 			_main._on_fight_pressed()
 		MatchState.Phase.MATCH_END:
-			_check("match ended with a winner", MatchState.match_winner() >= 0)
+			# A drawn round costs both sides a life, so both can cross the line
+			# together and a drawn MATCH is now a legal outcome. What has to hold is
+			# that somebody actually ran out of lives, not that somebody won.
+			_check("match ended because a side ran out of lives",
+				MatchState.wins[0] >= MatchState.WINS_NEEDED
+				or MatchState.wins[1] >= MatchState.WINS_NEEDED,
+				"scores %d-%d" % [MatchState.wins[0], MatchState.wins[1]])
 			_report()
 			return
 
@@ -479,6 +487,7 @@ func _do_prep() -> void:
 	_hold_checked = false
 	_start_hold_checked = false
 	_check_inspector()
+	_check_wheel_zoom()
 	_check("the force bar is out of the way during prep",
 		_main._force == null or not _main._force.visible)
 	_check_rosters()
@@ -501,6 +510,244 @@ func _do_prep() -> void:
 	_roster_before = _main.board.all_units().size()
 	_main._on_fight_pressed()
 	_check_fog_lifted()
+
+
+var _wheel_checked := false
+
+
+func _check_wheel_zoom() -> void:
+	# Pushed through the real viewport as a real event, not by calling zoom_by().
+	# Note the anchor-under-the-cursor behaviour is NOT covered: headless has no
+	# real pointer, so get_global_mouse_position() does not follow the synthesised
+	# event and every scroll here anchors on the window centre. What this proves
+	# is the delivery path and the clamping, which is what actually broke.
+	# The point of this test is the delivery path — whether a scroll actually
+	# reaches BoardView._unhandled_input and is acted on — because the first
+	# version of wheel zoom was wired up correctly and still did nothing, and no
+	# test of the zoom maths would ever have caught it.
+	if _wheel_checked:
+		return
+	_wheel_checked = true
+	var view: BoardView = _main._board_view
+	var before := view.zoom
+	var scale_before := view.tile_size
+
+	var over := view.view_area.get_center()
+	_send_wheel(MOUSE_BUTTON_WHEEL_UP, over)
+	_check("scrolling up over the board zooms in", view.zoom > before,
+		"zoom stayed at %.2f" % view.zoom)
+	_check("and the tiles actually got bigger", view.tile_size > scale_before,
+		"tile size stayed at %.0f" % view.tile_size)
+
+	var mid := view.zoom
+	_send_wheel(MOUSE_BUTTON_WHEEL_DOWN, over)
+	_check("scrolling down zooms back out", view.zoom < mid,
+		"zoom stayed at %.2f" % view.zoom)
+
+	# Off the board it must still be harmless rather than crash or run away.
+	_send_wheel(MOUSE_BUTTON_WHEEL_UP, Vector2(-500.0, -500.0))
+	_check("a scroll away from the board is still safe",
+		view.zoom >= BoardView.MIN_ZOOM and view.zoom <= BoardView.MAX_ZOOM,
+		"zoom went to %.2f" % view.zoom)
+
+	# And it must clamp rather than run off in either direction.
+	for i in 40:
+		_send_wheel(MOUSE_BUTTON_WHEEL_UP, over)
+	_check("zooming in stops at the limit",
+		view.zoom <= BoardView.MAX_ZOOM + 0.001,
+		"zoom reached %.2f" % view.zoom)
+	for i in 60:
+		_send_wheel(MOUSE_BUTTON_WHEEL_DOWN, over)
+	_check("and zooming out stops at the other one",
+		view.zoom >= BoardView.MIN_ZOOM - 0.001,
+		"zoom reached %.2f" % view.zoom)
+	_check("the tiles never shrink past readable",
+		view.tile_size >= BoardView.FLOOR_TILE,
+		"tiles are %.0f" % view.tile_size)
+
+	view.reset_zoom()
+	_check("reset puts it back to a plain fit",
+		is_equal_approx(view.zoom, 1.0))
+
+
+func _send_wheel(button: int, at: Vector2) -> void:
+	var down := InputEventMouseButton.new()
+	down.button_index = button
+	down.pressed = true
+	down.position = at
+	down.global_position = at
+	Input.warp_mouse(at)
+	get_tree().root.push_input(down)
+	var up := InputEventMouseButton.new()
+	up.button_index = button
+	up.pressed = false
+	up.position = at
+	up.global_position = at
+	get_tree().root.push_input(up)
+
+
+func _check_aura_zone_overlay() -> void:
+	# The Wellspring's reach used to be emitted by the sim and handled by nobody,
+	# so the one unit whose whole job is an area of effect showed no area at all.
+	# The zone is persistent state on the board rather than a timed flash, so what
+	# is worth asserting is that it goes in, survives, and comes out again.
+	var view: BoardView = _main._board_view
+	_check("the board starts with no aura zones", view._aura_zones.is_empty())
+	view.add_aura_zone(4242, 2, BoardModel.TEAM_B)
+	_check("a cast registers one", view._aura_zones.has(4242))
+	_check("and it remembers how far it reaches",
+		int(view._aura_zones[4242].radius) == 2,
+		"radius %d" % int(view._aura_zones[4242].radius))
+	# Idempotent: the Wellspring emits this on its opening instacast and again on
+	# every later cast, and that is one zone, not four.
+	view.add_aura_zone(4242, 2, BoardModel.TEAM_B)
+	view.add_aura_zone(4242, 2, BoardModel.TEAM_B)
+	_check("casting again does not stack a second one",
+		view._aura_zones.size() == 1, "%d zones" % view._aura_zones.size())
+	view.clear_aura_zone(4242)
+	_check("and it goes when the caster dies", view._aura_zones.is_empty())
+	view.add_aura_zone(4243, 1, BoardModel.TEAM_A)
+	view.clear_aura_zones()
+	_check("a new round starts clean", view._aura_zones.is_empty())
+
+
+func _check_every_sound_loaded() -> void:
+	# A renamed or missing .wav does not crash anything — Audio warns and carries
+	# on silently, which is the right behaviour at runtime and a terrible one to
+	# find out about by noticing a sound stopped happening. So the file list gets
+	# asserted here instead. Autoloads exist in a scene test, which is why this
+	# lives in the smoke suite and not in run_tests.
+	_check("six melee swings loaded", Audio._melee.size() == 6,
+		"%d loaded" % Audio._melee.size())
+	_check("two ranged shots loaded", Audio._ranged.size() == 2,
+		"%d loaded" % Audio._ranged.size())
+
+	for pair in [
+		["laser", Audio._laser], ["critical", Audio._crit],
+		["merge", Audio._merge], ["promotion", Audio._promotion],
+		["windfall", Audio._windfall], ["death", Audio._death],
+		["confirm", Audio._confirm], ["round start", Audio._round_start],
+		["select", Audio._select], ["pickup", Audio._pickup],
+	]:
+		_check("the %s sound loaded" % pair[0], pair[1] != null)
+	_check("melee is mixed below everything else",
+		Audio.MELEE_DB < Audio.SFX_DB,
+		"melee %.0f dB against %.0f dB" % [Audio.MELEE_DB, Audio.SFX_DB])
+	_check("and a crit is mixed above it", Audio.CRIT_DB > Audio.MELEE_DB)
+	_check_voice_lines()
+
+
+func _check_voice_lines() -> void:
+	# The Warden is the only unit with a voice, and it is placeholder material
+	# that is going to be deleted. So this asserts the MECHANISM, not the Warden:
+	# that a unit with lines finds them, that a unit without lines is silent
+	# rather than broken, and that the two pools stay separate.
+	Audio.prime_voice("warden")
+	var warden: Dictionary = Audio._voice_lines.get("warden", {})
+	_check("the Warden's death lines loaded",
+		warden.get("death", []).size() == 6,
+		"%d loaded" % warden.get("death", []).size())
+	_check("and its overkill lines loaded separately",
+		warden.get("overkill", []).size() == 3,
+		"%d loaded" % warden.get("overkill", []).size())
+
+	# The pools must not share a stream. If the overkill line is also in the
+	# ordinary pool then "exclusively on overkill" is not true, however the
+	# picking works.
+	var shared := 0
+	for s in warden.get("overkill", []):
+		if warden.get("death", []).has(s):
+			shared += 1
+	_check("no line is in both pools", shared == 0, "%d shared" % shared)
+
+	# Every other unit. Deleting the Warden's files should leave the game working
+	# exactly like this, which is what makes the removal a one-step job.
+	var full := load(GameSetup.BASE_LOADOUT) as LoadoutData
+	var quiet := 0
+	for u in full.units:
+		Audio.prime_voice(String(u.id))
+		var lines: Dictionary = Audio._voice_lines.get(String(u.id), {})
+		if lines.get("death", []).is_empty() and lines.get("overkill", []).is_empty():
+			quiet += 1
+	_check("every other unit is voiceless and none of them errored",
+		quiet == full.units.size() - 1,
+		"%d of %d quiet" % [quiet, full.units.size()])
+
+	# Calling it for a unit with nothing must be a no-op, not a crash. This is the
+	# line that runs on every death in the game.
+	Audio.play_death_voice("no_such_unit", true)
+	Audio.play_death_voice("", false)
+	_check("asking for a voice nobody has is harmless", true)
+
+	# The actual behaviour, not just the file lists: fire each kind a number of
+	# times and look at what the voices were handed. Twenty draws from a pool of
+	# three or six makes "it happened to pick the right one" not an explanation.
+	_check("an overkill only ever plays an overkill line",
+		_voices_drawn_from("warden", true, warden.get("overkill", []), 20))
+	_check("and an ordinary death never plays one",
+		_voices_drawn_from("warden", false, warden.get("death", []), 20))
+	_check_a_death_actually_speaks(warden)
+
+
+func _check_a_death_actually_speaks(warden: Dictionary) -> void:
+	# The two checks above prove Audio picks the right pool. This one proves
+	# anybody CALLS it: without this, deleting the line from BattlePlayer leaves
+	# every check in this suite green and the game silent.
+	var view := BoardView.new()
+	add_child(view)
+	var player := BattlePlayer.new()
+	add_child(player)
+	var empty: Array[Dictionary] = []
+	player.play(view, empty, {})
+
+	for v in Audio._voices:
+		v.stream = null
+	player._kill({uid = 4242, cell = Vector2i(2, 2), unit_id = "warden",
+		overkill = true, killer_uid = 1})
+	var heard_overkill := false
+	for v in Audio._voices:
+		if v.stream != null and warden.get("overkill", []).has(v.stream):
+			heard_overkill = true
+	_check("a death played through the view speaks an overkill line",
+		heard_overkill)
+
+	for v in Audio._voices:
+		v.stream = null
+	player._kill({uid = 4243, cell = Vector2i(3, 3), unit_id = "warden",
+		overkill = false, killer_uid = 1})
+	var heard_ordinary := false
+	for v in Audio._voices:
+		if v.stream != null and warden.get("death", []).has(v.stream):
+			heard_ordinary = true
+	_check("and an ordinary one speaks an ordinary line", heard_ordinary)
+
+	player.queue_free()
+	view.queue_free()
+	_check("a voice sits above the death thump it lands on",
+		Audio.VOICE_DB > Audio.DEATH_DB)
+	_check("and an overkill sits above an ordinary line",
+		Audio.OVERKILL_DB > Audio.VOICE_DB)
+
+
+func _voices_drawn_from(unit_id: String, overkill: bool,
+		allowed: Array, draws: int) -> bool:
+	# Reads the stream each pooled player was actually handed. That is as close to
+	# "what did the player hear" as a headless test can get, and it is the only
+	# way to catch a pool being picked from the wrong list.
+	for i in draws:
+		for v in Audio._voices:
+			v.stream = null
+		Audio.play_death_voice(unit_id, overkill)
+		var found := false
+		for v in Audio._voices:
+			if v.stream == null:
+				continue
+			if not allowed.has(v.stream):
+				return false
+			found = true
+		if not found:
+			return false
+	return true
 
 
 func _check_unbound_board_survives() -> void:

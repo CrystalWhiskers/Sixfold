@@ -47,6 +47,16 @@ func play(view: BoardView, events: Array[Dictionary], units := {}) -> void:
 	_flight.clear()
 	_deferred.clear()
 	_counts = [0, 0]
+	# Last round's zones are not this round's. Cleared here rather than at the end
+	# of playback, so the board still shows them during the round-end hold.
+	view.clear_aura_zones()
+	# Pull every voice line this round could need off disk now, while nothing is
+	# moving. Doing it lazily would put the load on the first death of the battle,
+	# which is the worst possible moment for a hitch.
+	for uid in _units:
+		var u: UnitInstance = _units[uid]
+		if u != null and u.data != null:
+			Audio.prime_voice(String(u.data.id))
 	set_process(true)
 	_announce_counts()
 
@@ -58,6 +68,13 @@ func stop() -> void:
 
 func is_playing() -> bool:
 	return _playing
+
+
+func clock() -> float:
+	# Battle time as the VIEWER is experiencing it, which is what a countdown on
+	# screen has to count. The sim resolved the whole round before frame one, so
+	# its own `elapsed` is already at the end and is no use here.
+	return _clock
 
 
 func _process(delta: float) -> void:
@@ -111,6 +128,32 @@ func _apply(e: Dictionary) -> void:
 				ev.queue_redraw()
 			_view.spawn_label(_view.cell_to_pos(e.cell), "EMPOWERED",
 				Color(1.00, 0.86, 0.42))
+		"freeze":
+			# Held for as long as the freeze lasts rather than the usual flash, so
+			# the tile is readable the whole time the unit is missing its turns.
+			var fv := _view.view_for(e.uid)
+			if fv != null:
+				fv.queue_redraw()
+			_view.flash_cells([e.cell], Color(0.60, 0.82, 0.95, 0.50),
+				maxf(float(e.seconds), 0.4))
+			_view.spawn_label(_view.cell_to_pos(e.cell), "FROZEN",
+				Color(0.66, 0.87, 1.00))
+		"aura_zone":
+			# Persistent, unlike every other overlay here: the Wellspring's reach is
+			# on screen from its opening instacast until it dies, so this hands the
+			# board a zone to keep rather than a flash to count down.
+			_view.add_aura_zone(int(e.uid), int(e.get("radius", 1)), int(e.team))
+		"thaw":
+			var tv := _view.view_for(e.uid)
+			if tv != null:
+				tv.queue_redraw()
+		"isolated":
+			# Fired at the bell, before anything has moved, so the player finds out
+			# whether their placement worked at the one moment they can still learn
+			# from it. Cold grey-blue: this is not a buff being handed out, it is a
+			# unit confirming it got the room it needed.
+			_view.spawn_label(_view.cell_to_pos(e.cell), "ISOLATED",
+				Color(0.72, 0.78, 0.90))
 		"ascend":
 			# Its health bar has to be rebuilt, not just refilled: the maximum
 			# moved, so a view still holding the old one draws it permanently full.
@@ -121,6 +164,73 @@ func _apply(e: Dictionary) -> void:
 			_hp[e.uid] = {cur = float(e.hp), max = float(e.max_hp)}
 			_view.spawn_label(_view.cell_to_pos(e.cell), "ASCENDED",
 				Color(0.92, 0.40, 0.48))
+		"shell_away":
+			# The shot leaves now and lands later, so the view shows the arc AND
+			# marks the ground it is aimed at — the whole point of the flight time
+			# is that you get to see where it will land and move.
+			var away: Vector2 = _pos.get(e.uid, _view.cell_to_pos(e.from))
+			_view.spawn_shot(away, _view.cell_to_pos(e.cell),
+				float(e.flight) / maxf(speed, 0.01), true)
+			var marked: Array[Vector2i] = []
+			for c in e.get("cells", []):
+				marked.append(c)
+			_view.flash_cells(marked, Color(0.95, 0.55, 0.25, 0.30),
+				float(e.flight) / maxf(speed, 0.01))
+		"shell_land":
+			var blast: Array[Vector2i] = []
+			for c in e.get("cells", []):
+				blast.append(c)
+			_view.flash_cells(blast, Color(0.99, 0.72, 0.30, 0.60), 0.45)
+			_view.spawn_label(_view.cell_to_pos(e.cell), "IMPACT",
+				Color(0.99, 0.72, 0.30))
+		"field_up":
+			var lit: Array[Vector2i] = []
+			for c in e.get("cells", []):
+				lit.append(c)
+			# Held for the field's whole life, so the burning ground stays visible
+			# the entire time it is dangerous rather than blinking once.
+			_view.flash_cells(lit, Color(0.92, 0.42, 0.20, 0.28),
+				float(e.seconds) / maxf(speed, 0.01))
+		"field_down":
+			pass
+		"drain_start":
+			_view.spawn_label(_view.cell_to_pos(e.cell), "SIPHONED",
+				Color(0.72, 0.42, 0.68))
+		"drain_end":
+			pass
+		"harden":
+			# The shield bar already moves off the "shield" event; this is the
+			# feedback that says WHY it moved, which is the whole read on this
+			# unit — you want to see it thickening as it is being pecked at.
+			var kv := _view.view_for(e.uid)
+			if kv != null:
+				kv.set_shield(float(e.shield))
+				kv.queue_redraw()
+		"wall_hit":
+			# Chips of stone, and a redraw so the wall visibly loses height. The
+			# "terrain" event still follows on the blow that finishes it.
+			_view.flash_cells([e.cell], Color(0.86, 0.72, 0.42, 0.35), 0.25)
+			var hv := _view.view_for(e.uid)
+			if hv != null:
+				_lunges[e.uid] = {
+					dir = (Vector2(e.cell) - Vector2(e.from)).normalized(),
+					left = LUNGE_TIME,
+				}
+			_view.queue_redraw()
+		"terrain":
+			# The sim already changed BoardModel — this event exists so the view
+			# knows to repaint and to flash the tiles, not to carry the change.
+			var touched: Array[Vector2i] = []
+			for c in e.get("broken", []):
+				touched.append(c)
+			if not touched.is_empty():
+				_view.flash_cells(touched, Color(0.86, 0.72, 0.42, 0.60), 0.6)
+			var built: Array[Vector2i] = []
+			for c in e.get("raised", []):
+				built.append(c)
+			if not built.is_empty():
+				_view.flash_cells(built, Color(0.62, 0.68, 0.78, 0.60), 0.6)
+			_view.queue_redraw()
 		"taunt_end":
 			var tv := _view.view_for(e.uid)
 			if tv != null:
@@ -207,6 +317,10 @@ func _begin_attack(e: Dictionary) -> void:
 	var tiles := from.distance_to(to) / maxf(_view.tile_size, 1.0)
 
 	var shooter: UnitInstance = _units.get(e.uid, null)
+	# On the SWING, not on the hit: a shot in flight should be heard leaving the
+	# bow, and the crack of the hit is a separate sound a moment later.
+	if shooter != null:
+		Audio.play_attack(shooter.data.attack_type, shooter.data.beam_attack)
 	if shooter != null and shooter.data.beam_attack:
 		# Instant and unending: no travel time, and it runs past whoever it hit.
 		_view.spawn_beam(from, to, BEAM_COLOR, shooter.data.beam_endless)
@@ -233,7 +347,7 @@ func _schedule_damage(e: Dictionary) -> void:
 func _schedule_death(e: Dictionary) -> void:
 	var delay: float = _flight.get(e.uid, 0.0)
 	if delay <= 0.0:
-		_kill(e.uid)
+		_kill(e)
 		return
 	_deferred.append({due = _clock + delay, kind = "death", event = e})
 
@@ -249,6 +363,11 @@ func _show_ability(e: Dictionary) -> void:
 			if e.has("target_cell"):
 				_view.spawn_shot(at, _view.cell_to_pos(e.target_cell), 0.18, true)
 				_view.flash_cells([e.target_cell], Color(0.55, 0.85, 0.40, 0.45), 0.5)
+		AbilityData.Kind.FREEZE:
+			# The bolt only. The FROZEN label and the tile are drawn off the
+			# "freeze" event below, which carries how long it actually lasted.
+			if e.has("target_cell"):
+				_view.spawn_shot(at, _view.cell_to_pos(e.target_cell), 0.14, true)
 		AbilityData.Kind.FOCUS_BURST:
 			var cells: Array[Vector2i] = []
 			for c in e.get("cells", []):
@@ -295,6 +414,16 @@ func _show_ability(e: Dictionary) -> void:
 				graves.append(c)
 			_view.flash_cells(graves, Color(0.58, 0.72, 0.86, 0.55), 0.6)
 			_view.spawn_label(at, "RISE", Color(0.72, 0.82, 0.94))
+		AbilityData.Kind.SAP:
+			if bool(e.get("wasted", false)):
+				_view.spawn_label(at, "NO STONE", Color(0.62, 0.66, 0.74))
+				return
+			_view.spawn_label(at, "BREACH", Color(0.86, 0.72, 0.42))
+		AbilityData.Kind.BUILD:
+			if bool(e.get("wasted", false)):
+				_view.spawn_label(at, "NO ROOM", Color(0.62, 0.66, 0.74))
+				return
+			_view.spawn_label(at, "EMPLACED", Color(0.70, 0.76, 0.86))
 		AbilityData.Kind.ASCEND:
 			# Two different things share this ability, so they need two labels:
 			# the one-off change, and the armed swing that follows every later bar.
@@ -319,7 +448,10 @@ func _hit(e: Dictionary) -> void:
 	_hp[e.uid] = {cur = float(e.hp), max = float(_hp.get(e.uid, {}).get("max", 1.0))}
 	var v := _view.view_for(e.uid)
 	var at: Vector2 = _pos.get(e.uid, _view.cell_to_pos(e.cell))
-	_view.spawn_damage(at, float(e.amount), bool(e.get("spell", false)))
+	var crit := bool(e.get("crit", false))
+	if crit:
+		Audio.play_crit()
+	_view.spawn_damage(at, float(e.amount), bool(e.get("spell", false)), crit)
 	if v != null:
 		v.set_hp(float(e.hp), v.hp_max)
 		v.set_shield(float(e.get("shield", 0.0)))
@@ -411,7 +543,30 @@ func _heal(e: Dictionary) -> void:
 		_view.spawn_label(at, "+%d" % roundi(float(e.amount)), Color(0.45, 0.82, 0.48))
 
 
-func _kill(uid: int) -> void:
+func _unit_id_of(uid: int, e: Dictionary) -> String:
+	# The event first, because it is the only source that is guaranteed to exist:
+	# a test replays a log with no roster behind it, and the roster is gone for a
+	# summon that was never in it.
+	var from_event := String(e.get("unit_id", ""))
+	if not from_event.is_empty():
+		return from_event
+	var u: UnitInstance = _units.get(uid, null)
+	return String(u.data.id) if u != null and u.data != null else ""
+
+
+func _kill(e: Dictionary) -> void:
+	var uid := int(e.uid)
+	# The zone belongs to the caster, so it goes when the caster does.
+	_view.clear_aura_zone(uid)
+	# Here rather than in _schedule_death, so the sound lands with the body and
+	# not with the arrow leaving the bow. Both teams: the fog lifts when the
+	# battle starts, so there is nothing left to give away.
+	Audio.play_death()
+	# On top of the thump, from the same moment. Which line depends on whether the
+	# blow that landed was bigger than the unit's whole health bar — the sim
+	# decided that when it dealt the damage and put the answer on the event,
+	# because it is the only place that ever saw the number.
+	Audio.play_death_voice(_unit_id_of(uid, e), bool(e.get("overkill", false)))
 	_view.kill_view(uid)
 	_moves.erase(uid)
 	_lunges.erase(uid)
@@ -438,7 +593,7 @@ func _advance_deferred() -> void:
 		if d.kind == "damage":
 			_hit(d.event)
 		else:
-			_kill(d.event.uid)
+			_kill(d.event)
 			_flight.erase(d.event.uid)
 		_deferred.remove_at(i)
 

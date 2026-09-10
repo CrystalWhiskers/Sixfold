@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_tue10"]
+
+[resource]
+script = ExtResource("1_tue10")
+id = &"spite"
+display_name = "Spite"
+unit_id = &"pariah"
+bronze = Vector2(0.25, 0.5)
+silver = Vector2(0.5, 1)
+gold = Vector2(0.75, 1.5)
+stat_a = 2
+stat_b = 0
+uses_second_stat = true

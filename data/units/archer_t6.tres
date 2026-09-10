@@ -1,10 +1,11 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Resource" path="res://data/abilities/quickdraw.tres" id="1_uxruc"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_mwl3i"]
+[ext_resource type="Resource" path="res://data/abilities/quickdraw.tres" id="1_mwl3i"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_ybn42"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="3_e6bj5"]
 
 [resource]
-script = ExtResource("2_mwl3i")
+script = ExtResource("2_ybn42")
 id = &"archer"
 display_name = "Archer VI"
 tier = 6
@@ -15,6 +16,7 @@ move_time = 0.5
 attack_range = 3
 sight_range = 5
 attack_type = 1
-ability = ExtResource("1_uxruc")
+ability = ExtResource("1_mwl3i")
 note = "Charges fastest of anyone and never stops speeding up. Fold if reached."
+sprite = ExtResource("3_e6bj5")
 accent = Color(0.55, 0.62, 0.32, 1)

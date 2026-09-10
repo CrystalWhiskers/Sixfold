@@ -7,12 +7,18 @@ enum AttackType {
 	SPELL,
 }
 
+## The value IS the tile count, which is why new bands are only ever appended at
+## the top. Inserting one in the middle would silently re-reach every unit above
+## it — MEDIUM becoming 3 would hand a tile to the Vexer, the Pyre, the Seraph,
+## the Conjurer and the Wellspring at once.
 enum RangeBand {
 	MELEE = 1,
 	MEDIUM = 2,
 	LONG = 3,
 	SNIPER = 4,
-	UNLIMITED = 5,
+	SIEGE = 5,
+	HORIZON = 6,
+	UNLIMITED = 7,
 }
 
 const RANGE_NAMES := {
@@ -20,8 +26,15 @@ const RANGE_NAMES := {
 	RangeBand.MEDIUM: "Medium",
 	RangeBand.LONG: "Long",
 	RangeBand.SNIPER: "Sniper",
+	RangeBand.SIEGE: "Siege",
+	RangeBand.HORIZON: "Horizon",
 	RangeBand.UNLIMITED: "Unlimited",
 }
+
+## The highest band a unit may be *printed* at. Everything above it exists to be
+## reached through buffs, which is what keeps a range bonus feeling like a real
+## prize rather than a rounding error.
+const MAX_PRINTED_BAND := RangeBand.SNIPER
 
 const UNLIMITED_TILES := 100
 
@@ -34,7 +47,7 @@ const UNLIMITED_TILES := 100
 @export var attack_damage: float = 10.0
 @export var attack_speed: float = 1.0
 @export var move_time: float = 0.45
-@export_range(1, 5) var attack_range: int = RangeBand.MELEE
+@export_range(1, 7) var attack_range: int = RangeBand.MELEE
 @export var sight_range: int = 4
 @export var attack_type: AttackType = AttackType.MELEE
 
@@ -71,6 +84,11 @@ const CHASSIS_NAMES := {
 ## applied. 0.15 is 15% off every hit, all the time, with no upkeep.
 @export_range(0.0, 0.9) var damage_resist: float = 0.0
 
+## Fraction of the damage it deals that comes back as health, always, with no
+## upkeep. The Bloodletting buff adds to this rather than replacing it — same
+## shape as damage_resist and the RESIST stat.
+@export_range(0.0, 1.0) var lifesteal: float = 0.0
+
 ## Health restored every second to each adjacent friendly MECHANICAL unit. This
 ## is a trait rather than an ability, because the unit that has it already spends
 ## its ability slot on building the thing it repairs.
@@ -93,6 +111,40 @@ const CHASSIS_NAMES := {
 
 ## The radius its ordinary attack splashes over once empowered. 1 is a 3x3.
 @export var empower_splash_radius: int = 0
+
+## What fraction of its attack damage a swing does to stone. Everyone can chew
+## through a wall eventually — that is what stops an army being sealed in
+## permanently — but at 0.15 an ordinary unit needs a very long time and would
+## much rather walk round. A Sapper is set far above 1.0, and because this is a
+## multiple of attack damage rather than a flat number, its digging speed doubles
+## with every tier for free.
+@export var wall_damage_mult: float = 0.15
+
+## Shield gained every time this unit is HIT, as a fraction of its max health.
+## Per hit, deliberately — not per point of damage taken — which is the whole
+## unit: a dozen small attacks feed it far more than one enormous one, so it eats
+## a Vexer alive and folds to a Culverin.
+##
+## The shield goes up AFTER the blow that caused it lands, so there is no free
+## first hit; what it buys is the next one.
+@export var shield_on_hit: float = 0.0
+
+## How much shield it may hold at once, as a fraction of max health. Without a cap
+## a slow attacker could never out-pace the gain and the unit would simply stop
+## dying. It still can stop dying against genuinely feeble attacks — that is what
+## it is FOR — and sudden death is what eventually breaks the lock.
+@export var shield_cap: float = 1.0
+
+## While this unit is the LAST ONE ALIVE on its side, every hit it lands also
+## takes this fraction of the target's maximum health. Its ordinary attack is
+## deliberately pitiful, so this is not a bonus on top of a real unit — it is the
+## entire unit, and it does nothing at all until its army is gone.
+##
+## Not the same thing as `solo_empower`, which asks "am I the only one of my
+## KIND" and is decided once at the opening bell. This asks "is anyone else of
+## mine still standing" and is asked live, on every single hit, so it switches on
+## the moment the last ally falls and switches off again if one gets back up.
+@export var alone_hp_damage: float = 0.0
 
 ## Every friendly unit within this many tiles takes `burden_percent` more damage.
 ## A cost the unit imposes on its own side, not a debuff on the enemy.
@@ -165,3 +217,14 @@ func chassis_name() -> String:
 
 func is_mechanical() -> bool:
 	return chassis == Chassis.MECHANICAL
+
+
+func breaks_walls() -> bool:
+	# "This unit is in the demolition business", which decides how eagerly it
+	# paths into stone. Above 1.0 means one swing is worth more than an ordinary
+	# swing at flesh, which nothing but a Sapper has any business being.
+	return wall_damage_mult >= 1.0
+
+
+func wall_damage() -> float:
+	return attack_damage * maxf(wall_damage_mult, 0.0)

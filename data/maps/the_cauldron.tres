@@ -8,5 +8,5 @@ id = &"the_cauldron"
 display_name = "The Cauldron"
 rank = 9
 width = 11
-rows = PackedStringArray("...........", ".^^^^^^^^^.", ".^.......^.", ".^.......^.", ".^.......^.", ".^.......^.", ".^.......^.", ".^.......^.", ".^.......^.", ".^^^^^^^^^.", "...........")
+rows = PackedStringArray("..//...//..", ".^^^^^^^^^.", ".^.......^.", ".^.......^.", ".^.......^.", ".^/...../^.", ".^.......^.", ".^.......^.", ".^.......^.", ".^^^^^^^^^.", "..//...//..")
 note = "A rim of high ground all the way round a low floor. Ranged units want the wall; melee wants them off it."

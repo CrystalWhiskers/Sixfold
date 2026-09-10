@@ -6,7 +6,7 @@
 script = ExtResource("1_i4l0w")
 id = &"four_corners"
 display_name = "Four Corners"
-rank = 17
+rank = 18
 width = 11
 rows = PackedStringArray(".....#.....", ".....#.....", ".....#.....", ".....#.....", "##.#####.##", "...........", "##.#####.##", ".....#.....", ".....#.....", ".....#.....", ".....#.....")
 note = "Two rooms each side, one gate each, and a single hallway across the middle. You commit to a left or a right before you know where they went."

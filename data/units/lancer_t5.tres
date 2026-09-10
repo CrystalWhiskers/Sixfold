@@ -1,11 +1,12 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Resource" path="res://data/abilities/impale.tres" id="1_3bc62"]
-[ext_resource type="Resource" path="res://data/units/lancer_t6.tres" id="2_hu7ni"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_p3krt"]
+[ext_resource type="Resource" path="res://data/abilities/impale.tres" id="1_hu7ni"]
+[ext_resource type="Resource" path="res://data/units/lancer_t6.tres" id="2_p3krt"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_orcsq"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="4_yhjk0"]
 
 [resource]
-script = ExtResource("3_p3krt")
+script = ExtResource("3_orcsq")
 id = &"lancer"
 display_name = "Lancer V"
 tier = 5
@@ -13,8 +14,9 @@ max_hp = 1520.0
 attack_damage = 256.0
 attack_speed = 1.1
 move_time = 0.36
-ability = ExtResource("1_3bc62")
+ability = ExtResource("1_hu7ni")
 pierce_targets = 2
-next_tier = ExtResource("2_hu7ni")
+next_tier = ExtResource("2_p3krt")
 note = "Every swing already cuts through two. The ability makes it three, harder."
+sprite = ExtResource("4_yhjk0")
 accent = Color(0.72, 0.35, 0.28, 1)

@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_rtutl"]
+
+[resource]
+script = ExtResource("1_rtutl")
+id = &"undermine"
+display_name = "Undermine"
+description = "A shaped charge against the wall beside it, favouring the stone between its army and the enemy — worth four of its own swings, and its swings are already six times what anyone else does to stone. Every unit on the board re-paths the moment a hole appears. Permanent stone is beyond it."
+kind = 15
+cast_time = 1.2

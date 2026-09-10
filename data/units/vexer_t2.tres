@@ -1,11 +1,12 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Resource" path="res://data/abilities/blight.tres" id="1_3vpb8"]
-[ext_resource type="Resource" path="res://data/units/vexer_t3.tres" id="2_use1e"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_f767d"]
+[ext_resource type="Resource" path="res://data/abilities/blight.tres" id="1_use1e"]
+[ext_resource type="Resource" path="res://data/units/vexer_t3.tres" id="2_f767d"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_6firk"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="4_qil4o"]
 
 [resource]
-script = ExtResource("3_f767d")
+script = ExtResource("3_6firk")
 id = &"vexer"
 display_name = "Vexer II"
 tier = 2
@@ -14,8 +15,9 @@ attack_damage = 12.0
 attack_speed = 2.4
 attack_range = 2
 attack_type = 1
-ability = ExtResource("1_3vpb8")
+ability = ExtResource("1_use1e")
 mana_per_attack = 12.0
-next_tier = ExtResource("2_use1e")
+next_tier = ExtResource("2_f767d")
 note = "Weak hits, but the fastest attack rate means the bar fills constantly."
+sprite = ExtResource("4_qil4o")
 accent = Color(0.45, 0.4, 0.66, 1)

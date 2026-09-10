@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_31g7k"]
+
+[resource]
+script = ExtResource("1_31g7k")
+id = &"hunger"
+display_name = "Hunger"
+unit_id = &"parasite"
+bronze = Vector2(0.25, 1)
+silver = Vector2(0.5, 2)
+gold = Vector2(0.75, 3)
+stat_a = 2
+stat_b = 4
+uses_second_stat = true
+flat_b = true

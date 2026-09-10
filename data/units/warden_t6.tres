@@ -1,10 +1,11 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Resource" path="res://data/abilities/bulwark_shield.tres" id="1_3a5kw"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_mf048"]
+[ext_resource type="Resource" path="res://data/abilities/bulwark_shield.tres" id="1_mf048"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_462tp"]
+[ext_resource type="Texture2D" path="res://assets/portraits/warden.png" id="3_2o0tw"]
 
 [resource]
-script = ExtResource("2_mf048")
+script = ExtResource("2_462tp")
 id = &"warden"
 display_name = "Warden VI"
 tier = 6
@@ -13,8 +14,9 @@ attack_damage = 1088.0
 attack_speed = 0.35
 move_time = 0.85
 sight_range = 3
-ability = ExtResource("1_3a5kw")
+ability = ExtResource("1_mf048")
 mana_per_attack = 20.0
 casts_at_battle_start = true
 note = "Slow to swing and slower to walk, but hits like a truck behind a shield bigger than itself."
+sprite = ExtResource("3_2o0tw")
 accent = Color(0.38, 0.47, 0.6, 1)

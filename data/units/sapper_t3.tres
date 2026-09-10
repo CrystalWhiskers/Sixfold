@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/abilities/undermine.tres" id="1_41pp8"]
+[ext_resource type="Resource" path="res://data/units/sapper_t4.tres" id="2_apoqh"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_5hoo7"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="4_wqq51"]
+
+[resource]
+script = ExtResource("3_5hoo7")
+id = &"sapper"
+display_name = "Sapper III"
+tier = 3
+max_hp = 600.0
+attack_damage = 104.0
+attack_speed = 0.9
+move_time = 0.46
+ability = ExtResource("1_41pp8")
+mana_per_attack = 0.0
+mana_per_charge = 8.0
+wall_damage_mult = 6.0
+next_tier = ExtResource("2_apoqh")
+note = "Goes at stone the way everything else goes at flesh: six times its own attack damage a swing, so a tier 6 Sapper puts a hole in a map wall almost as fast as it walks to it. It is the only unit that would rather dig than walk round. Once the walls are down that utility is spent, which is why its ordinary combat stats are genuinely good — it has to still be worth its tile in round six."
+sprite = ExtResource("4_wqq51")
+accent = Color(0.66, 0.52, 0.34, 1)

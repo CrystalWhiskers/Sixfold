@@ -1,19 +1,21 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Resource" path="res://data/units/wisp_t5.tres" id="1_hto4k"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_0fdr7"]
+[ext_resource type="Resource" path="res://data/units/wisp_t5.tres" id="1_0fdr7"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_4kufx"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="3_b3wwx"]
 
 [resource]
-script = ExtResource("2_0fdr7")
+script = ExtResource("2_4kufx")
 id = &"wisp"
 display_name = "Wisp IV"
 tier = 4
-max_hp = 272.0
-attack_damage = 56.0
+max_hp = 560.0
+attack_damage = 72.0
 attack_speed = 1.3
 move_time = 0.4
 sight_range = 3
 mana_per_attack = 0.0
-next_tier = ExtResource("1_hto4k")
+next_tier = ExtResource("1_0fdr7")
 note = "Summoned only. Never drawn, never merged, gone when the round ends."
+sprite = ExtResource("3_b3wwx")
 accent = Color(0.7, 0.62, 0.86, 1)

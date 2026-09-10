@@ -49,6 +49,18 @@ const RARITY_COLORS := [
 ## of its own — the buff is still a max-health buff, this is what makes it the
 ## Vigil's max-health buff rather than anyone's.
 @export var extra_raises: Vector3 = Vector3.ZERO
+
+## Extra toughness on walls raised by whatever this buff covers, bronze/silver/
+## gold, as a fraction. 1.0 is "twice as hard to knock down". Another rider on a
+## stat buff, like extra_raises — the buff is still a max-health buff, this is
+## what makes it the Mason's.
+@export var wall_toughness: Vector3 = Vector3.ZERO
+
+## Extra shield-per-hit for whatever this buff covers, bronze/silver/gold, as a
+## fraction of max health. Another rider on a stat buff, like extra_raises and
+## wall_toughness — the buff is still a max-health buff, this is what makes it the
+## Colossus's.
+@export var shield_on_hit: Vector3 = Vector3.ZERO
 @export var weight: float = 1.0
 @export var exclusive_rarity: int = -1
 
@@ -149,6 +161,24 @@ func extra_raises_at(r: Rarity) -> int:
 	return roundi(extra_raises.z)
 
 
+func shield_on_hit_at(r: Rarity) -> float:
+	match r:
+		Rarity.BRONZE:
+			return shield_on_hit.x
+		Rarity.SILVER:
+			return shield_on_hit.y
+	return shield_on_hit.z
+
+
+func wall_toughness_at(r: Rarity) -> float:
+	match r:
+		Rarity.BRONZE:
+			return wall_toughness.x
+		Rarity.SILVER:
+			return wall_toughness.y
+	return wall_toughness.z
+
+
 func third_magnitude(r: Rarity) -> float:
 	match r:
 		Rarity.BRONZE:
@@ -176,6 +206,12 @@ func describe(r: Rarity) -> String:
 			var raises := extra_raises_at(r)
 			if raises > 0:
 				line += "  Each of them calls back %d more of the fallen per cast." % raises
+			var tough := wall_toughness_at(r)
+			if tough > 0.0:
+				line += "  The walls it raises are %s harder to bring down." % _bare(tough)
+			var plate := shield_on_hit_at(r)
+			if plate > 0.0:
+				line += "  Every hit it takes also adds %s of its max health to its shield." % _bare(plate)
 			return line
 		Kind.REGEN:
 			return "Allies heal %s of max health every second." % _bare(m.x)

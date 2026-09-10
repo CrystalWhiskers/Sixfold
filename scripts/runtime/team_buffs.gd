@@ -113,6 +113,28 @@ func extra_raises_for(u: UnitInstance) -> int:
 	return extra
 
 
+func wall_toughness_for(u: UnitInstance) -> float:
+	# Summed like extra_raises, and for the same reason: two picks that both feed
+	# the Mason should both count.
+	var extra := 0.0
+	for p in picks:
+		var buff: BuffData = p.buff
+		if buff.kind != BuffData.Kind.STAT or not buff.applies_to(u):
+			continue
+		extra += buff.wall_toughness_at(p.rarity)
+	return extra
+
+
+func shield_on_hit_for(u: UnitInstance) -> float:
+	var extra := 0.0
+	for p in picks:
+		var buff: BuffData = p.buff
+		if buff.kind != BuffData.Kind.STAT or not buff.applies_to(u):
+			continue
+		extra += buff.shield_on_hit_at(p.rarity)
+	return extra
+
+
 func wild_merge() -> bool:
 	for p in picks:
 		if p.buff.kind == BuffData.Kind.WILD_MERGE:

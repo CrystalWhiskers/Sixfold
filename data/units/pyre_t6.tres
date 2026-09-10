@@ -1,10 +1,11 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Resource" path="res://data/abilities/cinder_lance.tres" id="1_i828x"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_41pm4"]
+[ext_resource type="Resource" path="res://data/abilities/cinder_lance.tres" id="1_41pm4"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_itqcd"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="3_xc6da"]
 
 [resource]
-script = ExtResource("2_41pm4")
+script = ExtResource("2_itqcd")
 id = &"pyre"
 display_name = "Pyre VI"
 tier = 6
@@ -14,7 +15,8 @@ attack_speed = 0.7
 move_time = 0.55
 attack_range = 2
 attack_type = 2
-ability = ExtResource("1_i828x")
+ability = ExtResource("1_41pm4")
 mana_per_attack = 34.0
 note = "Ordinary attacks are feeble. Everything rides on landing the burst."
+sprite = ExtResource("3_xc6da")
 accent = Color(0.78, 0.55, 0.22, 1)

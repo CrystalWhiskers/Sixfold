@@ -1,10 +1,11 @@
 [gd_resource type="Resource" script_class="UnitData" format=3]
 
-[ext_resource type="Resource" path="res://data/abilities/lament.tres" id="1_breaq"]
-[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_81gpw"]
+[ext_resource type="Resource" path="res://data/abilities/lament.tres" id="1_81gpw"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_q8pb7"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="3_h6tp7"]
 
 [resource]
-script = ExtResource("2_81gpw")
+script = ExtResource("2_q8pb7")
 id = &"vigil"
 display_name = "Vigil VI"
 tier = 6
@@ -14,8 +15,9 @@ attack_speed = 0.7
 move_time = 0.72
 attack_range = 2
 attack_type = 2
-ability = ExtResource("1_breaq")
+ability = ExtResource("1_81gpw")
 mana_per_attack = 0.0
 mana_per_ally_death = 25.0
 note = "Its bar does not move when it swings and does not move when it kills. It fills only when your own side loses someone, four deaths to a cast — so it is dead weight in a fight you are winning and the reason you win the one you are losing. Every tier is one more body it hands back."
+sprite = ExtResource("3_h6tp7")
 accent = Color(0.56, 0.6, 0.7, 1)

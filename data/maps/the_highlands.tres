@@ -6,8 +6,8 @@
 script = ExtResource("1_k8lp2")
 id = &"the_highlands"
 display_name = "The Highlands"
-rank = 19
+rank = 20
 height = 8
 has_neutral = false
-rows = PackedStringArray(".^^^^.", "......", "..##..", "......", "......", "..##..", "......", ".^^^^.")
+rows = PackedStringArray(".^^^^.", "..//..", "..##..", "......", "......", "..##..", "..//..", ".^^^^.")
 note = "No divider, a boulder in each half, and a long ridge at the back of both. Short, high and mean."

@@ -6,7 +6,20 @@ const OPEN := "."
 const WALL := "#"
 const VOID := "X"
 const HIGH := "^"
-const GLYPHS := ".#X^"
+
+## Stone a Sapper can chew through. It behaves exactly like WALL for movement,
+## sight and deployment — the only difference is that it can stop existing
+## mid-battle. A map that wants some walls to be permanent uses WALL for those,
+## which is why this is a second glyph rather than a flag on the first.
+const RUBBLE := "%"
+
+## The only way onto high ground on foot. An ordinary tile in every other
+## respect — you can stand on it, shoot from it and be hit on it exactly as if it
+## were open ground — but a unit may only step ONTO a HIGH tile from a STAIRS
+## tile or from another HIGH one. Without a set of these, a plateau is scenery.
+const STAIRS := "/"
+
+const GLYPHS := ".#X^%/"
 
 @export var id: StringName = &""
 @export var display_name: String = "Map"
@@ -50,7 +63,12 @@ func glyph(c: Vector2i) -> String:
 
 
 func is_wall(c: Vector2i) -> bool:
-	return glyph(c) == WALL
+	var g := glyph(c)
+	return g == WALL or g == RUBBLE
+
+
+func is_breakable(c: Vector2i) -> bool:
+	return glyph(c) == RUBBLE
 
 
 func is_void(c: Vector2i) -> bool:
@@ -61,9 +79,13 @@ func is_high(c: Vector2i) -> bool:
 	return glyph(c) == HIGH
 
 
+func is_stairs(c: Vector2i) -> bool:
+	return glyph(c) == STAIRS
+
+
 func blocked(c: Vector2i) -> bool:
 	var g := glyph(c)
-	return g == WALL or g == VOID
+	return g == WALL or g == VOID or g == RUBBLE
 
 
 func mirror(c: Vector2i) -> Vector2i:
@@ -115,7 +137,7 @@ func summary() -> String:
 
 
 func terrain_note() -> String:
-	var counts := {WALL: 0, VOID: 0, HIGH: 0}
+	var counts := {WALL: 0, VOID: 0, HIGH: 0, RUBBLE: 0, STAIRS: 0}
 	for y in height:
 		for x in width:
 			var g := glyph(Vector2i(x, y))
@@ -128,8 +150,12 @@ func terrain_note() -> String:
 		parts.append("%d walls" % counts[WALL])
 	if not lines.is_empty():
 		parts.append("%d barriers" % lines.size())
+	if counts[RUBBLE] > 0:
+		parts.append("%d breakable" % counts[RUBBLE])
 	if counts[HIGH] > 0:
 		parts.append("%d high ground" % counts[HIGH])
+	if counts[STAIRS] > 0:
+		parts.append("%d stairs" % counts[STAIRS])
 	return ", ".join(parts)
 
 

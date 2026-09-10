@@ -46,6 +46,11 @@ var cast_guarded := false
 var pop_t := 0.0
 var merge_target := false
 
+# Whose side the person watching is on. The enemy's letters are drawn upside
+# down, which turns out to read faster than colour alone: at a glance the board
+# separates into "letters I can read" and "letters I cannot".
+var player_team := BoardModel.TEAM_B
+
 @onready var _sprite: Sprite2D = $Sprite
 
 
@@ -70,14 +75,12 @@ func bind(p_unit: UnitInstance) -> void:
 func _refresh_sprite() -> void:
 	if _sprite == null:
 		return
-	if unit != null and unit.data.sprite != null:
-		_sprite.texture = unit.data.sprite
-		_sprite.visible = true
-		var tex_size := _sprite.texture.get_size()
-		var fit := (tile_size - 10.0) / maxf(maxf(tex_size.x, tex_size.y), 1.0)
-		_sprite.scale = Vector2(fit, fit)
-	else:
-		_sprite.visible = false
+	# The portrait is NOT drawn by this Sprite2D. It is drawn inside _draw(), so
+	# it can sit between the plate and the team ring; a child node always renders
+	# above its parent's own drawing, and z_index cannot fix that without also
+	# dropping it behind the board's tiles — which is exactly what happened when
+	# this tried to. The node stays for scenes that set a custom `view_scene`.
+	_sprite.visible = false
 
 
 func set_hp(cur: float, maxv: float) -> void:
@@ -275,16 +278,43 @@ func _draw() -> void:
 	var tier := unit.data.tier
 	var tint := tier_color(tier)
 
-	if unit.data.sprite == null:
-		var fill: Color = unit.data.accent.lerp(tint, 0.06 * float(tier - 1))
-		fill.a = alpha
-		draw_rect(body, fill, true)
+	# The plate the unit sits on, drawn whether or not there is a portrait. With a
+	# portrait it is the muted ground the art reads against; without one it is the
+	# unit's whole colour. Same rect either way, so a unit that gains art later
+	# keeps its footprint exactly.
+	var fill: Color = unit.data.accent.lerp(tint, 0.06 * float(tier - 1))
+	if unit.data.sprite != null:
+		# Behind art, the accent has to stop competing with it: pulled most of the
+		# way to grey and darkened well below the portrait's own midtones. It is
+		# there to say whose unit this is and what tier, not to be looked at.
+		fill = fill.lerp(Color(0.16, 0.17, 0.20), 0.62).darkened(0.15)
+	fill.a = alpha
+	draw_rect(body, fill, true)
+
+	if unit.data.sprite != null:
+		# Inset inside the plate so a rim of the muted ground shows all the way
+		# round, and drawn HERE — after the plate, before the ring and the bars —
+		# so nothing readable ends up underneath it.
+		var art := body.grow(-4.0)
+		draw_texture_rect(unit.data.sprite, art, false, Color(1, 1, 1, alpha))
+	else:
 		var initial := String(unit.data.display_name).substr(0, 1).to_upper()
 		var font := ThemeDB.fallback_font
 		var size := 30
 		var w := font.get_string_size(initial, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
-		draw_string(font, Vector2(-w * 0.5, 10.0), initial,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color(0, 0, 0, 0.65 * alpha))
+		var ink := Color(0, 0, 0, 0.65 * alpha)
+		if unit.team == player_team:
+			draw_string(font, Vector2(-w * 0.5, 10.0), initial,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, size, ink)
+		else:
+			# Rotated about the tile's own centre rather than the text baseline,
+			# or the letter walks off the square. draw_set_transform replaces the
+			# canvas transform outright, so it has to be reset afterwards — the
+			# health bar and everything below draw in plain local space.
+			draw_set_transform(Vector2.ZERO, PI, Vector2.ONE)
+			draw_string(font, Vector2(-w * 0.5, 10.0), initial,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, size, ink)
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 	var ring := team_color()
 	ring.a = alpha

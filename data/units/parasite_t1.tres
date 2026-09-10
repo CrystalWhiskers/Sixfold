@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/abilities/siphon.tres" id="1_wu2l7"]
+[ext_resource type="Resource" path="res://data/units/parasite_t2.tres" id="2_bbvqx"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_coixi"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="4_txg7p"]
+
+[resource]
+script = ExtResource("3_coixi")
+id = &"parasite"
+display_name = "Parasite"
+max_hp = 90.0
+attack_damage = 17.0
+attack_speed = 1.4
+move_time = 0.48
+attack_range = 3
+sight_range = 5
+attack_type = 1
+ability = ExtResource("1_wu2l7")
+mana_per_attack = 18.0
+lifesteal = 0.25
+next_tier = ExtResource("2_bbvqx")
+note = "Drinks a quarter of everything it deals, from range, quickly. Its bar reaches across the whole board and fastens onto the single biggest thing the other side has — and then takes a fixed slice of that maximum every second whatever happens to it. It is the answer to a tier 6 Transcendence, and it is nearly useless against eight small ones."
+sprite = ExtResource("4_txg7p")
+accent = Color(0.48, 0.3, 0.44, 1)

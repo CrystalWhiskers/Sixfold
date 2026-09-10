@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_r82e6"]
+
+[resource]
+script = ExtResource("1_r82e6")
+id = &"bombardment"
+display_name = "Bombardment"
+description = "Picks whichever enemy has the most company and lobs a shell at the ground it is standing on. Three times its own attack, 150% to the tile itself and 100% down each arm of the cross, and the ground burns for six seconds afterwards. It takes a second and a half to come down, and it is aimed at the tile rather than the unit — anything that walks off in the meantime is simply not there when it lands."
+kind = 17
+cast_time = 0.8
+shell_flight = 1.5
+field_seconds = 6.0
