@@ -22,6 +22,7 @@ enum Kind {
 	SHELL,
 	DRAIN,
 	FREEZE,
+	CHARGE,
 }
 
 @export var id: StringName = &""
@@ -123,12 +124,37 @@ enum Kind {
 @export var heal_percent_per_tier: float = 0.20
 @export var heal_radius: int = 3
 
+## Whether the heal also lifts the target's debuffs. Kept as a flag on the
+## ability rather than baked into BURST_HEAL, so a second healer can exist that
+## only heals — cleansing is a thing an ability does, not a thing healing is.
+@export var cleanses: bool = false
+
+@export_group("Charge")
+## A multiple of the caster's own attack damage, per tier. A charge at 1.5 on a
+## tier 3 hits for 4.5x its attack — off attack rather than a flat number, so it
+## rides every buff that sharpens the unit and needs no separate tier table.
+@export var charge_damage_per_tier: float = 0.0
+
+## Seconds of stun, per tier. A tier 3 charger at 0.4 stuns for 1.2s.
+@export var stun_seconds_per_tier: float = 0.0
+
+## How far it will run before giving up. The board is eleven tall, so anything at
+## or above that is "the whole board".
+@export var charge_distance: int = 11
+
 @export_group("Summon")
 @export var summon_unit: UnitData = null
 @export var summon_max: int = 3
 @export var summon_count: int = 1
 @export var summon_random: bool = false
 @export var summon_cap_by_tier: bool = true
+
+## How fast the cap climbs with tier, when summon_cap_by_tier is on. 0.5 is one
+## more every two tiers — 1 at tiers 1-2, 2 at 3-4, 3 at 5-6 — which is what the
+## Engineer's sentries and most retinues want. 1.0 is one more every tier, which
+## is the Conjurer: six wisps at tier 6. The cap is always clamped to summon_max,
+## so that number is still the real ceiling.
+@export var summon_per_tier: float = 0.5
 @export var summon_persists: bool = false
 @export var consumes_caster: bool = false
 @export var summon_adjacent: bool = true

@@ -20,6 +20,7 @@ enum Kind {
 	TIER_GIFT,
 	SACRIFICE,
 	MIMIC,
+	ROUND_SHIELD,
 }
 
 const ONE_SHOT_KINDS := [Kind.BOARD_FILL, Kind.TIER_GIFT, Kind.SACRIFICE,
@@ -61,6 +62,29 @@ const RARITY_COLORS := [
 ## wall_toughness — the buff is still a max-health buff, this is what makes it the
 ## Colossus's.
 @export var shield_on_hit: Vector3 = Vector3.ZERO
+
+## Extra units per cast for whatever this buff covers, bronze/silver/gold. The
+## summoning counterpart of extra_raises: that one feeds the Vigil's RAISE, this
+## one feeds a SUMMON, which is what the Spire uses.
+@export var extra_summons: Vector3 = Vector3.ZERO
+
+## Extra stun SECONDS, flat, bronze/silver/gold. Flat rather than a percentage
+## because a share of a stun is a number nobody can feel — "one second longer" is
+## one you can count on the board.
+@export var stun_bonus: Vector3 = Vector3.ZERO
+
+## Extra charge damage as a fraction, bronze/silver/gold. 0.5 is +50%.
+@export var charge_bonus: Vector3 = Vector3.ZERO
+
+## A tier ceiling. Zero means no ceiling — every buff in the game until now. Set
+## it and the buff only touches units at or below that tier, which is a different
+## axis from unit_id: "all units, but only the small ones" is not something a
+## unit list can express.
+##
+## Checked live in applies_to(), so a unit that MERGES past the ceiling loses the
+## buff at the next resync — which is the round boundary. That is the honest
+## reading: it is a buff for small units, and the unit stopped being small.
+@export var max_tier: int = 0
 @export var weight: float = 1.0
 @export var exclusive_rarity: int = -1
 
@@ -98,10 +122,14 @@ func magnitude(r: Rarity) -> Vector2:
 
 
 func applies_to(u: UnitInstance) -> bool:
-	if unit_id == &"":
-		return true
 	if u == null or u.data == null:
 		return false
+	# The tier ceiling comes first, because it applies to global buffs too and a
+	# global buff returns early below.
+	if max_tier > 0 and u.data.tier > max_tier:
+		return false
+	if unit_id == &"":
+		return true
 	return u.data.id == unit_id or also_units.has(u.data.id)
 
 
@@ -143,13 +171,35 @@ func modifiers_for(r: Rarity) -> Array[StatModifier]:
 	var mode := StatModifier.Mode.FLAT if flat else StatModifier.Mode.PERCENT
 	var mode_b := StatModifier.Mode.FLAT if flat_b else StatModifier.Mode.PERCENT
 	if not is_zero_approx(m.x):
-		out.append(StatModifier.make(stat_a, mode, m.x))
+		out.append(StatModifier.make(stat_a, mode, _signed(stat_a, mode, m.x)))
 	if uses_second_stat and not is_zero_approx(m.y):
-		out.append(StatModifier.make(stat_b, mode_b, m.y))
+		out.append(StatModifier.make(stat_b, mode_b, _signed(stat_b, mode_b, m.y)))
 	var extra := third_magnitude(r)
 	if uses_third_stat and not is_zero_approx(extra):
 		out.append(StatModifier.make(stat_c, StatModifier.Mode.PERCENT, extra))
 	return out
+
+
+static func _signed(s: StatModifier.Stat, mode: StatModifier.Mode,
+		value: float) -> float:
+	## Turns "faster" into the number the stat actually wants.
+	##
+	## MOVE_TIME is seconds per tile: LOWER is faster. Every other stat in the game
+	## is the other way round. So a buff row written the way a player reads it —
+	## "movement speed +50%" — has to come out of here as the move_time multiplier
+	## that produces it, which is a NEGATIVE percentage.
+	##
+	## +50% speed means covering a tile in 1/1.5 of the time, so the multiplier is
+	## 0.667 and the percentage is -0.333. Writing -0.333 in the buff table instead
+	## would work and would be a trap: the next person to add a movement buff would
+	## read the row as "-33% movement" and put +0.50 there, and the buff would make
+	## the whole army slower with nothing to show it had gone wrong.
+	if mode != StatModifier.Mode.PERCENT:
+		return value
+	if not (s in StatModifier.INVERTED_STATS):
+		return value
+	# A speed increase can never reach zero time, and a decrease is just slower.
+	return 1.0 / (1.0 + value) - 1.0 if value > -1.0 else value
 
 
 func extra_raises_at(r: Rarity) -> int:
@@ -159,6 +209,33 @@ func extra_raises_at(r: Rarity) -> int:
 		Rarity.SILVER:
 			return roundi(extra_raises.y)
 	return roundi(extra_raises.z)
+
+
+func extra_summons_at(r: Rarity) -> int:
+	match r:
+		Rarity.BRONZE:
+			return roundi(extra_summons.x)
+		Rarity.SILVER:
+			return roundi(extra_summons.y)
+	return roundi(extra_summons.z)
+
+
+func stun_bonus_at(r: Rarity) -> float:
+	match r:
+		Rarity.BRONZE:
+			return stun_bonus.x
+		Rarity.SILVER:
+			return stun_bonus.y
+	return stun_bonus.z
+
+
+func charge_bonus_at(r: Rarity) -> float:
+	match r:
+		Rarity.BRONZE:
+			return charge_bonus.x
+		Rarity.SILVER:
+			return charge_bonus.y
+	return charge_bonus.z
 
 
 func shield_on_hit_at(r: Rarity) -> float:
@@ -193,6 +270,9 @@ func describe(r: Rarity) -> String:
 		return description % _numbers(r)
 	var m := magnitude(r)
 	var who := "All units" if is_global() else _who()
+	if max_tier > 0:
+		who = ("All units at tier %d or below" % max_tier if is_global()
+			else "%s at tier %d or below" % [who, max_tier])
 	match kind:
 		Kind.STAT:
 			var line := "%s: %s" % [who, _stat_phrase_with_extra(m, r)]
@@ -206,9 +286,20 @@ func describe(r: Rarity) -> String:
 			var raises := extra_raises_at(r)
 			if raises > 0:
 				line += "  Each of them calls back %d more of the fallen per cast." % raises
+			var extra := extra_summons_at(r)
+			if extra > 0:
+				line += "  Each of them brings %d more with it when it spends itself." % extra
 			var tough := wall_toughness_at(r)
 			if tough > 0.0:
 				line += "  The walls it raises are %s harder to bring down." % _bare(tough)
+			var longer := stun_bonus_at(r)
+			if longer > 0.0:
+				line += "  Its charge stuns for %s second%s longer." % [
+					("%.1f" % longer).trim_suffix(".0"),
+					"" if is_equal_approx(longer, 1.0) else "s"]
+			var harder := charge_bonus_at(r)
+			if harder > 0.0:
+				line += "  And the charge itself hits %s harder." % _bare(harder)
 			var plate := shield_on_hit_at(r)
 			if plate > 0.0:
 				line += "  Every hit it takes also adds %s of its max health to its shield." % _bare(plate)
@@ -227,6 +318,8 @@ func describe(r: Rarity) -> String:
 			return "Draw %d more unit(s) every turn from now on." % roundi(m.x)
 		Kind.BOARD_FILL:
 			return "Right now: draw tier 1 units until you have %d on the board. Worth most when you are behind." % roundi(m.x)
+		Kind.ROUND_SHIELD:
+			return "Every unit starts each round with %d shield. It soaks damage first and is never healed." % roundi(m.x)
 		Kind.WILD_MERGE:
 			return "Any two of your units of the same tier can merge, whatever they are."
 		Kind.TIER_GIFT:
@@ -282,7 +375,10 @@ static func _stat_name(s: StatModifier.Stat) -> String:
 		StatModifier.Stat.ATTACK_SPEED:
 			return "attack speed"
 		StatModifier.Stat.MOVE_TIME:
-			return "move time"
+			# Named for what the buff row means, not for the field it drives. The
+			# row says "+50%" and the player should read that as faster; see
+			# _signed().
+			return "movement speed"
 		StatModifier.Stat.ATTACK_RANGE:
 			return "range band"
 		StatModifier.Stat.SIGHT_RANGE:

@@ -118,7 +118,7 @@ both are deliberately isolated so removing them is deleting files:
 | What | Where | What breaks when it's gone |
 |---|---|---|
 | The Warden portrait | `assets/portraits/warden.png` | The unit falls back to a coloured block, like the other twenty-nine. |
-| The Warden's death lines | `assets/voice/warden_*.wav` | Wardens die to the ordinary death thump, like the other twenty-nine. |
+| The death voice lines | `assets/voice/` (the whole folder) | Every unit dies to the ordinary death thump, with no cry over it. |
 
 Delete the files (and their `.import` siblings) and nothing else needs editing.
 `Audio` looks its voice pools up by counting files on disk, so a unit with none
@@ -129,9 +129,12 @@ those two checks in `tools/smoke_test.gd::_check_voice_lines()` go with the file
 
 ### How the voice system works
 
-Files are named `<unit_id>_<kind>_<n>.wav` in `assets/voice/`, numbered from 1.
-`kind` is either `death` or `overkill`. Giving the Reaver a voice is dropping
-`reaver_death_1.wav` in that folder — no code change.
+Files are named `<kind>_<n>.wav` in `assets/voice/`, numbered from 1. `kind` is
+either `death` or `overkill`. Every unit shares them — there is deliberately no
+per-unit lookup, because one roster-wide voice is what the game wants today and
+a per-unit pool with one unit in it is machinery pretending to be a feature.
+Adding a seventh death line is dropping `death_7.wav` in that folder; no code
+change, and nothing anywhere counts the files.
 
 **Overkill** means the killing blow was larger than the victim's *entire* health
 bar, not larger than whatever was left of it. `CombatSim.is_overkill()` decides

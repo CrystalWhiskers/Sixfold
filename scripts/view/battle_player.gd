@@ -23,6 +23,14 @@ var _clock := 0.0
 var _playing := false
 var _winner := CombatSim.RESULT_DRAW
 
+## Where each unit is, in BOARD space — fractional tile coordinates, not pixels.
+##
+## This used to hold pixels, and that was the bug behind units jumping around
+## when you zoomed: a pixel position is only meaningful at the tile_size it was
+## worked out at, so the moment the board rescaled, every cached position in here
+## was quietly describing somewhere else. Tiles do not care how big a tile is on
+## screen, so nothing in here goes stale. _place_views() multiplies by the live
+## tile_size once a frame and that is the only place pixels are involved.
 var _pos: Dictionary = {}
 var _hp: Dictionary = {}
 var _moves: Dictionary = {}
@@ -50,19 +58,17 @@ func play(view: BoardView, events: Array[Dictionary], units := {}) -> void:
 	# Last round's zones are not this round's. Cleared here rather than at the end
 	# of playback, so the board still shows them during the round-end hold.
 	view.clear_aura_zones()
-	# Pull every voice line this round could need off disk now, while nothing is
-	# moving. Doing it lazily would put the load on the first death of the battle,
-	# which is the worst possible moment for a hitch.
-	for uid in _units:
-		var u: UnitInstance = _units[uid]
-		if u != null and u.data != null:
-			Audio.prime_voice(String(u.data.id))
+	# From here the board must not place units from the model's cells; see
+	# BoardView.playback.
+	view.playback = true
 	set_process(true)
 	_announce_counts()
 
 
 func stop() -> void:
 	_playing = false
+	if _view != null:
+		_view.playback = false
 	set_process(false)
 
 
@@ -93,6 +99,7 @@ func _process(delta: float) -> void:
 
 	if _cursor >= _events.size() and _moves.is_empty() and _deferred.is_empty():
 		_playing = false
+		_view.playback = false
 		set_process(false)
 		finished.emit(_winner)
 
@@ -100,7 +107,7 @@ func _process(delta: float) -> void:
 func _apply(e: Dictionary) -> void:
 	match e.kind:
 		"spawn":
-			_pos[e.uid] = _view.cell_to_pos(e.cell)
+			_pos[e.uid] = _board(e.cell)
 			_hp[e.uid] = {cur = float(e.hp), max = float(e.max_hp)}
 			var sv := _view.view_for(e.uid)
 			if sv != null:
@@ -110,8 +117,8 @@ func _apply(e: Dictionary) -> void:
 				sv.set_shield(0.0)
 		"move":
 			_moves[e.uid] = {
-				from = _view.cell_to_pos(e.from),
-				to = _view.cell_to_pos(e.to),
+				from = _board(e.from),
+				to = _board(e.to),
 				start = float(e.t),
 				duration = maxf(float(e.duration), 0.01),
 			}
@@ -168,7 +175,7 @@ func _apply(e: Dictionary) -> void:
 			# The shot leaves now and lands later, so the view shows the arc AND
 			# marks the ground it is aimed at — the whole point of the flight time
 			# is that you get to see where it will land and move.
-			var away: Vector2 = _pos.get(e.uid, _view.cell_to_pos(e.from))
+			var away: Vector2 = _at(int(e.uid), e.from)
 			_view.spawn_shot(away, _view.cell_to_pos(e.cell),
 				float(e.flight) / maxf(speed, 0.01), true)
 			var marked: Array[Vector2i] = []
@@ -193,6 +200,47 @@ func _apply(e: Dictionary) -> void:
 				float(e.seconds) / maxf(speed, 0.01))
 		"field_down":
 			pass
+		"charge":
+			# The lane it ran down, lit for a beat. Drawn before the unit is moved so
+			# the streak reads as "it came from there", and the unit's own view is
+			# snapped to the far end rather than walked — a charge is not a walk and
+			# animating it as one would make it look like an ordinary advance.
+			var lane: Array[Vector2i] = []
+			for c in e.get("cells", []):
+				lane.append(c)
+			_view.flash_cells(lane, Color(0.98, 0.62, 0.28, 0.42), 0.45)
+			_pos[e.uid] = _board(e.to)
+			_moves.erase(e.uid)
+			var cv := _view.view_for(e.uid)
+			if cv != null:
+				cv.position = (_pos[e.uid] as Vector2) * _view.tile_size
+			if bool(e.get("hit", false)):
+				# The lunge sells the impact, pointed the way it was running.
+				_lunges[e.uid] = {
+					dir = Vector2(charge_step(e)),
+					left = LUNGE_TIME,
+				}
+		"stun":
+			var stv := _view.view_for(e.uid)
+			if stv != null:
+				stv.queue_redraw()
+			# Held for as long as the stun lasts, the same as the freeze tile, so the
+			# whole time the unit is missing its turns is readable.
+			_view.flash_cells([e.cell], Color(0.98, 0.82, 0.42, 0.42),
+				maxf(float(e.seconds), 0.4))
+			_view.spawn_label(_at(int(e.uid), e.cell), "STUNNED",
+				Color(1.00, 0.86, 0.46))
+		"stun_end":
+			var ev2 := _view.view_for(e.uid)
+			if ev2 != null:
+				ev2.queue_redraw()
+		"cleanse":
+			# Names what came off rather than saying "CLEANSE": a Seraph lifting a
+			# freeze and a Seraph lifting a poison are different moments and the
+			# player should be able to tell which one they just got.
+			_view.spawn_label(_at(int(e.uid), e.cell),
+				String(", ").join(e.get("removed", [])).to_upper(),
+				Color(0.68, 0.94, 0.86))
 		"drain_start":
 			_view.spawn_label(_view.cell_to_pos(e.cell), "SIPHONED",
 				Color(0.72, 0.42, 0.68))
@@ -247,7 +295,7 @@ func _apply(e: Dictionary) -> void:
 		"heal":
 			_heal(e)
 		"blink":
-			_pos[e.uid] = _view.cell_to_pos(e.to)
+			_pos[e.uid] = _board(e.to)
 			_moves.erase(e.uid)
 			_view.flash_cells([e.from, e.to], Color(0.55, 0.42, 0.78, 0.55), 0.4)
 		"stealth":
@@ -277,11 +325,33 @@ func _apply(e: Dictionary) -> void:
 			_view.flash_cells(cells, Color(0.95, 0.65, 0.30, 0.55), 0.35)
 		"death":
 			if bool(e.get("consumed", false)):
-				_view.spawn_label(_pos.get(e.uid, _view.cell_to_pos(e.cell)),
+				_view.spawn_label(_at(int(e.uid), e.cell),
 					"SPENT", Color(0.82, 0.74, 0.52))
 			_schedule_death(e)
 		"end":
 			_winner = e.winner
+
+
+func charge_step(e: Dictionary) -> Vector2i:
+	## Which way the charge was running, worked out from the event rather than from
+	## the unit's team — the event already knows, and the view should not have to
+	## re-derive a rule the simulation owns.
+	var from: Vector2i = e.get("from", Vector2i.ZERO)
+	var to: Vector2i = e.get("to", from)
+	return Vector2i(signi(to.x - from.x), signi(to.y - from.y))
+
+
+func _board(cell: Vector2i) -> Vector2:
+	## A cell as a board-space point: the middle of the tile, measured in tiles.
+	return Vector2(cell.x + 0.5, cell.y + 0.5)
+
+
+func _at(uid: int, fallback: Vector2i) -> Vector2:
+	## Where a unit is on SCREEN right now, for a label or a projectile to be
+	## anchored to. Live positions come from _pos; anything the playback has not
+	## seen yet falls back to the cell the event names.
+	var b: Vector2 = _pos.get(uid, _board(fallback))
+	return b * _view.tile_size
 
 
 func _begin_cast(e: Dictionary) -> void:
@@ -312,9 +382,13 @@ func _show_beam(e: Dictionary) -> void:
 
 
 func _begin_attack(e: Dictionary) -> void:
-	var from: Vector2 = _pos.get(e.uid, _view.cell_to_pos(e.from))
-	var to: Vector2 = _pos.get(e.target_uid, _view.cell_to_pos(e.to))
-	var tiles := from.distance_to(to) / maxf(_view.tile_size, 1.0)
+	var from := _at(int(e.uid), e.from)
+	var to := _at(int(e.target_uid), e.to)
+	# In tiles directly, off the board-space positions, rather than by dividing
+	# pixels back down by the tile size. Same number, one fewer thing to get
+	# wrong when the tile size changes underneath it.
+	var tiles: float = (_pos.get(e.uid, _board(e.from)) as Vector2).distance_to(
+		_pos.get(e.target_uid, _board(e.to)) as Vector2)
 
 	var shooter: UnitInstance = _units.get(e.uid, null)
 	# On the SWING, not on the hit: a shot in flight should be heard leaving the
@@ -353,7 +427,7 @@ func _schedule_death(e: Dictionary) -> void:
 
 
 func _show_ability(e: Dictionary) -> void:
-	var at: Vector2 = _pos.get(e.uid, _view.cell_to_pos(e.cell))
+	var at := _at(int(e.uid), e.cell)
 	match int(e.kind):
 		AbilityData.Kind.HASTE:
 			_view.spawn_label(at, "CAST", Color(0.98, 0.85, 0.42))
@@ -447,10 +521,16 @@ static func _waste_label(reason: String) -> String:
 func _hit(e: Dictionary) -> void:
 	_hp[e.uid] = {cur = float(e.hp), max = float(_hp.get(e.uid, {}).get("max", 1.0))}
 	var v := _view.view_for(e.uid)
-	var at: Vector2 = _pos.get(e.uid, _view.cell_to_pos(e.cell))
+	var at := _at(int(e.uid), e.cell)
 	var crit := bool(e.get("crit", false))
 	if crit:
 		Audio.play_crit()
+	# Any part of the hit eaten by a shield, not just a hit fully absorbed. A
+	# blow that chews through the last of a shield and carries on into health is
+	# still a blow the shield answered, and hearing nothing there would make the
+	# shield feel like it stopped working one hit early.
+	if float(e.get("absorbed", 0.0)) > 0.0:
+		Audio.play_shield_hit()
 	_view.spawn_damage(at, float(e.amount), bool(e.get("spell", false)), crit)
 	if v != null:
 		v.set_hp(float(e.hp), v.hp_max)
@@ -465,7 +545,7 @@ func _set_stealth(e: Dictionary) -> void:
 	v.hidden_unit = bool(e.on)
 	v.queue_redraw()
 	if bool(e.on):
-		_view.spawn_label(_pos.get(e.uid, v.position), "VANISH",
+		_view.spawn_label(_at(int(e.uid), e.cell), "VANISH",
 			Color(0.68, 0.56, 0.88))
 
 
@@ -474,11 +554,11 @@ func _summon(e: Dictionary) -> void:
 	if unit == null:
 		return
 	var v := _view.ensure_view(unit)
-	_pos[e.uid] = _view.cell_to_pos(e.cell)
+	_pos[e.uid] = _board(e.cell)
 	_hp[e.uid] = {cur = float(e.hp), max = float(e.max_hp)}
 	if v == null:
 		return
-	v.position = _pos[e.uid]
+	v.position = _pos[e.uid] * _view.tile_size
 	v.dying = false
 	v.death_t = 0.0
 	v.set_hp(float(e.hp), float(e.max_hp))
@@ -501,10 +581,10 @@ func _begin_revive(e: Dictionary) -> void:
 	var v := _view.view_for(e.uid)
 	if v == null and unit != null:
 		v = _view.ensure_view(unit)
-	_pos[e.uid] = _view.cell_to_pos(e.cell)
+	_pos[e.uid] = _board(e.cell)
 	if v == null:
 		return
-	v.position = _pos[e.uid]
+	v.position = _pos[e.uid] * _view.tile_size
 	v.begin_revive()
 	_view.spawn_label(v.position, "RISING", Color(0.60, 0.88, 0.66))
 	_view.flash_cells([e.cell], Color(0.45, 0.85, 0.55, 0.35), float(e.duration))
@@ -512,7 +592,7 @@ func _begin_revive(e: Dictionary) -> void:
 
 func _respawn(e: Dictionary) -> void:
 	var unit: UnitInstance = _units.get(e.uid, null)
-	_pos[e.uid] = _view.cell_to_pos(e.cell)
+	_pos[e.uid] = _board(e.cell)
 	_hp[e.uid] = {cur = float(e.hp), max = float(e.max_hp)}
 	var v := _view.view_for(e.uid)
 	if v == null and unit != null:
@@ -523,7 +603,7 @@ func _respawn(e: Dictionary) -> void:
 	v.death_t = 0.0
 	v.display_hp = 0.0
 	v.end_revive()
-	v.position = _pos[e.uid]
+	v.position = _pos[e.uid] * _view.tile_size
 	v.set_hp(float(e.hp), float(e.max_hp))
 	v.set_shield(0.0)
 	v.set_mana(0.0)
@@ -539,19 +619,8 @@ func _heal(e: Dictionary) -> void:
 		return
 	v.set_hp(float(e.hp), v.hp_max)
 	if float(e.amount) >= 1.0:
-		var at: Vector2 = _pos.get(e.uid, _view.cell_to_pos(e.cell))
+		var at := _at(int(e.uid), e.cell)
 		_view.spawn_label(at, "+%d" % roundi(float(e.amount)), Color(0.45, 0.82, 0.48))
-
-
-func _unit_id_of(uid: int, e: Dictionary) -> String:
-	# The event first, because it is the only source that is guaranteed to exist:
-	# a test replays a log with no roster behind it, and the roster is gone for a
-	# summon that was never in it.
-	var from_event := String(e.get("unit_id", ""))
-	if not from_event.is_empty():
-		return from_event
-	var u: UnitInstance = _units.get(uid, null)
-	return String(u.data.id) if u != null and u.data != null else ""
 
 
 func _kill(e: Dictionary) -> void:
@@ -566,7 +635,7 @@ func _kill(e: Dictionary) -> void:
 	# blow that landed was bigger than the unit's whole health bar — the sim
 	# decided that when it dealt the damage and put the answer on the event,
 	# because it is the only place that ever saw the number.
-	Audio.play_death_voice(_unit_id_of(uid, e), bool(e.get("overkill", false)))
+	Audio.play_death_voice(bool(e.get("overkill", false)))
 	_view.kill_view(uid)
 	_moves.erase(uid)
 	_lunges.erase(uid)
@@ -627,7 +696,7 @@ func _place_views() -> void:
 		var v := _view.view_for(uid)
 		if v == null:
 			continue
-		var p: Vector2 = _pos[uid]
+		var p: Vector2 = (_pos[uid] as Vector2) * _view.tile_size
 		if _lunges.has(uid):
 			var l: Dictionary = _lunges[uid]
 			var amount: float = maxf(l.left, 0.0) / LUNGE_TIME

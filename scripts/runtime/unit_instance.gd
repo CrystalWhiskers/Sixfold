@@ -15,6 +15,51 @@ const MANA_MAX := 100.0
 
 static var _next_uid: int = 1
 
+## Every timed condition a unit can be under, in one place.
+##
+## Until now each of these was an ad-hoc field with its own clearing code, which
+## was fine while nothing ever asked "what is on this unit?" — and stopped being
+## fine the moment something did. A cleanse written against the fields would
+## enumerate the two that existed the day it was written and quietly miss every
+## status added afterwards, which is the same shape as the bug heal() exists to
+## prevent: a rule enforced in N places is a rule with N-1 chances to be
+## forgotten.
+##
+## Adding a status is three adjacent edits in this file — a name here, an arm in
+## has_status(), an arm in clear_status() — and everything that walks the list
+## (cleanse, the round reset) picks it up for free.
+##
+## Deliberately NOT in here: burden, exposure, empowerment, isolation and the
+## Leech's drain. Those are computed at the moment they are needed rather than
+## stored, so there is nothing to clear and nothing to go stale.
+enum Status {
+	POISON,
+	FROZEN,
+	STUNNED,
+	TAUNT,
+	REFLECT,
+	STEALTH,
+	HASTE,
+	NO_RECOVERY,
+}
+
+## `debuff` is whether it is done TO the unit by an enemy; `cleansable` is
+## whether a cleanse may lift it. They are separate on purpose. Sudden death is
+## unquestionably a debuff and must not be cleansable — it is a rule of the
+## clock, not a spell, and a Seraph should not be able to switch it off. A
+## Paragon's taunt is self-inflicted, so it is not a debuff at all.
+const STATUSES := [
+	{id = Status.POISON, name = "Poison", debuff = true, cleansable = true},
+	{id = Status.FROZEN, name = "Frozen", debuff = true, cleansable = true},
+	{id = Status.STUNNED, name = "Stunned", debuff = true, cleansable = true},
+	{id = Status.TAUNT, name = "Taunt", debuff = false, cleansable = false},
+	{id = Status.REFLECT, name = "Reflect", debuff = false, cleansable = false},
+	{id = Status.STEALTH, name = "Stealth", debuff = false, cleansable = false},
+	{id = Status.HASTE, name = "Haste", debuff = false, cleansable = false},
+	{id = Status.NO_RECOVERY, name = "Sudden Death", debuff = true,
+		cleansable = false},
+]
+
 var data: UnitData = null
 var team: int = 0
 var cell: Vector2i = Vector2i(-1, -1)
@@ -55,6 +100,13 @@ var empowered: bool = false
 # reward for where you PUT it during prep, not for where the fight drifts.
 var isolated: bool = false
 
+# Sudden death, switched on for every unit on the board when the clock reaches
+# it. Deliberately NOT folded into is_suppressed(): suppression means "gains
+# nothing at all" and also blocks haste stacks and gifted mana, which sudden
+# death has no business touching. This one is exactly two things — no healing,
+# no shield gained — which is what was asked for and nothing more.
+var recovery_denied: bool = false
+
 ## Seconds since this unit last swung at anything. Grows while it walks, resets
 ## the moment it attacks. Only one thing reads it — see IMPATIENT_AFTER in
 ## CombatSim — but it is real state about the unit, so it lives on the unit.
@@ -71,6 +123,14 @@ var reflect_left: float = 0.0
 # is already running.
 var frozen_left: float = 0.0
 var frozen_amp: float = 1.0
+
+# Stunned: cannot move, cannot swing, cannot cast. Deliberately its OWN state and
+# not a short freeze, because a freeze is three things and a stun is one. The
+# Stasis's freeze also amplifies incoming damage and cancels everything the
+# victim would have done on death, and neither of those belongs to a unit that
+# simply ran into something very hard. Folding them together would have handed
+# the charger two mechanics it was never given.
+var stun_left: float = 0.0
 
 # The Devourer's two states. `ascended` is the transformation, which is one-way
 # and lasts the round; `executes_next` is the armed swing, which is spent the
@@ -209,6 +269,18 @@ func is_frozen() -> bool:
 	return frozen_left > 0.0
 
 
+func is_stunned() -> bool:
+	return stun_left > 0.0
+
+
+func is_held() -> bool:
+	## Frozen or stunned — the two states that stop a unit acting outright. One
+	## function so the three gates below cannot end up disagreeing about which
+	## conditions count, which is exactly what happened the first time a freeze
+	## was added and can_attack_now() was missed.
+	return is_frozen() or is_stunned()
+
+
 func frozen_damage_taken() -> float:
 	return maxf(frozen_amp, 1.0) if is_frozen() else 1.0
 
@@ -217,11 +289,11 @@ func can_move_now() -> bool:
 	# Holding still is the price of the taunt: it plants itself, and it cannot
 	# swing while it is doing it either. Being frozen is the same shape and none
 	# of the payoff.
-	return data.can_move and not is_taunting() and not is_frozen()
+	return data.can_move and not is_taunting() and not is_held()
 
 
 func can_attack_now() -> bool:
-	return data.can_attack and not is_taunting() and not is_frozen()
+	return data.can_attack and not is_taunting() and not is_held()
 
 
 func taunt_damage_taken() -> float:
@@ -329,7 +401,7 @@ func add_shield(amount: float, cap: float) -> void:
 	# Same reasoning as heal(). Note this stops shields being GAINED and does not
 	# strip the ones already there: a Warden that opened with its bulwark keeps it
 	# and simply cannot top it up.
-	if is_suppressed():
+	if is_suppressed() or recovery_denied:
 		return
 	shield = minf(maxf(shield, 0.0) + amount, cap)
 
@@ -378,13 +450,82 @@ func heal(amount: float) -> void:
 	# Seraph, the Engineer's repair, lifesteal — because "cannot be healed" has to
 	# mean all of them, and a rule enforced in six places is a rule with five
 	# chances to be forgotten when a seventh healer is written.
-	if amount <= 0.0 or not is_alive() or is_suppressed():
+	if amount <= 0.0 or not is_alive() or is_suppressed() or recovery_denied:
 		return
 	current_hp = minf(current_hp + amount, stat(StatModifier.Stat.MAX_HP))
 
 
 func heal_to_full() -> void:
 	current_hp = stat(StatModifier.Stat.MAX_HP)
+
+
+func has_status(s: Status) -> bool:
+	match s:
+		Status.POISON:
+			return not dots.is_empty()
+		Status.FROZEN:
+			return frozen_left > 0.0
+		Status.STUNNED:
+			return stun_left > 0.0
+		Status.TAUNT:
+			return taunt_left > 0.0
+		Status.REFLECT:
+			return reflect_left > 0.0
+		Status.STEALTH:
+			return stealth_left > 0.0
+		Status.HASTE:
+			return haste_stacks > 0
+		Status.NO_RECOVERY:
+			return recovery_denied
+	return false
+
+
+func clear_status(s: Status) -> void:
+	match s:
+		Status.POISON:
+			# The whole entry goes, which takes the remaining ticks, the
+			# vulnerability and the suppression with it — those three ride on the
+			# dot rather than living separately, so there is nothing else to undo.
+			dots.clear()
+		Status.FROZEN:
+			frozen_left = 0.0
+			frozen_amp = 1.0
+		Status.STUNNED:
+			stun_left = 0.0
+		Status.TAUNT:
+			taunt_left = 0.0
+		Status.REFLECT:
+			reflect_left = 0.0
+		Status.STEALTH:
+			stealth_left = 0.0
+		Status.HASTE:
+			# The stacks go; the modifiers they put on the unit are cleared with
+			# the rest of the battle modifiers at the round boundary, not here.
+			haste_stacks = 0
+		Status.NO_RECOVERY:
+			recovery_denied = false
+
+
+static func status_name(s: Status) -> String:
+	for row in STATUSES:
+		if row.id == s:
+			return row.name
+	return "?"
+
+
+func cleanse() -> Array[String]:
+	## Lifts every cleansable debuff currently on this unit and names what went.
+	## Walks the table rather than naming fields, so a status added later is
+	## cleansed without anyone remembering to come back here.
+	var removed: Array[String] = []
+	for row in STATUSES:
+		if not row.debuff or not row.cleansable:
+			continue
+		if not has_status(row.id):
+			continue
+		clear_status(row.id)
+		removed.append(row.name)
+	return removed
 
 
 func reset_for_battle() -> void:
@@ -401,15 +542,15 @@ func reset_for_battle() -> void:
 	empowered = false
 	isolated = false
 	dry_spell = 0.0
-	frozen_left = 0.0
-	frozen_amp = 1.0
-	taunt_left = 0.0
-	reflect_left = 0.0
+	# Every status goes at the round boundary, cleansable or not — sudden death
+	# belongs to the round that ran out of clock, and a freeze does not carry over
+	# into a fight that has not started. Walked from the table rather than listed
+	# by hand, so this cannot fall out of step with what a status IS.
+	for row in STATUSES:
+		clear_status(row.id)
 	ascended = false
 	executes_next = false
 	shield = 0.0
-	haste_stacks = 0
-	stealth_left = 0.0
 	revives = 0
 	summons_made = 0
 	mana_clock = 0.0

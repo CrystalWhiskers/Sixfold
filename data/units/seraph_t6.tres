@@ -17,6 +17,6 @@ attack_range = 2
 attack_type = 1
 ability = ExtResource("1_qtch1")
 mana_per_attack = 34.0
-note = "Fills its bar fast and dumps it all into whoever is closest to dying."
+note = "Fills its bar fast and dumps it all into whoever is closest to dying, lifting whatever is on them first. The only cleanse in the game, which makes it the answer to a Vexer or a Stasis."
 sprite = ExtResource("3_4jwko")
 accent = Color(0.55, 0.8, 0.75, 1)

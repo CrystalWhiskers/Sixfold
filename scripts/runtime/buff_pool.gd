@@ -25,10 +25,26 @@ func load_all(dir_path := BUFF_DIR) -> int:
 
 
 func _is_live(b: BuffData) -> bool:
+	## A buff with nothing in it is a data mistake and is dropped rather than
+	## offered. "Nothing in it" used to mean only that the stat magnitudes were
+	## zero — which quietly binned the first buff written entirely out of RIDERS.
+	## Avalanche is stun seconds and charge damage and no stat at all; it loaded,
+	## sat in data/buffs, and never appeared in a single pick.
+	##
+	## So the question is now "does this buff do anything", asked of every field
+	## that can make it do something.
 	if b.id == &"":
 		return false
-	return not (b.bronze.is_zero_approx() and b.silver.is_zero_approx()
-		and b.gold.is_zero_approx())
+	if not (b.bronze.is_zero_approx() and b.silver.is_zero_approx()
+			and b.gold.is_zero_approx()):
+		return true
+	if b.empowered_cap_at_gold > 0:
+		return true
+	for rider in [b.extra_raises, b.wall_toughness, b.shield_on_hit,
+			b.extra_summons, b.stun_bonus, b.charge_bonus, b.third]:
+		if not (rider as Vector3).is_zero_approx():
+			return true
+	return false
 
 
 func offer(rng: RandomNumberGenerator, count := OPTIONS, exclude: Array = [],

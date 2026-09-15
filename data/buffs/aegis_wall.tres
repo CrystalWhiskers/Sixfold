@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_vra7b"]
+
+[resource]
+script = ExtResource("1_vra7b")
+id = &"aegis_wall"
+display_name = "Aegis Wall"
+kind = 12
+bronze = Vector2(1000, 0)
+silver = Vector2(2000, 0)
+gold = Vector2(3000, 0)

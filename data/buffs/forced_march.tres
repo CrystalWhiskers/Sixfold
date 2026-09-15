@@ -1,17 +1,12 @@
 [gd_resource type="Resource" script_class="BuffData" format=3]
 
-[ext_resource type="Script" path="res://scripts/data/stat_modifier.gd" id="1_byqxk"]
-[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="2_1t5rx"]
-
-[sub_resource type="Resource" id="Resource_2lppm"]
-script = ExtResource("1_byqxk")
-stat = 3
-mode = 1
-value = -0.12
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_cn5ne"]
 
 [resource]
-script = ExtResource("2_1t5rx")
+script = ExtResource("1_cn5ne")
 id = &"forced_march"
 display_name = "Forced March"
-modifiers = Array[ExtResource("1_byqxk")]([SubResource("Resource_2lppm")])
-weight = 0.8
+bronze = Vector2(0.5, 0)
+silver = Vector2(0.75, 0)
+gold = Vector2(1, 0)
+stat_a = 3

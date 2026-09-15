@@ -667,19 +667,31 @@ func merge(a: UnitInstance, b: UnitInstance, at: Vector2i) -> UnitInstance:
 
 
 func _roll_merge_procs(merged: UnitInstance) -> void:
-	last_merge_procs = {extra_tier = false, extra_unit = null}
+	# Counts and lists, not flags. Holding the same proc buff at two rarities is
+	# two independent rolls, so both can land on one merge.
+	var extras: Array[UnitInstance] = []
+	last_merge_procs = {extra_tiers = 0, extra_units = extras}
 	var tb: TeamBuffs = team_buffs.get(merged.team, null)
 	if tb == null:
 		return
-	var tier_chance := tb.merge_extra_tier_chance()
-	if tier_chance > 0.0 and merge_rng.randf() < tier_chance \
-			and not merged.data.is_max_tier():
-		merged.promote_to(merged.data.next_tier, [] as Array[StatModifier])
-		last_merge_procs.extra_tier = true
+	for chance in tb.merge_extra_tier_chances():
+		# Checked inside the loop, not before it: the first promotion can be what
+		# puts the unit at max tier, and the second roll must see that.
+		if merged.data.is_max_tier():
+			break
+		if chance > 0.0 and merge_rng.randf() < chance:
+			merged.promote_to(merged.data.next_tier, [] as Array[StatModifier])
+			last_merge_procs.extra_tiers = int(last_merge_procs.extra_tiers) + 1
 	tb.apply_to(merged)
-	var unit_chance := tb.merge_extra_unit_chance()
-	if unit_chance > 0.0 and merge_rng.randf() < unit_chance:
-		last_merge_procs.extra_unit = _summon_extra(merged.team, tb)
+	for chance in tb.merge_extra_unit_chances():
+		if chance <= 0.0 or merge_rng.randf() >= chance:
+			continue
+		# _summon_extra returns null when the board is full, and a second roll
+		# landing on a full board is simply nothing — not an error, and not a
+		# null in the list for the view to trip over.
+		var made := _summon_extra(merged.team, tb)
+		if made != null:
+			extras.append(made)
 
 
 func _summon_extra(team: int, tb: TeamBuffs) -> UnitInstance:

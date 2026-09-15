@@ -19,6 +19,12 @@ const MUSIC_DIR := "res://assets/music"
 ## battle_3.ogg into assets/music and giving it a name below; nothing else.
 const BATTLE_PREFIX := "battle_%d"
 
+## The boss pool, counted the same way. Separate from the battle tracks rather
+## than mixed in with them, because whether these can come up in an ordinary
+## round is a SETTING — see GameSetup.boss_in_pool — and a single list could not
+## answer that question.
+const BOSS_PREFIX := "boss_%d"
+
 ## Tracks are identified by NUMBER and nothing else — the menu shows "1", "2",
 ## "3". Names were tried and dropped: the files are placeholders that will be
 ## swapped out, a name in code has to be kept in step with a file on disk by hand,
@@ -26,10 +32,14 @@ const BATTLE_PREFIX := "battle_%d"
 const SFX_DIR := "res://assets/sfx"
 
 ## Voice lines live apart from the effects on purpose. Everything in assets/sfx
-## is the game's own sound; everything in assets/voice belongs to ONE unit and is
-## placeholder material that will be pulled out. Keeping them in separate folders
-## means removing a unit's voice is deleting its files and nothing else — no
-## editing of this script, no dangling constant, no silent failure.
+## is the game's own sound; everything in assets/voice is borrowed placeholder
+## material that will be pulled out. Keeping them in separate folders means
+## removing the voices is deleting one folder and nothing else — no editing of
+## this script, no dangling constant, no silent failure.
+##
+## Every unit shares these lines. There is deliberately no per-unit lookup here:
+## one roster-wide voice is what the game actually wants today, and a per-unit
+## pool with exactly one unit in it is machinery pretending to be a feature.
 const VOICE_DIR := "res://assets/voice"
 
 ## How many effects may overlap. Eight is comfortably more than a busy tick ever
@@ -87,6 +97,17 @@ const PICKUP_DB := -12.0
 ## swings — present, countable, not the headline.
 const DEATH_DB := -14.0
 
+## Down with the melee swings, and for the same reason: a Warden's shield eats a
+## dozen hits in a row, so this is one of the most frequently played sounds in
+## the game and cannot sit anywhere near the top of the mix.
+const SHIELD_DB := -13.0
+
+## The beam belongs to one unit and it fires continuously, so unlike a swing it
+## is never a single event you want to notice — it is a texture that runs under
+## the fight. It sat at the shared effects level for a long time and was by some
+## distance the loudest thing on any board with a Transcendence on it.
+const LASER_DB := -15.0
+
 ## A voice line rides ON TOP of the death thump rather than replacing it — the
 ## thump is the event, the cry is the character — so it sits a little above the
 ## thump to be heard through it, and still under the swings.
@@ -116,12 +137,15 @@ var _promotion: AudioStream = null
 
 var _death: AudioStream = null
 
-## Voice pools, keyed by unit id: `{"warden": {death = [...], overkill = [...]}}`.
-## Filled the first time a unit id is asked about and never re-read, so a unit
-## with no voice files costs one directory probe for the whole session and then
-## nothing. A unit that has none is cached as two empty arrays — the absence is
-## the answer, and it is worth remembering too.
-var _voice_lines: Dictionary = {}
+## A hit stopped by a shield. Fires alongside the swing that caused it, not
+## instead of it — you hear the blow and then the shield answering it.
+var _shield_hit: AudioStream = null
+
+## The two voice pools, shared by every unit on the board. Both may be empty —
+## the whole folder is placeholder material and the game has to keep working the
+## day it is deleted, which is why nothing here warns about a missing file.
+var _death_voice: Array[AudioStream] = []
+var _overkill_voice: Array[AudioStream] = []
 
 ## The one UI sound. Every button that commits to something plays it — starting a
 ## match, taking a buff, closing the loadout editor — so the interface answers
@@ -148,12 +172,43 @@ var _rng := RandomNumberGenerator.new()
 
 var enabled := true
 
+## Overall loudness, 0 to 1, driven by the slider in the settings menu.
+##
+## Applied to the Master BUS rather than to any of the level constants above. The
+## mix ladder — melee under the crits, the crits under the round bell — took a
+## lot of passes to get right, and a volume control that touched those numbers
+## would flatten it the moment it was moved. One fader on the bus moves all of
+## them together and leaves the relationships between them exactly as they are.
+var volume := 1.0:
+	set(value):
+		volume = clampf(value, 0.0, 1.0)
+		if not is_inside_tree():
+			return
+		_apply_volume()
+
 ## How many battle_N.ogg files there are. Counted once at startup.
 var battle_track_count := 0
+
+## And how many boss_N.ogg files. Zero is a perfectly good answer — the boss
+## rule simply never fires and the toggle has nothing to let in.
+var boss_track_count := 0
+
+
+func _apply_volume() -> void:
+	var bus := AudioServer.get_bus_index("Master")
+	if bus < 0:
+		return
+	# Muted outright at zero rather than left at some very small decibel figure.
+	# linear_to_db(0) is negative infinity, and a fader that reads "0%" should be
+	# silence and not a faint hiss.
+	AudioServer.set_bus_mute(bus, volume <= 0.0)
+	if volume > 0.0:
+		AudioServer.set_bus_volume_db(bus, linear_to_db(volume))
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	_apply_volume()
 	_music = AudioStreamPlayer.new()
 	_music.bus = "Master"
 	_music.volume_db = MUSIC_DB
@@ -177,15 +232,21 @@ func _ready() -> void:
 	_windfall = _load_one("windfall.wav")
 	_promotion = _load_one("promotion.wav")
 	_death = _load_one("death.wav")
+	_shield_hit = _load_one("shield_hit.wav")
 	_confirm = _load_one("confirm.wav")
 	_round_start = _load_one("round_start.wav")
 	_select = _load_one("select.wav")
 	_pickup = _load_one("pickup.wav")
+	_death_voice = _load_voice_run("death")
+	_overkill_voice = _load_voice_run("overkill")
 	while ResourceLoader.exists("%s/%s.ogg" % [
 			MUSIC_DIR, BATTLE_PREFIX % (battle_track_count + 1)]):
 		battle_track_count += 1
 	if battle_track_count == 0:
 		push_warning("Audio: no battle tracks in %s" % MUSIC_DIR)
+	while ResourceLoader.exists("%s/%s.ogg" % [
+			MUSIC_DIR, BOSS_PREFIX % (boss_track_count + 1)]):
+		boss_track_count += 1
 	_rng.randomize()
 
 
@@ -199,18 +260,17 @@ func _load_one(file: String) -> AudioStream:
 	return load(path) as AudioStream
 
 
-func _load_voice_run(unit_id: String, kind: String) -> Array[AudioStream]:
+func _load_voice_run(kind: String) -> Array[AudioStream]:
 	## Counts upward from _1 until a number is missing, the same trick the melee
-	## pool uses. Adding a seventh Warden death line is dropping
-	## warden_death_7.wav into assets/voice; removing the voice entirely is
-	## deleting the files. Neither touches this script.
-	##
-	## Deliberately silent when nothing is there. Twenty-nine of the thirty units
-	## have no voice, and a push_warning each would bury the warnings that matter.
+	## pool uses — except the count is not written down anywhere, because these
+	## files are going to be deleted and a hard-coded 6 would turn that deletion
+	## into six warnings. Adding a seventh death line is dropping death_7.wav into
+	## assets/voice; removing the voices is deleting the folder. Neither touches
+	## this script.
 	var out: Array[AudioStream] = []
 	var n := 1
 	while true:
-		var path := "%s/%s_%s_%d.wav" % [VOICE_DIR, unit_id, kind, n]
+		var path := "%s/%s_%d.wav" % [VOICE_DIR, kind, n]
 		if not ResourceLoader.exists(path):
 			break
 		var s := load(path) as AudioStream
@@ -218,18 +278,6 @@ func _load_voice_run(unit_id: String, kind: String) -> Array[AudioStream]:
 			out.append(s)
 		n += 1
 	return out
-
-
-func prime_voice(unit_id: String) -> void:
-	## Load a unit's lines BEFORE the battle rather than at the moment it dies.
-	## The files are small enough that it hardly matters, but "hitches the first
-	## time something dies" is a bug that would be miserable to track down later.
-	if unit_id.is_empty() or _voice_lines.has(unit_id):
-		return
-	_voice_lines[unit_id] = {
-		death = _load_voice_run(unit_id, "death"),
-		overkill = _load_voice_run(unit_id, "overkill"),
-	}
 
 
 func _load_run(pattern: String, count: int) -> Array[AudioStream]:
@@ -265,8 +313,19 @@ func battle_track(index: int) -> String:
 	return BATTLE_PREFIX % index
 
 
+func boss_track(index: int) -> String:
+	## 1-based, matching the file names.
+	return BOSS_PREFIX % index
+
+
 func battle_track_name(index: int) -> String:
 	return str(index)
+
+
+func boss_track_name(index: int) -> String:
+	# "B1", "B2" — numbered like the battle tracks but marked, so a boss track
+	# switched into the ordinary rotation is still identifiable in the menu.
+	return "B%d" % index
 
 
 func stop_music() -> void:
@@ -310,7 +369,7 @@ func play_attack(kind: UnitData.AttackType, beam := false) -> void:
 	# spelled in terms of what the unit does rather than what it is called, which
 	# is what keeps it working if a second beam unit ever appears.
 	if beam:
-		_fire(_laser, SFX_DB)
+		_fire(_laser, LASER_DB)
 		return
 	# Everything else that is not a melee swing plays the ranged pool, spells
 	# included. Spells used to borrow the laser and no longer do: with one unit
@@ -366,21 +425,24 @@ func play_death() -> void:
 	_fire(_death, DEATH_DB, _rng.randf_range(0.93, 1.07))
 
 
-func play_death_voice(unit_id: String, overkill := false) -> void:
-	## Layered over play_death(), not instead of it. The thump says a body
-	## dropped; the line says WHOSE. Units without voice files simply get the
-	## thump, which is why this is safe to call on every death in the game.
+func play_shield_hit() -> void:
+	# Pitch wander, like the swings. A Warden under fire plays this several times
+	# a second and identical repeats read as a stuck sample rather than a shield.
+	_fire(_shield_hit, SHIELD_DB, _rng.randf_range(0.94, 1.06))
+
+
+func play_death_voice(overkill := false) -> void:
+	## Layered over play_death(), not instead of it: the thump is the event, the
+	## cry is the character. With the folder empty this does nothing at all and
+	## every death is just the thump, which is why it is safe to call on every
+	## death in the game without checking anything first.
 	##
-	## The two pools are exclusive. An overkill plays the overkill line and NOT
-	## the ordinary one — that is the whole point of having a separate pool, and
-	## playing both would just sound like a mistake. A unit with overkill lines
-	## but no ordinary ones stays silent on ordinary deaths rather than falling
-	## back, for the same reason: the overkill line is supposed to mean something.
-	if unit_id.is_empty():
-		return
-	prime_voice(unit_id)
-	var lines: Dictionary = _voice_lines.get(unit_id, {})
-	var pool: Array[AudioStream] = lines.get("overkill" if overkill else "death", [])
+	## The two pools are exclusive. An overkill plays an overkill line and NOT an
+	## ordinary one — that is the whole point of having a separate pool, and
+	## playing both would only sound like a mistake. Nor does an overkill fall
+	## back to the ordinary pool when the overkill pool is empty: the line is
+	## supposed to mean something, and a fallback would make it mean nothing.
+	var pool := _overkill_voice if overkill else _death_voice
 	# No pitch wander here. It works on a thump because a thump has no pitch to
 	# speak of; on a voice it sounds like a broken tape.
 	_fire(_pick(pool), OVERKILL_DB if overkill else VOICE_DB)

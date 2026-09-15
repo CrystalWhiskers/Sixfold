@@ -18,6 +18,6 @@ attack_type = 1
 mana_per_attack = 0.0
 chassis = 1
 can_move = false
-note = "Built, not drawn, and the ten seconds it costs to raise are paid for here. It cannot move and it cannot be moved, it sees the whole board, and it fires rarely and enormously. Stone still stops its shot like anyone else's."
+note = "Built, not drawn, and the ten seconds it costs to raise are paid for here. It cannot move and it cannot be moved, it sees the whole board, and it fires rarely and enormously. Its range has no limit of any kind — it shoots over walls, over stone, over anything, from wherever it was bolted down."
 sprite = ExtResource("2_rgy0u")
 accent = Color(0.48, 0.55, 0.62, 1)

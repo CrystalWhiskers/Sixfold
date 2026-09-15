@@ -7,12 +7,10 @@
 script = ExtResource("1_isau7")
 id = &"assemble"
 display_name = "Assemble"
-description = "Spends the opening of the round bolting a Sentry together on the tile it is standing on, then steps aside and leaves it there. It is head-down while it works and takes double damage the whole time. If its Sentry is destroyed it will build another once its bar is full, and it will not start a build it has no room to finish."
+description = "Spends the opening of the round bolting a Sentry together on the tile it is standing on, then steps aside and leaves it there. It keeps one at tiers 1-2, two at 3-4 and three at 5-6, and builds them one at a time. It is head-down while it works and takes double damage the whole time. If a Sentry is destroyed it will build another once its bar is full, and it will not start a build it has no room to finish."
 kind = 9
 cast_time = 10.0
 summon_unit = ExtResource("2_e5mv4")
-summon_max = 1
-summon_cap_by_tier = false
 opener_takes_time = true
 exposes_caster = 1.0
 holds_when_capped = true

@@ -59,11 +59,200 @@ func _ready() -> void:
 	call_deferred("_run")
 
 
+func _check_volume_slider() -> void:
+	_section_volume()
+	var panel: SettingsPanel = _menu._settings
+	_check("the settings panel exists and starts hidden or shut",
+		panel != null)
+	if panel == null:
+		return
+	panel.open()
+	var slider: HSlider = panel._volume_slider
+	_check("it has a volume slider", slider != null)
+	if slider == null:
+		return
+	var started := Audio.volume
+	_check("the slider runs from silence to full",
+		is_equal_approx(slider.min_value, 0.0)
+		and is_equal_approx(slider.max_value, 1.0),
+		"%.2f to %.2f" % [slider.min_value, slider.max_value])
+
+	var bus := AudioServer.get_bus_index("Master")
+	_check("there is a Master bus to drive", bus >= 0)
+
+	slider.value = 0.5
+	_check("moving it sets the volume", is_equal_approx(Audio.volume, 0.5),
+		"%.2f" % Audio.volume)
+	_check("and the label says where it is",
+		panel._volume_label.text.contains("50"), panel._volume_label.text)
+	# The fader moves the BUS, not the level constants — the mix ladder between
+	# the swings, the crits and the bell has to survive a volume change intact.
+	if bus >= 0:
+		_check("half volume is a quieter bus, not a quieter melee constant",
+			AudioServer.get_bus_volume_db(bus) < 0.0
+			and is_equal_approx(Audio.MELEE_DB, -12.0),
+			"bus at %.1f dB" % AudioServer.get_bus_volume_db(bus))
+
+	slider.value = 0.0
+	_check("dragged to the bottom it mutes outright, not nearly",
+		bus < 0 or AudioServer.is_bus_mute(bus))
+	_check("and the label says muted, not 0%",
+		panel._volume_label.text.contains("muted"), panel._volume_label.text)
+
+	slider.value = 1.0
+	_check("and back up unmutes it", bus < 0 or not AudioServer.is_bus_mute(bus))
+	Audio.volume = started
+	panel._on_done()
+	_check("Done closes the panel", not panel.visible)
+
+
+func _section_volume() -> void:
+	print("\nSettings")
+
+
+func _check_boss_music() -> void:
+	print("\nBoss music")
+	var panel: SettingsPanel = _menu._settings
+	if panel == null:
+		return
+	panel.open()
+	_check("six boss tracks loaded", Audio.boss_track_count == 6,
+		"%d found" % Audio.boss_track_count)
+	_check("boss tracks are named apart from the battle ones",
+		Audio.boss_track(1) == "boss_1"
+		and Audio.boss_track_name(1) == "B1",
+		"%s / %s" % [Audio.boss_track(1), Audio.boss_track_name(1)])
+
+	var started := GameSetup.boss_in_pool
+	GameSetup.boss_in_pool = false
+	panel._refresh_boss()
+	_check("they stay out of the ordinary rotation by default",
+		not GameSetup.boss_in_pool
+		and panel._boss_button.text == "Boss rounds only",
+		panel._boss_button.text)
+
+	# With them out, forty rolls of the battle track must never land on a boss.
+	var leaked := 0
+	for i in 200:
+		if GameSetup.roll_battle_track().begins_with("boss_"):
+			leaked += 1
+	_check("and a battle roll never returns one", leaked == 0,
+		"%d of 200 rolls were boss tracks" % leaked)
+
+	panel._boss_button.pressed.emit()
+	_check("the switch lets them in", GameSetup.boss_in_pool)
+	_check("and says where they play now",
+		panel._boss_button.text == "Boss rounds and ordinary rounds",
+		panel._boss_button.text)
+	var got := 0
+	for i in 400:
+		if GameSetup.roll_battle_track().begins_with("boss_"):
+			got += 1
+	_check("a battle roll can now land on one", got > 0,
+		"never in 400 rolls")
+
+	panel._boss_button.pressed.emit()
+	_check("and switching it back shuts them out again",
+		not GameSetup.boss_in_pool)
+
+	# The boss rule itself: a tier 6 anywhere on the board, either side.
+	BoardModel.reset_map()
+	var b := BoardModel.new()
+	_check("an empty board is not a boss round",
+		not GameSetup.is_boss_round(b))
+	var low: UnitData = load("res://data/units/warden_t1.tres")
+	b.force_place(UnitInstance.create(low, BoardModel.TEAM_B), Vector2i(2, 8))
+	_check("nor is one with only low tiers on it",
+		not GameSetup.is_boss_round(b))
+	var top: UnitData = load("res://data/units/warden_t6.tres")
+	# On the ENEMY half, because walking into their tier 6 is the moment this is
+	# most worth marking — the rule is about the field, not about who owns it.
+	var boss := UnitInstance.create(top, BoardModel.TEAM_A)
+	b.force_place(boss, Vector2i(2, 2))
+	_check("an enemy tier 6 makes it a boss round",
+		GameSetup.is_boss_round(b))
+	boss.current_hp = 0.0
+	_check("and a dead one does not", not GameSetup.is_boss_round(b))
+	BoardModel.reset_map()
+
+	_check("rolling a boss track gives a boss track",
+		GameSetup.roll_boss_track().begins_with("boss_"),
+		GameSetup.roll_boss_track())
+
+	GameSetup.boss_in_pool = started
+	panel._refresh_boss()
+	panel._on_done()
+
+
+func _check_portrait_toggle() -> void:
+	# The switch that turns unit art off, so the coloured blocks can be used while
+	# the portraits are placeholder material.
+	# The settings live behind the Settings button now, so the panel has to be
+	# open before anything in it has a position or can be clicked.
+	_menu._settings.open()
+	var b: Button = _menu._settings._portrait_button
+	_check("the menu has a portrait switch", b != null)
+	if b == null:
+		return
+	var started_on := GameSetup.portraits
+	GameSetup.portraits = true
+	_menu._settings._refresh_portraits()
+	_check("portraits are on by default and the button says so",
+		GameSetup.portraits and b.button_pressed and b.text == "Portraits",
+		"reads '%s'" % b.text)
+
+	# A unit that HAS art. Whether it draws that art is the whole question, and
+	# the one function both draw sites ask is where the answer comes from.
+	var warden: UnitData = load("res://data/units/warden_t1.tres")
+	_check("the test unit has a portrait to hide",
+		warden != null and warden.sprite != null)
+	if warden == null or warden.sprite == null:
+		return
+	_check("with the switch on, it hands back the unit's art",
+		UnitView.portrait_for(warden) == warden.sprite)
+	# The setting lives on GameSetup and the flag lives on UnitView, because the
+	# two scripts that DRAW a unit must not reach for an autoload — one that does
+	# will not compile in the headless model suite, and every test touching it is
+	# then skipped without saying so. This is the check that they stay in step.
+	_check("the setting is written down to the view layer",
+		UnitView.portraits_on == GameSetup.portraits)
+
+	b.pressed.emit()
+	_check("clicking it turns portraits off", not GameSetup.portraits)
+	_check("the button now says what the board will look like instead",
+		b.text == "Coloured blocks" and not b.button_pressed,
+		"reads '%s'" % b.text)
+	# Null, not a flag: the art-less path is the path portraits-off takes, so
+	# there is only ever one placeholder look in the game.
+	_check("the flag followed it down", not UnitView.portraits_on)
+	_check("and the unit reports no art at all, exactly like an art-less unit",
+		UnitView.portrait_for(warden) == null)
+
+	b.pressed.emit()
+	_check("clicking again puts the art back", GameSetup.portraits
+		and UnitView.portrait_for(warden) == warden.sprite)
+	_check("and the label goes back too", b.text == "Portraits")
+
+	# A unit with no art is unaffected either way — the switch removes art, it
+	# does not add a second placeholder.
+	var wisp: UnitData = load("res://data/units/wisp_t1.tres")
+	if wisp != null and wisp.sprite == null:
+		GameSetup.portraits = false
+		var off := UnitView.portrait_for(wisp)
+		GameSetup.portraits = true
+		_check("a unit that never had art reads the same with the switch either way",
+			off == null and UnitView.portrait_for(wisp) == null)
+
+	GameSetup.portraits = started_on
+	_menu._settings._refresh_portraits()
+
+
 func _check_playlist(_buttons_unused: Array) -> void:
 	# Read the toggles off the menu rather than sniffing button text: the labels
 	# are bare numbers now, and matching "ends with 1" against every Button on the
 	# screen finds things that are not tracks.
-	var toggles: Array[Button] = _menu._track_buttons
+	_menu._settings.open()
+	var toggles: Array[Button] = _menu._settings._track_buttons
 	var count: int = Audio.battle_track_count
 	_check("there is a toggle for every battle track",
 		toggles.size() == count and count >= 2,
@@ -167,9 +356,9 @@ func _run() -> void:
 	var labels: PackedStringArray = []
 	for b in buttons:
 		labels.append(b.text)
-	_check("the menu offers all three choices",
+	_check("the menu offers all four choices",
 		labels.has("Battle the Computer") and labels.has("Local PvP")
-		and labels.has("Loadouts"),
+		and labels.has("Loadouts") and labels.has("Settings"),
 		"found %s" % str(labels))
 
 	var screen := Rect2(Vector2.ZERO, _menu.get_viewport_rect().size)
@@ -179,6 +368,9 @@ func _run() -> void:
 			spilled.append(b.text)
 	_check("every menu button is on screen", spilled.is_empty(), "; ".join(spilled))
 	_check_playlist(buttons)
+	_check_portrait_toggle()
+	_check_volume_slider()
+	_check_boss_music()
 	_check_drawn_rounds()
 
 	GameSetup.mode = GameSetup.Mode.VS_COMPUTER

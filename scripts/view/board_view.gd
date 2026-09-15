@@ -48,6 +48,15 @@ var pan := Vector2.ZERO
 var _panning := false
 var _pan_from := Vector2.ZERO
 var zoom := 1.0
+
+## True while a battle is being replayed. The board model's cells are no use to
+## the view during playback — the sim resolves the whole round before frame one,
+## so every unit's `cell` is already where it will be when the round ENDS. Any
+## sync_positions() during a battle would therefore teleport the army to its own
+## final positions, which is exactly what zooming used to do. BattlePlayer owns
+## the positions while this is set, and puts every unit somewhere itself, every
+## frame.
+var playback := false
 var _fit_tile := MIN_TILE
 var _dying: Array[UnitView] = []
 
@@ -330,7 +339,7 @@ func drop_view(uid: int) -> void:
 
 
 func sync_positions() -> void:
-	if board == null:
+	if board == null or playback:
 		return
 	for u in board.all_units():
 		if is_concealed(u):

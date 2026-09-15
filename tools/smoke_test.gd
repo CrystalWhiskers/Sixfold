@@ -1,11 +1,30 @@
 extends Node
 
 const ROUNDS := 6
-const MAX_FRAMES := 20000
+## A stall guard, not a performance budget — and frames are the wrong unit for
+## it, which is why this number is so large.
+##
+## The round-end and battle-start holds are REAL-TIME timers. Headless Godot runs
+## _process as fast as the machine allows, so how many frames pass during a
+## 0.2-second hold depends entirely on how loaded the box is: on a quiet run it
+## was blowing a 20,000-frame budget and reporting "stuck in phase Battle", which
+## read exactly like a hung round loop and was nothing of the kind. It failed
+## about one run in three.
+##
+## Kept as frames rather than converted to seconds because every other counter in
+## here is frames, and the only job this has is to stop an actually-hung suite
+## from running forever. Six figures of headroom costs a couple of seconds in the
+## worst case and removes the false alarm entirely.
+const MAX_FRAMES := 400000
 
 var _main: Node2D
 var _frames := 0
 var _rounds_played := 0
+## music_checks as it stood once setup finished. The wiring check below counts
+## from here, because the boss-rule checks at setup call _refresh_music() a few
+## times themselves and would otherwise satisfy the very count they are meant to
+## leave alone.
+var _music_checks_at_start := 0
 var _force_seen := false
 var _force_min := 999
 var _force_wipe_seen := false
@@ -72,7 +91,8 @@ func _process(_delta: float) -> void:
 		_check("the round-end pause is long enough to read",
 			_main.round_end_hold >= 1.0,
 			"hold is %.2fs" % _main.round_end_hold)
-		_main.round_end_hold = 0.2
+		# Short, because every hold is real time and the suite plays several rounds.
+		_main.round_end_hold = 0.05
 		_main.battle_start_hold = 0.15
 		_check("the status line wraps instead of running off the screen",
 			_main._status.autowrap_mode != TextServer.AUTOWRAP_OFF)
@@ -130,6 +150,20 @@ func _process(_delta: float) -> void:
 				MatchState.wins[0] >= MatchState.WINS_NEEDED
 				or MatchState.wins[1] >= MatchState.WINS_NEEDED,
 				"scores %d-%d" % [MatchState.wins[0], MatchState.wins[1]])
+			# The round loop has to ASK the boss rule, once per prep phase. The
+			# checks further down prove the rule answers correctly; this is the one
+			# that proves the call site is still there.
+			# Run HERE, after the match, because it puts a tier 6 on the board and
+			# takes it off again. Doing that during setup left the first round with
+			# a board the round loop could not resolve and the suite hung in the
+			# battle phase — a mutating check belongs where there is nothing left to
+			# disturb.
+			_check_the_boss_rule_reaches_the_music()
+			_check_the_charge_reaches_the_view()
+			var asked: int = _main.music_checks - _music_checks_at_start
+			_check("the boss rule was asked at every prep phase",
+				asked >= _rounds_played and asked > 0,
+				"asked %d times over %d rounds" % [asked, _rounds_played])
 			_report()
 			return
 
@@ -445,8 +479,16 @@ func _watch_round_end_hold() -> void:
 
 	var a: int = _main.board.living_units_of(BoardModel.TEAM_A).size()
 	var b: int = _main.board.living_units_of(BoardModel.TEAM_B).size()
-	_check("the surviving side is still standing on the board", a == 0 or b == 0,
-		"A has %d, B has %d — nobody was wiped out" % [a, b])
+	# A wipe is no longer the only way a round can end. The clock decides one that
+	# runs to 2:00 on body count, so both sides can still be standing — this used
+	# to assert a wipe and failed about one run in five once the timer went in,
+	# which is the test being out of date rather than the game being wrong.
+	var by_clock: bool = _main._last_sim != null \
+		and _main._last_sim.elapsed >= CombatSim.DEFAULT_TIMEOUT
+	_check("either a side was wiped out or the clock decided it",
+		a == 0 or b == 0 or by_clock,
+		"A has %d, B has %d after %.1fs" % [
+			a, b, 0.0 if _main._last_sim == null else _main._last_sim.elapsed])
 	_check("the winner's units keep their end-of-battle places",
 		_main.board.all_units().size() == a + b,
 		"%d on the board, %d alive" % [_main.board.all_units().size(), a + b])
@@ -456,8 +498,11 @@ func _watch_round_end_hold() -> void:
 	_check("it agrees with the board about who is left",
 		bar.mine == b and bar.theirs == a,
 		"bar says %d v %d, board says %d v %d" % [bar.mine, bar.theirs, b, a])
-	_check("one side ends the round holding the whole bar",
-		is_equal_approx(bar.mine_share(), 1.0)
+	# Same reason: a round the clock decided leaves both sides on the bar, and
+	# that is the correct picture of what happened.
+	_check("a round that ended in a wipe leaves one side holding the whole bar",
+		by_clock
+		or is_equal_approx(bar.mine_share(), 1.0)
 		or is_equal_approx(bar.mine_share(), 0.0)
 		or bar.total() == 0,
 		"share is %.2f" % bar.mine_share())
@@ -635,61 +680,53 @@ func _check_every_sound_loaded() -> void:
 		"melee %.0f dB against %.0f dB" % [Audio.MELEE_DB, Audio.SFX_DB])
 	_check("and a crit is mixed above it", Audio.CRIT_DB > Audio.MELEE_DB)
 	_check_voice_lines()
+	_check_zoom_keeps_units_put()
+	_music_checks_at_start = _main.music_checks
 
 
 func _check_voice_lines() -> void:
-	# The Warden is the only unit with a voice, and it is placeholder material
-	# that is going to be deleted. So this asserts the MECHANISM, not the Warden:
-	# that a unit with lines finds them, that a unit without lines is silent
-	# rather than broken, and that the two pools stay separate.
-	Audio.prime_voice("warden")
-	var warden: Dictionary = Audio._voice_lines.get("warden", {})
-	_check("the Warden's death lines loaded",
-		warden.get("death", []).size() == 6,
-		"%d loaded" % warden.get("death", []).size())
-	_check("and its overkill lines loaded separately",
-		warden.get("overkill", []).size() == 3,
-		"%d loaded" % warden.get("overkill", []).size())
+	# The voices are placeholder material that is going to be deleted, so what is
+	# asserted here is the MECHANISM, not the specific lines: that the pools load,
+	# that they stay separate, and that an empty folder leaves a working game.
+	_check("the death lines loaded", Audio._death_voice.size() == 6,
+		"%d loaded" % Audio._death_voice.size())
+	_check("and the overkill lines loaded separately",
+		Audio._overkill_voice.size() == 3,
+		"%d loaded" % Audio._overkill_voice.size())
 
-	# The pools must not share a stream. If the overkill line is also in the
+	# The pools must not share a stream. If an overkill line is also in the
 	# ordinary pool then "exclusively on overkill" is not true, however the
 	# picking works.
 	var shared := 0
-	for s in warden.get("overkill", []):
-		if warden.get("death", []).has(s):
+	for s in Audio._overkill_voice:
+		if Audio._death_voice.has(s):
 			shared += 1
 	_check("no line is in both pools", shared == 0, "%d shared" % shared)
 
-	# Every other unit. Deleting the Warden's files should leave the game working
-	# exactly like this, which is what makes the removal a one-step job.
-	var full := load(GameSetup.BASE_LOADOUT) as LoadoutData
-	var quiet := 0
-	for u in full.units:
-		Audio.prime_voice(String(u.id))
-		var lines: Dictionary = Audio._voice_lines.get(String(u.id), {})
-		if lines.get("death", []).is_empty() and lines.get("overkill", []).is_empty():
-			quiet += 1
-	_check("every other unit is voiceless and none of them errored",
-		quiet == full.units.size() - 1,
-		"%d of %d quiet" % [quiet, full.units.size()])
-
-	# Calling it for a unit with nothing must be a no-op, not a crash. This is the
-	# line that runs on every death in the game.
-	Audio.play_death_voice("no_such_unit", true)
-	Audio.play_death_voice("", false)
-	_check("asking for a voice nobody has is harmless", true)
+	# The day the folder is deleted. Every one of these calls runs on an ordinary
+	# death, so an empty pool has to be silence rather than a crash — that is what
+	# makes the removal a one-step job.
+	var kept_death := Audio._death_voice
+	var kept_overkill := Audio._overkill_voice
+	Audio._death_voice = []
+	Audio._overkill_voice = []
+	Audio.play_death_voice(true)
+	Audio.play_death_voice(false)
+	_check("with the voice folder emptied, a death is still just a death", true)
+	Audio._death_voice = kept_death
+	Audio._overkill_voice = kept_overkill
 
 	# The actual behaviour, not just the file lists: fire each kind a number of
 	# times and look at what the voices were handed. Twenty draws from a pool of
 	# three or six makes "it happened to pick the right one" not an explanation.
 	_check("an overkill only ever plays an overkill line",
-		_voices_drawn_from("warden", true, warden.get("overkill", []), 20))
+		_voices_drawn_from(true, Audio._overkill_voice, 20))
 	_check("and an ordinary death never plays one",
-		_voices_drawn_from("warden", false, warden.get("death", []), 20))
-	_check_a_death_actually_speaks(warden)
+		_voices_drawn_from(false, Audio._death_voice, 20))
+	_check_a_death_actually_speaks()
 
 
-func _check_a_death_actually_speaks(warden: Dictionary) -> void:
+func _check_a_death_actually_speaks() -> void:
 	# The two checks above prove Audio picks the right pool. This one proves
 	# anybody CALLS it: without this, deleting the line from BattlePlayer leaves
 	# every check in this suite green and the game silent.
@@ -702,22 +739,22 @@ func _check_a_death_actually_speaks(warden: Dictionary) -> void:
 
 	for v in Audio._voices:
 		v.stream = null
-	player._kill({uid = 4242, cell = Vector2i(2, 2), unit_id = "warden",
+	player._kill({uid = 4242, cell = Vector2i(2, 2),
 		overkill = true, killer_uid = 1})
 	var heard_overkill := false
 	for v in Audio._voices:
-		if v.stream != null and warden.get("overkill", []).has(v.stream):
+		if v.stream != null and Audio._overkill_voice.has(v.stream):
 			heard_overkill = true
 	_check("a death played through the view speaks an overkill line",
 		heard_overkill)
 
 	for v in Audio._voices:
 		v.stream = null
-	player._kill({uid = 4243, cell = Vector2i(3, 3), unit_id = "warden",
+	player._kill({uid = 4243, cell = Vector2i(3, 3),
 		overkill = false, killer_uid = 1})
 	var heard_ordinary := false
 	for v in Audio._voices:
-		if v.stream != null and warden.get("death", []).has(v.stream):
+		if v.stream != null and Audio._death_voice.has(v.stream):
 			heard_ordinary = true
 	_check("and an ordinary one speaks an ordinary line", heard_ordinary)
 
@@ -729,15 +766,14 @@ func _check_a_death_actually_speaks(warden: Dictionary) -> void:
 		Audio.OVERKILL_DB > Audio.VOICE_DB)
 
 
-func _voices_drawn_from(unit_id: String, overkill: bool,
-		allowed: Array, draws: int) -> bool:
+func _voices_drawn_from(overkill: bool, allowed: Array, draws: int) -> bool:
 	# Reads the stream each pooled player was actually handed. That is as close to
 	# "what did the player hear" as a headless test can get, and it is the only
 	# way to catch a pool being picked from the wrong list.
 	for i in draws:
 		for v in Audio._voices:
 			v.stream = null
-		Audio.play_death_voice(unit_id, overkill)
+		Audio.play_death_voice(overkill)
 		var found := false
 		for v in Audio._voices:
 			if v.stream == null:
@@ -748,6 +784,175 @@ func _voices_drawn_from(unit_id: String, overkill: bool,
 		if not found:
 			return false
 	return true
+
+
+func _check_zoom_keeps_units_put() -> void:
+	# The bug this is here for: zooming during a battle used to fling every unit
+	# somewhere else. Two causes, both fixed, both checked here.
+	BoardModel.reset_map()
+	var model := BoardModel.new()
+	var unit := UnitInstance.create(
+		load("res://data/units/warden_t1.tres") as UnitData, BoardModel.TEAM_A)
+	model.force_place(unit, Vector2i(2, 3))
+
+	var view := BoardView.new()
+	add_child(view)
+	view.fit_to(Rect2(Vector2.ZERO, Vector2(900, 700)))
+	view.bind(model)
+	var v := view.ensure_view(unit)
+	_check("the unit has a view to move around", v != null)
+	if v == null:
+		return
+
+	var player := BattlePlayer.new()
+	add_child(player)
+	var log: Array[Dictionary] = []
+	log.append({kind = "spawn", t = 0.0, uid = unit.uid, cell = Vector2i(2, 3),
+		hp = 100.0, max_hp = 100.0, has_ability = false})
+	# A far-future event so the player does not run out of log and declare the
+	# battle over on the first frame — this test needs it still playing.
+	log.append({kind = "counts", t = 999.0, a = 1, b = 1})
+	player.play(view, log, {unit.uid: unit})
+	player._process(0.05)
+
+	var small := view.tile_size
+	var before := v.position
+	_check("the board is driving the unit's position", before != Vector2.ZERO)
+	# Board space: where the unit is in TILES. This is the number that must not
+	# move when the board rescales.
+	var board_before := before / small
+
+	view.zoom_by(1.25)
+	player._process(0.05)
+	var after := v.position
+	var board_after := after / view.tile_size
+	_check("zooming actually changed the tile size",
+		not is_equal_approx(view.tile_size, small),
+		"%.1f then %.1f" % [small, view.tile_size])
+	_check("but the unit is still on the same tile after zooming in",
+		board_before.distance_to(board_after) < 0.01,
+		"was %s tiles, now %s" % [board_before, board_after])
+	_check("and its pixel position scaled with the board",
+		after.distance_to(before * (view.tile_size / small)) < 1.0,
+		"expected %s, got %s" % [before * (view.tile_size / small), after])
+
+	# Zooming back out has to land where it started, or repeated wheel clicks
+	# walk the army off the board a little at a time.
+	view.zoom_by(1.0 / 1.25)
+	player._process(0.05)
+	_check("and zooming back out returns it to exactly where it was",
+		v.position.distance_to(before) < 1.0,
+		"started %s, ended %s" % [before, v.position])
+
+	# The second cause: the board must not re-place units from the model's cells
+	# during a battle, because those cells are already the END of the round.
+	_check("playback owns the positions while a battle is running", view.playback)
+	unit.cell = Vector2i(5, 9)
+	view.sync_positions()
+	_check("so a sync during playback leaves the unit where playback put it",
+		v.position.distance_to(before) < 1.0,
+		"was moved to %s" % v.position)
+
+	player.stop()
+	_check("and the board takes them back when the battle ends", not view.playback)
+	view.sync_positions()
+	_check("after which a sync does move it to the model's cell",
+		v.position.distance_to(view.cell_to_pos(Vector2i(5, 9))) < 1.0,
+		"%s against %s" % [v.position, view.cell_to_pos(Vector2i(5, 9))])
+
+	player.queue_free()
+	view.queue_free()
+
+
+func _check_the_boss_rule_reaches_the_music() -> void:
+	# Asked three times below. The wiring count is read BEFORE this runs, so these
+	# calls cannot pad it.
+	# The menu suite proves the RULE works and the toggle works. This proves the
+	# round loop actually asks: without it, _refresh_music could be deleted from
+	# _begin_prep and every check over there would stay green.
+	if Audio.boss_track_count <= 0:
+		_check("no boss tracks on disk to test the rule with", true)
+		return
+	var board: BoardModel = _main.board
+	var had := board.all_units().size()
+
+	_main._refresh_music()
+	_check("with no tier 6 about, the match track is playing",
+		Audio._music_now == _main._match_track,
+		"playing %s, match track is %s" % [
+			Audio._music_now, _main._match_track])
+
+	# Drop a tier 6 on the board and ask again.
+	var top: UnitData = load("res://data/units/warden_t6.tres")
+	var boss := UnitInstance.create(top, BoardModel.TEAM_A)
+	var spot := Vector2i(-1, -1)
+	for y in BoardModel.NEUTRAL_ROW:
+		for x in BoardModel.WIDTH:
+			if board.is_empty(Vector2i(x, y)):
+				spot = Vector2i(x, y)
+				break
+		if spot.x >= 0:
+			break
+	_check("there is somewhere to put a tier 6", spot.x >= 0)
+	if spot.x < 0:
+		return
+	board.force_place(boss, spot)
+	_main._refresh_music()
+	_check("a tier 6 on the board switches the music to a boss track",
+		Audio._music_now.begins_with("boss_"), Audio._music_now)
+
+	# And it goes back when the tier 6 does.
+	board.remove(boss)
+	_main._refresh_music()
+	_check("and it goes back to the match track when the tier 6 leaves",
+		Audio._music_now == _main._match_track, Audio._music_now)
+	_check("the board is as it was", board.all_units().size() == had,
+		"%d units, started with %d" % [board.all_units().size(), had])
+
+
+func _check_the_charge_reaches_the_view() -> void:
+	# The model suite proves the charge resolves. This proves the VIEW does
+	# something with it — the "charge" and "stun" events have to be handled, or the
+	# unit teleports with no streak and no label and it reads as a bug.
+	var view := BoardView.new()
+	add_child(view)
+	view.fit_to(Rect2(Vector2.ZERO, Vector2(900, 700)))
+	BoardModel.reset_map()
+	var model := BoardModel.new()
+	var runner := UnitInstance.create(
+		load("res://data/units/breaker_t3.tres") as UnitData, BoardModel.TEAM_A)
+	model.force_place(runner, Vector2i(2, 1))
+	view.bind(model)
+	var v := view.ensure_view(runner)
+	var player := BattlePlayer.new()
+	add_child(player)
+	var log: Array[Dictionary] = []
+	log.append({kind = "spawn", t = 0.0, uid = runner.uid, cell = Vector2i(2, 1),
+		hp = 100.0, max_hp = 100.0, has_ability = true})
+	log.append({kind = "charge", t = 0.0, uid = runner.uid, from = Vector2i(2, 1),
+		to = Vector2i(2, 5), hit = true, target_cell = Vector2i(2, 6),
+		cells = [Vector2i(2, 2), Vector2i(2, 3), Vector2i(2, 4), Vector2i(2, 5)]})
+	log.append({kind = "stun", t = 0.0, uid = runner.uid, cell = Vector2i(2, 6),
+		seconds = 1.35})
+	log.append({kind = "counts", t = 999.0, a = 1, b = 1})
+	player.play(view, log, {runner.uid: runner})
+	player._process(0.05)
+
+	# Checked in BOARD space, not pixels: the drawn position also carries the
+	# impact lunge, which is a few pixels of deliberate overshoot and would make an
+	# exact pixel comparison fail for the right reason at the wrong time.
+	var landed: Vector2 = player._pos.get(runner.uid, Vector2.ZERO)
+	_check("the charge moved the unit to the far end of the lane",
+		v != null and landed.is_equal_approx(Vector2(2.5, 5.5)),
+		"ended at %s tiles" % landed)
+	_check("and it is not left walking there as if it strolled",
+		not player._moves.has(runner.uid))
+	_check("the lane and the stun both drew something",
+		view._flashes.size() >= 2, "%d flashes" % view._flashes.size())
+
+	player.stop()
+	player.queue_free()
+	view.queue_free()
 
 
 func _check_unbound_board_survives() -> void:

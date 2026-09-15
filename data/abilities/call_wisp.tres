@@ -7,7 +7,9 @@
 script = ExtResource("1_ythy4")
 id = &"call_wisp"
 display_name = "Call Wisp"
-description = "Fills its retinue back up to strength with wisps on the tiles beside it — one at the lowest tiers, three at the highest. Every cast tops it back up, so a wisp that dies is replaced the next time the bar is full."
+description = "Fills its retinue back up to strength with wisps on the tiles beside it — one more for every tier it has, up to six. Every cast tops it back up, so a wisp that dies is replaced the next time the bar is full."
 kind = 9
 summon_unit = ExtResource("2_c7adx")
+summon_max = 6
+summon_per_tier = 1.0
 summon_retinue = true

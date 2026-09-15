@@ -21,13 +21,14 @@ func _draw() -> void:
 		draw_rect(body, Color(0.30, 0.33, 0.40), false, 1.0)
 		return
 
-	if unit.sprite != null:
+	var art := UnitView.portrait_for(unit)
+	if art != null:
 		draw_rect(body, Color(0.10, 0.11, 0.15), true)
-		var tex := unit.sprite.get_size()
+		var tex := art.get_size()
 		var fit: float = minf(body.size.x / maxf(tex.x, 1.0),
 			body.size.y / maxf(tex.y, 1.0))
 		var span := tex * fit
-		draw_texture_rect(unit.sprite,
+		draw_texture_rect(art,
 			Rect2(body.get_center() - span * 0.5, span), false)
 	else:
 		draw_rect(body, unit.accent, true)

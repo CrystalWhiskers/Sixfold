@@ -19,6 +19,25 @@ var map_index := 0
 ## Empty until the first read, because Audio has to have counted the files first.
 var battle_playlist: Array[bool] = []
 
+## Whether boss tracks may come up as ordinary battle music. Off by default: a
+## boss theme means something when it only plays for a boss, and a player who
+## wants them in the general rotation can say so.
+var boss_in_pool := false
+
+## Whether unit portraits are drawn at all. Off means every unit falls back to
+## the coloured plate and its initial — the look the game has for the units that
+## have no art yet, applied to all of them.
+##
+## On by default: a unit with art should show it unless you say otherwise.
+var portraits := true:
+	set(value):
+		portraits = value
+		# Written down to the view layer, which is where the drawing reads it.
+		# The setting belongs up here with the playlist; the flag has to live down
+		# there so the two scripts that draw a unit do not have to know an autoload
+		# exists — see UnitView.portraits_on.
+		UnitView.portraits_on = value
+
 ## Its own stream so which track you get is not decided by how many other random
 ## numbers the match happened to draw.
 var _music_rng := RandomNumberGenerator.new()
@@ -81,18 +100,48 @@ func tracks_on() -> int:
 
 
 func roll_battle_track() -> String:
-	# Called at the top of every round, so a long match moves through the
-	# playlist instead of sitting on whatever it opened with. play_music() is a
-	# no-op when the roll lands on the track already playing, which is what keeps
-	# a one-track playlist from restarting every round.
-	var live: Array[int] = []
+	# Rolled once per MATCH, not per round — the battle theme is meant to be the
+	# sound of this match rather than a shuffle between rounds. play_music() is a
+	# no-op when the roll lands on the track already playing.
+	var live: Array[String] = []
 	var list := playlist()
 	for i in list.size():
 		if list[i]:
-			live.append(i + 1)
+			live.append(Audio.battle_track(i + 1))
+	if boss_in_pool:
+		# Let in as full members of the rotation rather than with some separate
+		# weight: "allow boss themes into the pool" means the pool, and a boss
+		# track being longer is not a reason for it to be rarer.
+		for i in Audio.boss_track_count:
+			live.append(Audio.boss_track(i + 1))
 	if live.is_empty():
 		return Audio.battle_track(1)
-	return Audio.battle_track(live[_music_rng.randi_range(0, live.size() - 1)])
+	return live[_music_rng.randi_range(0, live.size() - 1)]
+
+
+func roll_boss_track() -> String:
+	## The track for a round with a tier 6 on the board. Rolled fresh each time
+	## rather than fixed for the match, because a boss round is an event and two
+	## of them in one match should not sound like the same event twice.
+	if Audio.boss_track_count <= 0:
+		return ""
+	return Audio.boss_track(_music_rng.randi_range(1, Audio.boss_track_count))
+
+
+static func is_boss_round(board: BoardModel) -> bool:
+	## A tier 6 unit anywhere on the board, either side. Deliberately not "the
+	## PLAYER has a tier 6": the music is about what is on the field, and walking
+	## into an enemy tier 6 is the moment that most deserves marking.
+	if board == null:
+		return false
+	for u in board.all_units():
+		if u.is_alive() and u.data != null and u.data.tier >= 6:
+			return true
+	return false
+
+
+func toggle_boss_in_pool() -> void:
+	boss_in_pool = not boss_in_pool
 
 
 func playlist_summary() -> String:

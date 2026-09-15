@@ -6,6 +6,7 @@
 script = ExtResource("1_hfp08")
 id = &"benediction"
 display_name = "Benediction"
-description = "A heavy burst of healing on whoever nearby is hurt worst. Bigger every tier."
+description = "A heavy burst of healing on whoever nearby is hurt worst, and every debuff on them is lifted first — poison, and the freeze that goes with it. Bigger every tier. Cleansing before healing is what makes it an answer to a Vexer: a poisoned unit cannot be healed at all until the poison is off it."
 kind = 8
 cast_time = 0.28
+cleanses = true

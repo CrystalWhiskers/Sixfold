@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/abilities/onslaught.tres" id="1_wee4a"]
+[ext_resource type="Resource" path="res://data/units/breaker_t3.tres" id="2_l1pqb"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_32gn1"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="4_jeelc"]
+
+[resource]
+script = ExtResource("3_32gn1")
+id = &"breaker"
+display_name = "Breaker II"
+tier = 2
+max_hp = 300.0
+attack_damage = 52.0
+attack_speed = 0.55
+move_time = 0.6
+ability = ExtResource("1_wee4a")
+mana_per_attack = 0.0
+casts_at_battle_start = true
+next_tier = ExtResource("2_l1pqb")
+note = "Everything it is worth happens in the first second of the round. At the bell it runs straight down the column you left it in and slams into the first enemy in the lane, for a great deal of damage and a stun that scales with its tier. Nothing else about it is special: an ordinary melee body with a slow swing, standing wherever the charge left it. Where you PUT it is the whole unit — an empty lane is a wasted charge and a walk to the wrong end of the board."
+sprite = ExtResource("4_jeelc")
+accent = Color(0.82, 0.52, 0.24, 1)

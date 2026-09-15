@@ -599,10 +599,10 @@ const UNIT_TABLE := [
 
 
 	{
-		id = &"warden", name = "Warden", hp = 220.0, dmg = 34.0, spd = 0.35,
-		move = 0.85, range = "MELEE", sight = 3, type = "MELEE",
+		id = &"warden", name = "Warden", hp = 220.0, dmg = 34.0, spd = 0.30,
+		move = 0.88, range = "MELEE", sight = 3, type = "MELEE",
 		accent = Color(0.38, 0.47, 0.60),
-		ability = &"bulwark_shield", mana = 20.0, opens = true,
+		ability = &"bulwark_shield", mana = 16.0, opens = true,
 		note = "Slow to swing and slower to walk, but hits like a truck behind a shield bigger than itself.",
 	},
 	{
@@ -666,7 +666,7 @@ const UNIT_TABLE := [
 		move = 0.48, range = "MEDIUM", sight = 4, type = "RANGED",
 		accent = Color(0.55, 0.80, 0.75),
 		ability = &"benediction", mana = 34.0,
-		note = "Fills its bar fast and dumps it all into whoever is closest to dying.",
+		note = "Fills its bar fast and dumps it all into whoever is closest to dying, lifting whatever is on them first. The only cleanse in the game, which makes it the answer to a Vexer or a Stasis.",
 	},
 	{
 		id = &"herald", name = "Herald", hp = 110.0, dmg = 7.0, spd = 0.8,
@@ -705,12 +705,12 @@ const UNIT_TABLE := [
 	},
 	{
 		id = &"transcendence", name = "Transcendence", hp = 165.0, dmg = 22.0, spd = 0.45,
-		move = 0.62, range = "MEDIUM", sight = 4, type = "RANGED",
+		move = 0.62, range = "UNLIMITED", sight = 6, type = "RANGED",
 		accent = Color(0.58, 0.56, 0.44),
 		mana = 0.0, magnet = true, beam = true,
 		apex = {hp = 4.0, dmg = 4.0, range = "UNLIMITED", pierce = 100,
-			endless = true, wash = 0.5, spd = 0.5},
-		note = "No ability, no tricks, and slower to swing than anything else on the board. Every merge it touches comes out Transcendence, and at tier 6 it fires a beam across the whole board that takes the rank behind the target with it — once every four seconds, so what it is aimed at matters more than how often.",
+			endless = true, wash = 0.5, spd = 0.35},
+		note = "No ability, no tricks, and slower to swing than anything else on the board — but its range has no limit at any tier, so it opens fire the instant the bell rings, from wherever you left it, over any wall in the way. Every merge it touches comes out Transcendence, and at tier 6 the shot becomes a beam that takes the rank behind the target with it — once every six seconds or so, which makes what it is aimed at matter far more than how often it fires.",
 	},
 	{
 		id = &"conjurer", name = "Conjurer", hp = 190.0, dmg = 7.0, spd = 0.6,
@@ -727,11 +727,18 @@ const UNIT_TABLE := [
 		note = "The heaviest single shot on the board and the slowest hands holding it — four tiles of reach and one swing every two and a half seconds. Its shell is aimed at whichever enemy has the most company, lands a second and a half later on the tile rather than the unit, and leaves the ground burning behind it. It wants a target that cannot afford to move and hates one that can.",
 	},
 	{
-		id = &"parasite", name = "Parasite", hp = 90.0, dmg = 17.0, spd = 1.4,
+		id = &"leech", name = "Leech", hp = 90.0, dmg = 17.0, spd = 1.4,
 		move = 0.48, range = "LONG", sight = 5, type = "RANGED",
 		accent = Color(0.48, 0.30, 0.44),
 		ability = &"siphon", mana = 18.0, lifesteal = 0.25,
 		note = "Drinks a quarter of everything it deals, from range, quickly. Its bar reaches across the whole board and fastens onto the single biggest thing the other side has — and then takes a fixed slice of that maximum every second whatever happens to it. It is the answer to a tier 6 Transcendence, and it is nearly useless against eight small ones.",
+	},
+	{
+		id = &"breaker", name = "Breaker", hp = 150.0, dmg = 26.0, spd = 0.55,
+		move = 0.60, range = "MELEE", sight = 4, type = "MELEE",
+		accent = Color(0.82, 0.52, 0.24),
+		ability = &"onslaught", mana = 0.0, opens = true,
+		note = "Everything it is worth happens in the first second of the round. At the bell it runs straight down the column you left it in and slams into the first enemy in the lane, for a great deal of damage and a stun that scales with its tier. Nothing else about it is special: an ordinary melee body with a slow swing, standing wherever the charge left it. Where you PUT it is the whole unit — an empty lane is a wasted charge and a walk to the wrong end of the board.",
 	},
 	{
 		id = &"colossus", name = "Colossus", hp = 250.0, dmg = 95.0, spd = 0.25,
@@ -800,7 +807,7 @@ const UNIT_TABLE := [
 		note = "Opens every round building a Sentry where it stands, exposed while it works, then steps off and leaves it standing there. Barely fights. It repairs an adjacent friendly Mechanical unit every second, and it will go to a damaged one rather than advance — so it tends its turret instead of dying on someone's spear.",
 	},
 	{
-		id = &"wisp", name = "Wisp", hp = 70.0, dmg = 9.0, spd = 1.3,
+		id = &"wisp", name = "Wisp", hp = 38.0, dmg = 5.0, spd = 1.3,
 		move = 0.40, range = "MELEE", sight = 3, type = "MELEE",
 		accent = Color(0.70, 0.62, 0.86),
 		mana = 0.0, hidden = true,
@@ -811,7 +818,7 @@ const UNIT_TABLE := [
 		move = 0.60, range = "UNLIMITED", sight = 6, type = "RANGED",
 		accent = Color(0.48, 0.55, 0.62),
 		mana = 0.0, rooted = true, mechanical = true, hidden = true,
-		note = "Built, not drawn, and the ten seconds it costs to raise are paid for here. It cannot move and it cannot be moved, it sees the whole board, and it fires rarely and enormously. Stone still stops its shot like anyone else's.",
+		note = "Built, not drawn, and the ten seconds it costs to raise are paid for here. It cannot move and it cannot be moved, it sees the whole board, and it fires rarely and enormously. Its range has no limit of any kind — it shoots over walls, over stone, over anything, from wherever it was bolted down.",
 	},
 ]
 
@@ -865,13 +872,15 @@ const ABILITY_TABLE := [
 	},
 	{
 		id = &"benediction", name = "Benediction", kind = "BURST_HEAL", cast_time = 0.28,
-		desc = "A heavy burst of healing on whoever nearby is hurt worst. Bigger every tier.",
+		desc = "A heavy burst of healing on whoever nearby is hurt worst, and every debuff on them is lifted first — poison, and the freeze that goes with it. Bigger every tier. Cleansing before healing is what makes it an answer to a Vexer: a poisoned unit cannot be healed at all until the poison is off it.",
 		heal_percent = 0.45, heal_percent_per_tier = 0.20, heal_radius = 3,
+		cleanses = true,
 	},
 	{
 		id = &"call_wisp", name = "Call Wisp", kind = "SUMMON", cast_time = 0.5,
-		desc = "Fills its retinue back up to strength with wisps on the tiles beside it — one at the lowest tiers, three at the highest. Every cast tops it back up, so a wisp that dies is replaced the next time the bar is full.",
-		summon = &"wisp", summon_max = 3, summon_retinue = true,
+		desc = "Fills its retinue back up to strength with wisps on the tiles beside it — one more for every tier it has, up to six. Every cast tops it back up, so a wisp that dies is replaced the next time the bar is full.",
+		summon = &"wisp", summon_max = 6, summon_retinue = true,
+		summon_per_tier = 1.0,
 	},
 	{
 		id = &"raise_host", name = "Raise Host", kind = "SUMMON", cast_time = 1.4,
@@ -886,6 +895,12 @@ const ABILITY_TABLE := [
 		burst_attack_multiple = 4.0, splash_damage = 0.0, splash_radius = 0,
 	},
 	{
+		id = &"onslaught", name = "Onslaught", kind = "CHARGE", cast_time = 0.2,
+		desc = "At the opening bell it runs straight forward down its own column until something stops it. The first ENEMY in the lane takes 1.2 times its attack damage per tier and is stunned for 0.45 seconds per tier — no moving, no swinging, no casting. An ally in the way blocks the charge and takes nothing; so does a wall. It moves whether or not it connects, so a charge into an empty lane leaves it standing at the far end having done nothing at all.",
+		charge_damage_per_tier = 1.2, stun_seconds_per_tier = 0.45,
+		charge_distance = 11,
+	},
+	{
 		id = &"retribution", name = "Retribution", kind = "REFLECT", cast_time = 0.5,
 		desc = "Sets itself and waits. For five seconds it shrugs off half again of everything that lands, and anything striking it from an adjacent tile — a swing or an ability — takes 200% of that damage straight back. A bow across the board is untouched by it.",
 		reflect_resist = 0.50, reflect_percent = 2.0, reflect_duration = 5.0,
@@ -898,9 +913,9 @@ const ABILITY_TABLE := [
 	},
 	{
 		id = &"assemble", name = "Assemble", kind = "SUMMON", cast_time = 10.0,
-		desc = "Spends the opening of the round bolting a Sentry together on the tile it is standing on, then steps aside and leaves it there. It is head-down while it works and takes double damage the whole time. If its Sentry is destroyed it will build another once its bar is full, and it will not start a build it has no room to finish.",
-		summon = &"sentry", summon_max = 1, summon_cap_by_tier = false,
-		summon_retinue = true, summon_at_caster = true,
+		desc = "Spends the opening of the round bolting a Sentry together on the tile it is standing on, then steps aside and leaves it there. It keeps one at tiers 1-2, two at 3-4 and three at 5-6, and builds them one at a time. It is head-down while it works and takes double damage the whole time. If a Sentry is destroyed it will build another once its bar is full, and it will not start a build it has no room to finish.",
+		summon = &"sentry", summon_max = 3, summon_retinue = true,
+		summon_at_caster = true,
 		opener_takes_time = true, exposes_caster = 1.0, holds_when_capped = true,
 	},
 	{
@@ -934,7 +949,7 @@ const ABILITY_TABLE := [
 	},
 	{
 		id = &"siphon", name = "Siphon", kind = "DRAIN", cast_time = 0.5,
-		desc = "Reaches across the whole board — no range limit at all — and fastens onto whichever enemy has the largest maximum health. From then until that unit dies it loses 2.5% of that maximum every second. Shields are not counted, so nothing hides behind one, and the bite does not shrink as the victim wears down. Several Siphons stack on the same victim, and the Parasite heals off every tick of it.",
+		desc = "Reaches across the whole board — no range limit at all — and fastens onto whichever enemy has the largest maximum health. From then until that unit dies it loses 2.5% of that maximum every second. Shields are not counted, so nothing hides behind one, and the bite does not shrink as the victim wears down. Several Siphons stack on the same victim, and the Leech heals off every tick of it.",
 		drain_percent = 0.025, drain_interval = 1.0,
 	},
 	{
@@ -946,7 +961,20 @@ const ABILITY_TABLE := [
 
 const BUFF_TABLE = [
 	{id = &"mending_wind", name = "Mending Wind", kind = "REGEN", weight = 1.0,
-		b = Vector2(0.05, 0.0), s = Vector2(0.07, 0.0), g = Vector2(0.10, 0.0)},
+		b = Vector2(0.01, 0.0), s = Vector2(0.02, 0.0), g = Vector2(0.04, 0.0)},
+	{id = &"aegis_wall", name = "Aegis Wall", kind = "ROUND_SHIELD", weight = 1.0,
+		b = Vector2(1000.0, 0.0), s = Vector2(2000.0, 0.0), g = Vector2(3000.0, 0.0)},
+	{id = &"forced_march", name = "Forced March", kind = "STAT", weight = 1.0,
+		stat_a = "MOVE_TIME",
+		b = Vector2(0.50, 0.0), s = Vector2(0.75, 0.0), g = Vector2(1.00, 0.0)},
+	{id = &"militia", name = "Militia", kind = "STAT", weight = 1.0,
+		stat_a = "MAX_HP", stat_b = "ATTACK_DAMAGE", two = true, max_tier = 3,
+		b = Vector2(0.50, 0.50), s = Vector2(0.75, 0.75), g = Vector2(1.00, 1.00)},
+	{id = &"avalanche", name = "Avalanche", kind = "STAT", weight = 1.0,
+		unit = &"breaker", stat_a = "MAX_HP",
+		stun_bonus = Vector3(1.0, 2.0, 3.0),
+		charge_bonus = Vector3(0.50, 0.75, 1.00),
+		b = Vector2(0.0, 0.0), s = Vector2(0.0, 0.0), g = Vector2(0.0, 0.0)},
 	{id = &"rupture", name = "Rupture", kind = "PERCENT_HP_DAMAGE", weight = 1.0,
 		b = Vector2(0.01, 0.0), s = Vector2(0.02, 0.0), g = Vector2(0.03, 0.0)},
 	{id = &"windfall", name = "Windfall", kind = "MERGE_EXTRA_UNIT", weight = 1.0,
@@ -997,9 +1025,9 @@ const BUFF_TABLE = [
 		unit = &"amalgam", stat_a = "MAX_HP",
 		b = Vector2(1.00, 0.0), s = Vector2(2.00, 0.0), g = Vector2(3.00, 0.0)},
 	{id = &"incubation", name = "Incubation", kind = "STAT", weight = 1.0,
-		unit = &"spire", stat_a = "MANA_REGEN", stat_b = "MAX_HP", two = true,
-		flat = true,
-		b = Vector2(3.0, 0.50), s = Vector2(6.0, 1.00), g = Vector2(9.0, 1.5)},
+		unit = &"spire", stat_a = "MANA_REGEN", flat = true,
+		extra_summons = Vector3(1, 2, 3),
+		b = Vector2(3.0, 0.0), s = Vector2(6.0, 0.0), g = Vector2(9.0, 0.0)},
 	{id = &"confluence", name = "Confluence", kind = "STAT", weight = 1.0,
 		unit = &"wellspring", stat_a = "MANA_REGEN", stat_b = "MAX_HP", two = true,
 		flat = true,
@@ -1043,7 +1071,7 @@ const BUFF_TABLE = [
 		two = true,
 		b = Vector2(0.20, 0.75), s = Vector2(0.40, 1.50), g = Vector2(0.60, 2.25)},
 	{id = &"hunger", name = "Hunger", kind = "STAT", weight = 1.0,
-		unit = &"parasite", stat_a = "ATTACK_SPEED", stat_b = "ATTACK_RANGE",
+		unit = &"leech", stat_a = "ATTACK_SPEED", stat_b = "ATTACK_RANGE",
 		two = true, flat_b = true,
 		b = Vector2(0.25, 1.0), s = Vector2(0.50, 2.0), g = Vector2(0.75, 3.0)},
 	{id = &"tempering", name = "Tempering", kind = "STAT", weight = 1.0,
@@ -1281,8 +1309,10 @@ func _make_abilities() -> Dictionary:
 			"shield_percent", "shield_cap_percent",
 			"blink_base_damage", "stealth_time", "aura_percent_per_tier",
 			"aura_radius", "revive_chance", "revive_delay", "revive_hp_percent",
-			"heal_percent", "heal_percent_per_tier", "heal_radius", "summon_max",
-				"summon_count", "summon_random", "summon_cap_by_tier", "mana_aura_radius",
+			"heal_percent", "heal_percent_per_tier", "heal_radius", "cleanses",
+				"charge_damage_per_tier", "stun_seconds_per_tier", "charge_distance",
+				"summon_max",
+				"summon_count", "summon_random", "summon_cap_by_tier", "summon_per_tier", "mana_aura_radius",
 				"summon_persists", "consumes_caster", "summon_adjacent",
 				"guards_caster", "summon_instacasts", "summon_retinue",
 				"opener_takes_time", "exposes_caster", "summon_at_caster",
@@ -1472,6 +1502,10 @@ func _make_buffs() -> void:
 		b.extra_raises = row.get("extra_raises", Vector3.ZERO)
 		b.wall_toughness = row.get("wall_toughness", Vector3.ZERO)
 		b.shield_on_hit = row.get("shield_on_hit", Vector3.ZERO)
+		b.extra_summons = row.get("extra_summons", Vector3.ZERO)
+		b.max_tier = row.get("max_tier", 0)
+		b.stun_bonus = row.get("stun_bonus", Vector3.ZERO)
+		b.charge_bonus = row.get("charge_bonus", Vector3.ZERO)
 		_save(b, "%s/%s.tres" % [BUFF_DIR, row.id])
 
 

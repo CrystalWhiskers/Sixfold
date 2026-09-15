@@ -14,21 +14,33 @@ const DISPLACE_TIME := 0.12
 const REGEN_INTERVAL := 1.0
 
 # Two tier-1 Wardens carry 275 points of shield each and deal about 12 a second,
-# so left alone they cannot finish each other inside the timeout. After this many
-# seconds every hit lands harder, and keeps growing, until somebody falls over.
+# so left alone they cannot finish each other inside the timeout. At 1:45 the
+# gloves come off and the last fifteen seconds are meant to produce a body.
 #
-# Held until the last thirty seconds on purpose. It used to start at 30s, which
+# Held until the last fifteen seconds on purpose. It used to start at 30s, which
 # meant almost nothing survived to the timeout and the clock never decided
-# anything — the escalation did. Now the clock is the rule and this is only the
-# backstop against a fight that would otherwise never touch.
-const SUDDEN_DEATH := 90.0
-const PRESSURE_RATE := 0.15
+# anything — the escalation did. The clock is the rule; this is the backstop
+# against a fight that would otherwise never touch.
+const SUDDEN_DEATH := 105.0
+
+# One step, not a ramp. It used to climb 15% a second, which over a long tail was
+# the thing that actually decided rounds; over fifteen seconds a ramp would be
+# nearly invisible for the first ten and absurd for the last two. A flat doubling
+# is legible — you can hear it happen and you know exactly what changed.
+#
+# It multiplies damage, attack speed and movement alike. Movement is in here
+# because the other half of an overrunning round is two units that never MEET —
+# on a maze or a long corridor, harder hits do nothing for a unit that is still
+# walking. Every unit is divided by the same number, so who outruns whom never
+# changes.
+const SUDDEN_DEATH_MULT := 2.0
 
 # A round can also overrun because the last two units never *meet* — on a maze
 # or a long corridor, harder hits do nothing for a unit that is still walking.
 # So pressure shortens the step as well as fattening the hit. Every unit is
 # divided by the same number, so who outruns whom never changes.
 const MIN_MOVE_TIME := TICK
+const MIN_ATTACK_TIME := TICK
 
 # What a tile costs to path through when one of your own is standing on it. Six
 # says "walk four tiles round rather than wait behind one, but do not walk
@@ -52,6 +64,11 @@ const SAPPER_WALL_COST := 2
 # reaches it, and short enough that a unit sent the long way round a map wall
 # gives up on the detour well before the round is decided.
 const IMPATIENT_AFTER := 6.0
+
+# And after this long it stops wanting the thing it cannot have. Two seconds
+# past the point where it starts breaking walls, so digging gets its chance
+# first; see _gave_up_on_target().
+const STUBBORN_AFTER := 8.0
 
 # An ordinary unit does 0.15x its attack damage to stone, and at that rate a map
 # wall outlasts the round several times over — smashing at that speed would be
@@ -283,6 +300,7 @@ func step() -> void:
 	_tick_stealth()
 	_tick_taunts()
 	_tick_freezes()
+	_tick_stuns()
 	_tick_reflects()
 	_tick_shells()
 	_tick_fields()
@@ -305,6 +323,16 @@ func _apply_battle_buffs() -> void:
 			continue
 		_regen[team] = tb.regen_fraction()
 		_hp_damage[team] = tb.hp_damage_fraction()
+		var bulwark := tb.round_shield()
+		if bulwark > 0.0:
+			# Straight onto the shield pool, not through add_shield(), because
+			# that respects the unit's own shield_cap — a number meant for the
+			# Warden's bulwark, which most units set to zero. This is a gift from
+			# outside the unit and the unit's own ceiling has nothing to say
+			# about it.
+			for u in _units:
+				if u.team == team:
+					u.shield = maxf(u.shield, 0.0) + bulwark
 		var mods := tb.full_roster_modifiers()
 		if mods.is_empty() or not _has_full_roster(team):
 			continue
@@ -326,15 +354,29 @@ func _has_full_roster(team: int) -> bool:
 
 
 func pressure() -> float:
-	if elapsed <= SUDDEN_DEATH:
-		return 1.0
-	return 1.0 + (elapsed - SUDDEN_DEATH) * PRESSURE_RATE
+	## The one number sudden death multiplies by. Read by the damage calculation,
+	## the attack timer and the move timer, so all three change together and there
+	## is a single place to look when the last fifteen seconds feel wrong.
+	return SUDDEN_DEATH_MULT if _sudden_death else 1.0
+
+
+func attack_interval(u: UnitInstance) -> float:
+	## The unit's own swing timer, divided by the pressure. This lives here rather
+	## than on UnitInstance because pressure belongs to the battle, not to the
+	## unit — a unit has no idea what time it is.
+	return maxf(u.attack_interval() / pressure(), MIN_ATTACK_TIME)
 
 
 func _tick_pressure() -> void:
 	if _sudden_death or elapsed <= SUDDEN_DEATH:
 		return
 	_sudden_death = true
+	# Nothing recovers from here on: no healing from any source, and no shield
+	# may be GAINED. Shields already standing are not stripped — the rule is that
+	# the fight stops replenishing, not that armour evaporates, and stripping them
+	# would delete the Warden's whole identity fifteen seconds from the end.
+	for u in _units:
+		u.recovery_denied = true
 	_emit("sudden_death", {at = elapsed})
 
 
@@ -409,10 +451,11 @@ func _shuffle_order() -> void:
 
 
 func _decide(u: UnitInstance) -> void:
-	# Frozen units do not get a turn at all. Checked before the target is even
-	# picked, and before the full-mana cast below, so a bar that filled the tick
-	# before the freeze landed is held rather than spent.
-	if u.is_frozen():
+	# Held units do not get a turn at all — frozen or stunned, the two are the
+	# same refusal here. Checked before the target is even picked, and before the
+	# full-mana cast below, so a bar that filled the tick before it landed is held
+	# rather than spent.
+	if u.is_held():
 		return
 	u.target = _mark_for(u)
 	if u.is_taunting():
@@ -505,7 +548,11 @@ func reach_against(u: UnitInstance, target: UnitInstance) -> int:
 	#
 	#   * A melee unit standing on the ground cannot touch anything on high
 	#     ground. Not "at a penalty" — at all. Stairs are the answer, and finding
-	#     them is the melee player's problem.
+	#     them is the melee player's problem. Standing ON the stairs counts as
+	#     being up there for this: the step is the fighting ground, and a melee
+	#     line that had to finish the climb before it could swing would be cut
+	#     down one at a time by anything waiting at the top. Stairs are the way
+	#     up, so they have to be a place you can fight from.
 	#   * Shooting FROM high ground is worth a band, which it always has been.
 	#   * Shooting AT high ground costs a band. A Long-ranged Archer has to come
 	#     to Medium range to touch the terrace.
@@ -514,7 +561,13 @@ func reach_against(u: UnitInstance, target: UnitInstance) -> int:
 	# terraces is fought at exactly the range it would be on flat ground.
 	var high_from := BoardModel.is_high(u.cell)
 	var high_to := target != null and BoardModel.is_high(target.cell)
-	if high_to and not high_from and not u.is_ranged():
+	# Stairs let a MELEE unit swing up onto the terrace, and do nothing else. A
+	# unit on the steps is halfway up: close enough to reach the man at the top,
+	# not high enough to be safe from him, and not high enough for a bow to gain
+	# the elevation band — that is a reward for holding the terrace, not for
+	# putting one foot on it.
+	var footing := high_from or BoardModel.is_stairs(u.cell)
+	if high_to and not footing and not u.is_ranged():
 		# Zero, not one: in_reach compares against a distance of at least one for
 		# any two distinct tiles, so this can never be satisfied.
 		return 0
@@ -548,7 +601,7 @@ func _hit_wall(u: UnitInstance, cell: Vector2i) -> bool:
 		return false
 	# It costs a swing, at the unit's own attack speed. A Sapper digs quickly
 	# because it hits hard and often; a Warden digs slowly for both reasons.
-	_enter(u, UnitInstance.State.ATTACKING, u.attack_interval())
+	_enter(u, UnitInstance.State.ATTACKING, attack_interval(u))
 	var fell := BoardModel.damage_wall(cell, hit)
 	_emit("wall_hit", {
 		uid = u.uid, from = u.cell, cell = cell, amount = hit,
@@ -617,8 +670,17 @@ func _choose_enemy(u: UnitInstance) -> UnitInstance:
 
 	# Stick with what it is already fighting while that is still sensible, or a
 	# unit would re-roll its mind every tick and never finish anything.
+	#
+	# Unless it has been stuck. The stickiness above is what makes a unit fight
+	# instead of dithering, but it is also how a unit freezes solid: it locks on
+	# to something it cannot actually get to — the far side of permanent stone,
+	# a plateau whose only stairs are on the enemy's half — and then walks into
+	# the same obstacle for the rest of the round because the target is still
+	# "sensible" by distance. Distance was never the question. Whether it has
+	# managed to do anything in the last few seconds is.
 	var held := u.target
-	if held != null and held.is_alive() and held.team != u.team \
+	var give_up := _gave_up_on_target(u)
+	if not give_up and held != null and held.is_alive() and held.team != u.team \
 			and not held.is_hidden() \
 			and BoardModel.tile_distance(u.cell, held.cell) <= reach:
 		return held
@@ -627,11 +689,37 @@ func _choose_enemy(u: UnitInstance) -> UnitInstance:
 	for other in _units:
 		if other.team == u.team or not other.is_alive() or other.is_hidden():
 			continue
+		# The one it just gave up on is off the list, so "pick again" cannot pick
+		# the same body and leave the unit standing exactly where it was.
+		if give_up and other == held:
+			continue
 		if BoardModel.tile_distance(u.cell, other.cell) <= reach:
 			pool.append(other)
-	if pool.size() <= 1:
+	if pool.is_empty():
+		# Nobody else within reach — often literally nobody else alive. Better to
+		# keep battering at the one enemy there is than to stand with no target
+		# at all, so the give-up is abandoned rather than the target.
 		return near
+	if pool.size() == 1:
+		return pool[0]
 	return pool[rng.randi_range(0, pool.size() - 1)]
+
+
+func _gave_up_on_target(u: UnitInstance) -> bool:
+	## Has this unit gone long enough without landing anything that it should stop
+	## being stubborn? Deliberately LONGER than IMPATIENT_AFTER: a unit with a
+	## wall in the way starts breaking it at six seconds, and it deserves the
+	## chance to finish rather than being pulled off the moment it starts digging.
+	## What is left after that is a unit that cannot solve its problem by walking
+	## or by digging, and the only move left is to want something else.
+	if u == null or u.dry_spell < STUBBORN_AFTER:
+		return false
+	# The clock restarts on the decision, not on the next hit. Without this the
+	# unit is over the line on every subsequent tick and re-rolls its target
+	# constantly — the dithering the stickiness exists to prevent, arrived at
+	# from the other direction.
+	u.dry_spell = 0.0
+	return true
 
 
 func _tending(u: UnitInstance) -> UnitInstance:
@@ -660,7 +748,23 @@ func _tending(u: UnitInstance) -> UnitInstance:
 	return best
 
 
+func shoots_through_walls(u: UnitInstance) -> bool:
+	## Unlimited range means unlimited: across the whole board and over anything
+	## in the way. A band that already ignores distance has no business being
+	## stopped by a wall — and the units that have it are the ones whose whole
+	## identity is that nothing is out of their reach. It is the one band that
+	## does this; a Horizon shot one band below still needs a clear line.
+	##
+	## Asked in three places — whether the shot connects, where the apex beam
+	## draws to, and who the beam catches BEHIND its target — because a beam that
+	## targets through stone but stops drawing at it would look like a bug and a
+	## beam that stopped catching things behind the wall would be one.
+	return u != null and u.range_band() == UnitData.RangeBand.UNLIMITED
+
+
 func _has_shot(u: UnitInstance, target: UnitInstance) -> bool:
+	if shoots_through_walls(u):
+		return true
 	# Only things that shoot need a clear line — with one exception. A melee unit
 	# swinging at the tile beside it never has a wall in the way, but now that it
 	# can also reach the four corners, it can be swinging across a barrier. Those
@@ -719,7 +823,7 @@ func _begin_attack(u: UnitInstance) -> void:
 	u.dry_spell = 0.0
 	var victim := u.target
 	var dmg := u.stat(StatModifier.Stat.ATTACK_DAMAGE)
-	var cd := u.attack_interval()
+	var cd := attack_interval(u)
 	_enter(u, UnitInstance.State.ATTACKING, cd)
 
 	if u.executes_next:
@@ -741,7 +845,8 @@ func _begin_attack(u: UnitInstance) -> void:
 	var struck := {victim.uid: true}
 	var extra := maxi(u.data.pierce_targets, 1) - 1
 	if extra > 0:
-		for v in _pierce_beyond(u.cell, victim, extra, u.team):
+		for v in _pierce_beyond(u.cell, victim, extra, u.team,
+				shoots_through_walls(u)):
 			struck[v.uid] = true
 			_damage(v, dmg, u)
 
@@ -776,14 +881,19 @@ func _mana_from_swing(u: UnitInstance) -> void:
 
 
 func beam_cells(from: Vector2i, toward: Vector2i,
-		team := BoardModel.NOBODY) -> Array[Vector2i]:
+		team := BoardModel.NOBODY, through_walls := false) -> Array[Vector2i]:
 	# The line the beam travels, from the shooter to the far edge of the board.
+	# `through_walls` is the apex Transcendence: its beam does not stop at stone,
+	# it goes through it, so the line runs to the edge of the board regardless of
+	# what is standing in the way.
 	var out: Array[Vector2i] = []
 	var step := Vector2i(signi(toward.x - from.x), signi(toward.y - from.y))
 	if step == Vector2i.ZERO:
 		return out
 	var c := from + step
-	while board.in_bounds(c) and not BoardModel.blocks_sight(c, team):
+	while board.in_bounds(c):
+		if not through_walls and BoardModel.blocks_sight(c, team):
+			break
 		out.append(c)
 		c += step
 	return out
@@ -791,7 +901,7 @@ func beam_cells(from: Vector2i, toward: Vector2i,
 
 func _beam_wash(u: UnitInstance, victim: UnitInstance, dmg: float,
 		struck: Dictionary) -> void:
-	var line := beam_cells(u.cell, victim.cell, u.team)
+	var line := beam_cells(u.cell, victim.cell, u.team, shoots_through_walls(u))
 	if line.is_empty():
 		return
 	var washed: Array[Vector2i] = []
@@ -824,7 +934,7 @@ func _beam_wash(u: UnitInstance, victim: UnitInstance, dmg: float,
 
 
 func _pierce_beyond(origin: Vector2i, victim: UnitInstance, count: int,
-		team: int) -> Array[UnitInstance]:
+		team: int, through_walls := false) -> Array[UnitInstance]:
 	var out: Array[UnitInstance] = []
 	var delta := victim.cell - origin
 	var step := Vector2i(signi(delta.x), signi(delta.y))
@@ -833,7 +943,9 @@ func _pierce_beyond(origin: Vector2i, victim: UnitInstance, count: int,
 	var c := victim.cell
 	for i in count + 2:
 		c += step
-		if not board.in_bounds(c) or BoardModel.blocks_sight(c, team):
+		if not board.in_bounds(c):
+			break
+		if not through_walls and BoardModel.blocks_sight(c, team):
 			break
 		var v := board.unit_at(c)
 		if v == null or not v.is_alive() or v.team == team:
@@ -898,6 +1010,8 @@ func _resolve_ability(u: UnitInstance) -> void:
 			_resolve_mana_aura(u, ab)
 		AbilityData.Kind.FREEZE:
 			_resolve_freeze(u, ab)
+		AbilityData.Kind.CHARGE:
+			_resolve_charge(u, ab)
 		AbilityData.Kind.TAUNT:
 			_resolve_taunt(u, ab)
 		AbilityData.Kind.REFLECT:
@@ -1004,6 +1118,17 @@ func _resolve_burst_heal(u: UnitInstance, ab: AbilityData) -> void:
 			cell = u.cell, wasted = true})
 		return
 
+	# BEFORE the heal, and the order is the whole point. The Vexer's poison stops
+	# its target being healed at all, so a cleanse that ran afterwards would lift
+	# the poison off a unit it had just failed to heal, and the Seraph would read
+	# as useless against the one unit it most obviously answers. Lifted first, the
+	# heal lands the same tick.
+	if ab.cleanses:
+		var lifted := patient.cleanse()
+		if not lifted.is_empty():
+			_emit("cleanse", {uid = patient.uid, cell = patient.cell,
+				removed = lifted})
+
 	var before := patient.current_hp
 	patient.heal(patient.stat(StatModifier.Stat.MAX_HP) * heal_fraction(u, ab)
 		* u.stat(StatModifier.Stat.HEAL_POWER))
@@ -1041,7 +1166,15 @@ func _worst_hurt_ally(u: UnitInstance, radius: int) -> UnitInstance:
 func summon_cap(u: UnitInstance, ab: AbilityData) -> int:
 	if not ab.summon_cap_by_tier:
 		return maxi(ab.summon_max, 1)
-	return clampi((u.data.tier + 1) / 2, 1, maxi(ab.summon_max, 1))
+	# ceil() rather than round(), so a rate of 0.5 gives 1 at tier 1 rather than
+	# 0 — a retinue unit with no retinue at its lowest tier is just a bad unit.
+	return clampi(ceili(float(u.data.tier) * maxf(ab.summon_per_tier, 0.01)),
+		1, maxi(ab.summon_max, 1))
+
+
+func extra_summons(u: UnitInstance) -> int:
+	var tb: TeamBuffs = team_buffs.get(u.team, null)
+	return tb.extra_summons_for(u) if tb != null else 0
 
 
 func retinue_size(u: UnitInstance) -> int:
@@ -1057,11 +1190,21 @@ func summon_want(u: UnitInstance, ab: AbilityData) -> int:
 	# summon_shortfall can never disagree about whether it is worth casting.
 	var cap := summon_cap(u, ab)
 	if not ab.summon_retinue:
-		return mini(maxi(ab.summon_count, 1), maxi(cap - u.summons_made, 0))
+		# Buffs add to what a single cast produces, not to the lifetime cap. For
+		# the Spire that is the whole of it: the cast is once and then the unit is
+		# gone, so "more per cast" and "more, full stop" are the same sentence.
+		var want := maxi(ab.summon_count, 1) + extra_summons(u)
+		return mini(want, maxi(cap - u.summons_made, 0))
 	# A retinue is measured by who is standing, and a cast refills it. That is
-	# what makes a tier 6 Conjurer open with three wisps rather than one, and
-	# what lets it replace one that dies instead of being done for the round.
-	return maxi(cap - retinue_size(u), 0)
+	# what makes a tier 6 Conjurer open with six wisps rather than one, and what
+	# lets it replace one that dies instead of being done for the round.
+	var want := maxi(cap - retinue_size(u), 0)
+	# Except when the thing is built on the caster's OWN tile. There is one tile
+	# to give, so an Engineer entitled to three Sentries builds them one cast at
+	# a time rather than stacking three turrets on one square.
+	if ab.summon_at_caster:
+		want = mini(want, 1)
+	return want
 
 
 func _resolve_reflect(u: UnitInstance, ab: AbilityData) -> void:
@@ -1106,6 +1249,116 @@ func _resolve_freeze(u: UnitInstance, ab: AbilityData) -> void:
 		cell = u.cell, target_uid = mark.uid, target_cell = mark.cell})
 	_emit("freeze", {uid = mark.uid, cell = mark.cell,
 		seconds = seconds, amp = amp})
+
+
+func charge_direction(team: int) -> Vector2i:
+	## Straight at the enemy, down the column the unit is standing in. TEAM_A holds
+	## the low rows and TEAM_B the high ones, so "forward" is the only direction
+	## either of them could mean.
+	return Vector2i(0, 1) if team == BoardModel.TEAM_A else Vector2i(0, -1)
+
+
+func charge_damage_of(u: UnitInstance, ab: AbilityData) -> float:
+	## A multiple of the unit's own attack damage, times its tier. Off attack
+	## rather than a flat figure so it rides every buff that sharpens the unit,
+	## and times tier because one AbilityData is shared by all six tiers — a flat
+	## number here would leave a tier 6 charging for exactly what a tier 1 does.
+	var base := u.stat(StatModifier.Stat.ATTACK_DAMAGE) \
+		* ab.charge_damage_per_tier * float(maxi(u.data.tier, 1))
+	return base * (1.0 + charge_bonus(u))
+
+
+func charge_bonus(u: UnitInstance) -> float:
+	var tb: TeamBuffs = team_buffs.get(u.team, null)
+	return tb.charge_bonus_for(u) if tb != null else 0.0
+
+
+func stun_seconds_of(u: UnitInstance, ab: AbilityData) -> float:
+	var secs := ab.stun_seconds_per_tier * float(maxi(u.data.tier, 1))
+	var tb: TeamBuffs = team_buffs.get(u.team, null)
+	# The buff adds FLAT seconds rather than a percentage. A percentage of a stun
+	# is a number nobody can feel; "one second longer" is one you can count.
+	return secs + (tb.stun_bonus_for(u) if tb != null else 0.0)
+
+
+func _resolve_charge(u: UnitInstance, ab: AbilityData) -> void:
+	## Runs straight forward from where it stands and slams into the first thing in
+	## the lane. The whole unit is a placement question: you are choosing a column
+	## during prep, and what is standing in that column at the bell is what it hits.
+	var step := charge_direction(u.team)
+	var from := u.cell
+	var reach := maxi(ab.charge_distance, 1)
+	var landed := from
+	var victim: UnitInstance = null
+	var c := from
+	for i in reach:
+		var next := c + step
+		if not board.in_bounds(next):
+			break
+		if BoardModel.is_blocked(next):
+			# Stone stops it dead. It does not break through — the charge is a body
+			# at speed, not a siege engine, and the Sapper already owns that job.
+			break
+		var who := board.unit_at(next)
+		if who != null and who.is_alive():
+			# The first unit in the lane, either side. An ALLY stops the charge and
+			# takes nothing: there is no friendly fire anywhere else in this game
+			# and inventing it here would make the unit a trap rather than a puzzle.
+			if who.team != u.team:
+				victim = who
+			break
+		c = next
+		landed = c
+
+	# It moves whether or not it connects, which is what makes a charge into an
+	# empty lane a real cost rather than a no-op — the unit ends up out of position
+	# at the far end of the board.
+	if landed != from and board.move_unit(u, landed):
+		u.move_from = from
+		u.state = UnitInstance.State.IDLE
+		u.state_timer = 0.0
+
+	var cells: Array[Vector2i] = []
+	var walk := from
+	while walk != landed:
+		walk += step
+		cells.append(walk)
+
+	_emit("charge", {uid = u.uid, from = from, to = landed, cells = cells,
+		hit = victim != null, target_cell = from if victim == null else victim.cell})
+
+	if victim == null:
+		# Nothing in the lane. Emitted as a wasted cast so the card's promise and
+		# what happened on screen agree.
+		_emit("ability", {uid = u.uid, ability = ab.id, kind = ab.kind,
+			cell = u.cell, wasted = true, reason = "empty_lane"})
+		return
+
+	var secs := stun_seconds_of(u, ab)
+	if secs > 0.0:
+		# Longest wins rather than adding, the same rule the freeze uses: two
+		# chargers hitting one unit should not lock it out of the round.
+		victim.stun_left = maxf(victim.stun_left, secs)
+		victim.state = UnitInstance.State.IDLE
+		victim.state_timer = 0.0
+		_emit("stun", {uid = victim.uid, cell = victim.cell, seconds = secs})
+
+	_emit("ability", {uid = u.uid, ability = ab.id, kind = ab.kind,
+		cell = u.cell, target_cell = victim.cell,
+		cells = [victim.cell] as Array[Vector2i]})
+	# Damage last, because it can kill — and a dead unit should not be handed a
+	# stun, nor should the charge event arrive after the death it caused.
+	_damage(victim, charge_damage_of(u, ab), u, true, false)
+
+
+func _tick_stuns() -> void:
+	for u in _units:
+		if u.stun_left <= 0.0:
+			continue
+		u.stun_left -= TICK
+		if u.stun_left <= 0.0:
+			u.stun_left = 0.0
+			_emit("stun_end", {uid = u.uid, cell = u.cell})
 
 
 func _tick_freezes() -> void:
@@ -1253,7 +1506,7 @@ func _consume_caster(u: UnitInstance) -> void:
 	u.current_hp = 0.0
 	var where := u.cell
 	board.remove(u)
-	_emit("death", {uid = u.uid, cell = where, unit_id = u.data.id,
+	_emit("death", {uid = u.uid, cell = where,
 		killer_uid = -1, consumed = true, overkill = false})
 
 
@@ -1371,6 +1624,12 @@ func _absorb_new_units() -> void:
 	if _pending_units.is_empty():
 		return
 	for u in _pending_units:
+		# Anything that arrives DURING sudden death arrives under it. Without this
+		# a summoner would be an unlimited source of healable, shieldable bodies in
+		# exactly the fifteen seconds meant to stop the round going round forever —
+		# and the newest unit on the board would be the only one playing by the old
+		# rules.
+		u.recovery_denied = _sudden_death
 		_units.append(u)
 	_pending_units.clear()
 	_order.clear()
@@ -1819,8 +2078,8 @@ func _resolve_drain(u: UnitInstance, ab: AbilityData) -> void:
 		_emit("ability", {uid = u.uid, ability = ab.id, kind = ab.kind,
 			cell = u.cell, wasted = true, reason = "no_target"})
 		return
-	# Stacking on purpose, and not deduplicated: two Parasites on one Transcendence
-	# drain it twice as fast, and so does one Parasite casting twice.
+	# Stacking on purpose, and not deduplicated: two Leechs on one Transcendence
+	# drain it twice as fast, and so does one Leech casting twice.
 	_drains.append({
 		source_uid = u.uid, victim = victim, percent = ab.drain_percent,
 		clock = 0.0, interval = maxf(ab.drain_interval, TICK),
@@ -1864,10 +2123,10 @@ func _tick_drains() -> void:
 			var bite := victim.stat(StatModifier.Stat.MAX_HP) * float(d.percent)
 			var src := _unit_by_uid(int(d.source_uid))
 			if src != null and src.is_alive():
-				# Through _damage, so the Parasite's lifesteal applies to it.
+				# Through _damage, so the Leech's lifesteal applies to it.
 				_damage(victim, bite, src, true, false)
 			else:
-				# The Parasite is dead. Its drain dies with it.
+				# The Leech is dead. Its drain dies with it.
 				_emit("drain_end", {uid = int(d.source_uid), target_uid = victim.uid})
 				_drains.remove_at(i)
 		i -= 1
@@ -2054,7 +2313,8 @@ func _resolve_pierce(u: UnitInstance, ab: AbilityData, target: UnitInstance) -> 
 		return
 	var dmg := u.stat(StatModifier.Stat.ATTACK_DAMAGE) * ab.pierce_damage_mult
 	var victims: Array[UnitInstance] = [target]
-	victims.append_array(_pierce_beyond(u.cell, target, maxi(ab.pierce_targets, 1) - 1, u.team))
+	victims.append_array(_pierce_beyond(u.cell, target,
+		maxi(ab.pierce_targets, 1) - 1, u.team, shoots_through_walls(u)))
 	var cells: Array[Vector2i] = []
 	for v in victims:
 		cells.append(v.cell)
@@ -2162,9 +2422,14 @@ func _damage(victim: UnitInstance, amount: float, source: UnitInstance,
 	var landed := victim.take_damage(total)
 	_harden(victim)
 	_drain_life(source, victim, total, landed)
+	# take_damage() returns the part that reached HEALTH, so the difference is
+	# exactly what the shield ate. Worked out here rather than in the view, which
+	# only ever sees the shield value that is left and could not tell a hit that
+	# was absorbed from one that landed on a unit that happens to have a shield.
 	_emit("damage", {
 		uid = victim.uid, source_uid = source.uid,
 		amount = total, hp = victim.current_hp, shield = victim.shield,
+		absorbed = maxf(total - landed, 0.0),
 		cell = victim.cell, spell = is_spell, crit = crit,
 	})
 	if not victim.is_alive():
@@ -2191,7 +2456,7 @@ func _fell(victim: UnitInstance, killer_uid: int, overkill := false) -> void:
 	# from quietly skipping the revive roll or the mana it owes the other side's
 	# scavengers.
 	var frozen := victim.is_frozen()
-	_emit("death", {uid = victim.uid, cell = victim.cell, unit_id = victim.data.id,
+	_emit("death", {uid = victim.uid, cell = victim.cell,
 		killer_uid = killer_uid, frozen = frozen, overkill = overkill})
 	board.remove(victim)
 	if frozen:

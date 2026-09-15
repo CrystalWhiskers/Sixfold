@@ -1,5 +1,18 @@
 extends SceneTree
 
+## A floor on how many checks a healthy run performs.
+##
+## A GDScript runtime error inside a test — calling a function that has been
+## renamed, say — aborts that ONE function and lets the run carry on. Nothing
+## fails, the suite prints "0 failed", and every check below the error simply
+## never happens. That is not hypothetical: a renamed TeamBuffs method sat broken
+## for a whole session behind a green run, taking thirteen checks with it.
+##
+## So the count itself is asserted. If it drops, something died quietly and the
+## run says so. Raise this when you add tests — it is a ratchet, and the number
+## only ever goes up.
+const MIN_CHECKS := 2050
+
 var _passed := 0
 var _failed := 0
 var _loadout: LoadoutData
@@ -78,9 +91,12 @@ func _initialize() -> void:
 	_test_blight_bites_current_health()
 	_test_blight_shuts_the_target_down()
 	_test_stasis_freezes()
+	_test_the_breaker_charges()
+	_test_avalanche()
+	_test_status_registry()
+	_test_seraph_cleanses()
 	_test_a_frozen_death_leaves_nothing()
 	_test_overkill_is_measured_against_the_whole_bar()
-	_test_every_death_names_its_unit()
 	_test_permafrost()
 	_test_spite()
 	_test_the_colossus_hardens_when_struck()
@@ -121,10 +137,25 @@ func _initialize() -> void:
 	_test_the_compound()
 	_test_the_labyrinth()
 	_test_sudden_death()
+	_test_sudden_death_rules()
+	_test_a_stuck_unit_gives_up()
+	_test_unlimited_range_ignores_walls()
+	_test_the_apex_beam_goes_through_stone()
+	_test_buffs_stack_across_rarities()
+	_test_the_round_shield_buff()
+	_test_the_militia_buff()
+	_test_forced_march()
+	_test_engineer_sentries_scale()
 	_test_live_counts()
 	_test_this_pass()
 	_test_mirror_matchup_is_fair()
 
+	var ran := _passed + _failed
+	if ran < MIN_CHECKS:
+		_failed += 1
+		print("\n  FAIL  only %d checks ran, expected at least %d — a test almost"
+			% [ran, MIN_CHECKS])
+		print("        certainly died partway through. Scroll up for a SCRIPT ERROR.")
 	print("\n%d passed, %d failed" % [_passed, _failed])
 	if _failed > 0:
 		print("FAILURES PRESENT")
@@ -884,8 +915,8 @@ func _test_buff_data() -> void:
 	_section("Buff data")
 
 	var pool := _pool()
-	_check("every buff on disk loaded", pool.buffs.size() == 43,
-		"loaded %d, expected 43" % pool.buffs.size())
+	_check("every buff on disk loaded", pool.buffs.size() == 47,
+		"loaded %d, expected 47" % pool.buffs.size())
 
 	var ids := {}
 	var missing: PackedStringArray = []
@@ -946,7 +977,7 @@ func _test_buff_data() -> void:
 	for b in pool.buffs:
 		if b.kind != BuffData.Kind.STAT:
 			non_stat += 1
-	_check("eleven buffs do something other than bump a stat", non_stat == 11,
+	_check("twelve buffs do something other than bump a stat", non_stat == 12,
 		"found %d" % non_stat)
 
 
@@ -1489,32 +1520,45 @@ func _test_merge_procs() -> void:
 	# in. Stacking seven was a magic number that only held while gold was 4x
 	# bronze; retuning it to 3x quietly left this test below 100% and it started
 	# failing on a third of its seeds.
-	var always_tier := TeamBuffs.new()
-	for i in _copies_for_certainty(pool.by_id(&"promotion")):
-		always_tier.add(pool.by_id(&"promotion"), BuffData.Rarity.GOLD)
-	_check("stacked merge chances cap at certainty",
-		is_equal_approx(always_tier.merge_extra_tier_chance(), 1.0))
+	# Stacking no longer sums into one fatter chance — each pick is its own roll —
+	# so "stack until it is certain" is not a thing that can be done any more and
+	# this asks the question that replaced it: does holding more copies make it
+	# fire more often? These two checks used to call merge_extra_tier_chance(),
+	# which no longer exists; the call errored at runtime and took the rest of
+	# this function down with it, silently, for a whole session.
+	var one_tier := TeamBuffs.new()
+	one_tier.add(pool.by_id(&"promotion"), BuffData.Rarity.GOLD)
+	var many_tier := TeamBuffs.new()
+	for i in 8:
+		many_tier.add(pool.by_id(&"promotion"), BuffData.Rarity.GOLD)
+	_check("one pick is one roll, eight picks are eight",
+		one_tier.merge_extra_tier_chances().size() == 1
+		and many_tier.merge_extra_tier_chances().size() == 8)
 
 	var tiers := 0
+	var one_tiers := 0
 	var extras := 0
 	for seed_value in 40:
-		var res := _merge_with(always_tier, seed_value)
-		if res.tier:
+		if _merge_with(many_tier, seed_value).tier:
 			tiers += 1
-	_check("a guaranteed Promotion always adds a tier", tiers == 40,
-		"fired %d times out of 40" % tiers)
+		if _merge_with(one_tier, seed_value).tier:
+			one_tiers += 1
+	_check("eight Promotions promote far more often than one",
+		tiers > one_tiers * 2, "%d of 40 against %d of 40" % [tiers, one_tiers])
 
+	var one_unit := TeamBuffs.new()
+	one_unit.add(pool.by_id(&"windfall"), BuffData.Rarity.GOLD)
 	var always_unit := TeamBuffs.new()
-	for i in _copies_for_certainty(pool.by_id(&"windfall")):
+	for i in 8:
 		always_unit.add(pool.by_id(&"windfall"), BuffData.Rarity.GOLD)
-	_check("Windfall stacks to certainty",
-		is_equal_approx(always_unit.merge_extra_unit_chance(), 1.0))
+	var one_extras := 0
 	for seed_value in 40:
-		var res := _merge_with(always_unit, seed_value)
-		if res.extra:
+		if _merge_with(always_unit, seed_value).extra:
 			extras += 1
-	_check("a guaranteed Windfall always summons one more", extras == 40,
-		"fired %d times out of 40" % extras)
+		if _merge_with(one_unit, seed_value).extra:
+			one_extras += 1
+	_check("and eight Windfalls summon far more often than one",
+		extras > one_extras * 2, "%d of 40 against %d of 40" % [extras, one_extras])
 
 	var none := TeamBuffs.new()
 	var quiet := 0
@@ -1551,8 +1595,12 @@ func _merge_with(tb: TeamBuffs, seed_value: int) -> Dictionary:
 		base = out.data.attack_speed
 		now = out.stat(StatModifier.Stat.ATTACK_SPEED)
 	return {
-		tier = procs.get("extra_tier", false),
-		extra = procs.get("extra_unit", null) != null,
+		# The keys are extra_tierS and extra_unitS now — a count and a list, because
+		# holding the same proc buff at two rarities can fire both on one merge.
+		# This helper was still reading the old singular keys, so it reported
+		# "nothing procced" for every merge in the suite.
+		tier = int(procs.get("extra_tiers", 0)) > 0,
+		extra = not (procs.get("extra_units", []) as Array).is_empty(),
 		speed = now,
 		base_speed = base,
 	}
@@ -1594,7 +1642,7 @@ func _test_new_units() -> void:
 		roster != null and roster.is_valid())
 	if roster == null:
 		return
-	_check("twenty-eight unit types are pickable", roster.units.size() == 28,
+	_check("twenty-nine unit types are pickable", roster.units.size() == 29,
 		"%d in the roster" % roster.units.size())
 	# Ids are file names, so a duplicate means one row quietly overwrites another
 	# and the roster is short without anything reporting it.
@@ -1979,10 +2027,12 @@ func _test_conjurer() -> void:
 		var at_tier := UnitInstance.create(
 			BoardModel.at_tier(conjurer, tier), BoardModel.TEAM_B)
 		caps.append(sim.summon_cap(at_tier, ab))
-	_check("the wisp cap goes 1, 1, 2, 2, 3, 3 across the six tiers",
-		caps == PackedInt32Array([1, 1, 2, 2, 3, 3]), str(caps))
-	_check("a tier 1 holds one wisp, a tier 6 holds three",
-		sim.summon_cap(t1, ab) == 1 and sim.summon_cap(t6, ab) == 3,
+	# One more wisp per tier, unlike every other retinue in the game, which gains
+	# one every two tiers. The Conjurer's whole body is its retinue.
+	_check("the wisp cap climbs one per tier, 1 through 6",
+		caps == PackedInt32Array([1, 2, 3, 4, 5, 6]), str(caps))
+	_check("a tier 1 holds one wisp, a tier 6 holds six",
+		sim.summon_cap(t1, ab) == 1 and sim.summon_cap(t6, ab) == 6,
 		"t1 caps at %d, t6 at %d" % [sim.summon_cap(t1, ab), sim.summon_cap(t6, ab)])
 
 	var board := _duel_board(_find("warden"), BoardModel.at_tier(conjurer, 6))
@@ -2136,8 +2186,8 @@ func _test_retinue() -> void:
 		var sim := CombatSim.new()
 		sim.setup(b, 3)
 		opened.append(sim.retinue_size(cj))
-	_check("the opening cast fills the retinue: 1, 1, 2, 2, 3, 3",
-		opened == PackedInt32Array([1, 1, 2, 2, 3, 3]), str(opened))
+	_check("the opening cast fills the retinue: one wisp per tier",
+		opened == PackedInt32Array([1, 2, 3, 4, 5, 6]), str(opened))
 
 	# A wisp that dies must free its place, or the Conjurer is done for the round
 	# after its opener however long the fight runs.
@@ -2149,7 +2199,7 @@ func _test_retinue() -> void:
 		Vector2i(2, 1))
 	var live := CombatSim.new()
 	live.setup(board, 7)
-	_check("a tier 6 opens with three wisps", live.retinue_size(six) == 3,
+	_check("a tier 6 opens with six wisps", live.retinue_size(six) == 6,
 		"opened with %d" % live.retinue_size(six))
 
 	for u in board.all_units():
@@ -2158,7 +2208,7 @@ func _test_retinue() -> void:
 			board.remove(u)
 			break
 	_check("losing one leaves room for one more",
-		live.retinue_size(six) == 2
+		live.retinue_size(six) == 5
 		and live.summon_want(six, ab) == 1,
 		"retinue %d, wants %d" % [
 			live.retinue_size(six), live.summon_want(six, ab)])
@@ -2168,11 +2218,11 @@ func _test_retinue() -> void:
 	for i in 12:
 		live.step()
 	_check("and the next full bar replaces it",
-		live.retinue_size(six) == 3,
+		live.retinue_size(six) == 6,
 		"retinue back to %d, made %d all round" % [
 			live.retinue_size(six), six.summons_made])
-	_check("the replacement is counted as a fourth summon, not a reused slot",
-		six.summons_made == 4, "summons_made is %d" % six.summons_made)
+	_check("the replacement is counted as a seventh summon, not a reused slot",
+		six.summons_made == 7, "summons_made is %d" % six.summons_made)
 
 
 func _test_chassis() -> void:
@@ -3281,11 +3331,17 @@ func _test_range_bands() -> void:
 	# band above Long and made the Culverin illegal. Two new bands at the top gave
 	# the ladder room: Sniper is now somewhere a unit may actually live, and the
 	# reserve — the bands only a buff can reach — sits above it.
+	# One exception, and it is deliberate: the Transcendence is printed at
+	# Unlimited at every tier. The reserve exists so a range buff feels like a
+	# prize; a unit that starts at the ceiling simply cannot be given one, which
+	# is a real cost of that unit and not a mistake in the ladder.
 	var over: PackedStringArray = []
 	for u in _roster().units:
+		if String(u.id) == "transcendence":
+			continue
 		if u.attack_range > UnitData.MAX_PRINTED_BAND:
 			over.append("%s at %s" % [u.id, u.range_name()])
-	_check("no unit is printed above the highest printable band",
+	_check("no unit but the Transcendence is printed above the printable band",
 		over.is_empty(), "; ".join(over))
 	_check("and bands remain above it for buffs to reach",
 		UnitData.RangeBand.UNLIMITED > UnitData.MAX_PRINTED_BAND)
@@ -3598,9 +3654,18 @@ func _test_transcendence() -> void:
 	_check("the Transcendence is on the roster", transcendence != null)
 	if transcendence == null:
 		return
-	_check("it is a medium-range stat stick with no ability",
-		transcendence.range_name() == "Medium" and transcendence.ability == null
+	_check("it is an unlimited-range stat stick with no ability",
+		transcendence.range_name() == "Unlimited" and transcendence.ability == null
 		and transcendence.max_hp > 150.0)
+	# The ceiling is the ceiling. Far Sight is a flat +1 band, and a unit already
+	# at Unlimited has nowhere to go — worth pinning, because it means this unit
+	# is the one thing in the game that gold Far Sight does nothing for.
+	var capped := UnitInstance.create(transcendence, BoardModel.TEAM_A)
+	capped.apply_modifiers([StatModifier.make(StatModifier.Stat.ATTACK_RANGE,
+		StatModifier.Mode.FLAT, 1.0)] as Array[StatModifier])
+	_check("and a range buff cannot push it any further",
+		capped.range_band() == UnitData.RangeBand.UNLIMITED,
+		capped.range_name())
 	_check("it is flagged as a merge magnet", transcendence.merge_magnet)
 	_check("nothing else is", not _find("warden").merge_magnet
 		and not _find("archer").merge_magnet)
@@ -3645,9 +3710,11 @@ func _test_transcendence() -> void:
 
 	var apex := BoardModel.at_tier(transcendence, 6)
 	var five := BoardModel.at_tier(transcendence, 5)
-	_check("tiers 1 to 5 stay medium range",
-		five.range_name() == "Medium" and five.pierce_targets == 1)
-	_check("tier 6 goes unlimited range and unlimited pierce",
+	# Range is no longer what tier 6 buys — every tier has it now. What the apex
+	# still buys is the PIERCE: a shot that takes the rank behind the target.
+	_check("every tier reaches the whole board",
+		five.range_name() == "Unlimited" and five.pierce_targets == 1)
+	_check("and tier 6 is what turns the shot into a beam",
 		apex.range_name() == "Unlimited" and apex.pierce_targets > 20,
 		"%s range, pierce %d" % [apex.range_name(), apex.pierce_targets])
 	_check("the apex jumps well past the usual doubling",
@@ -3870,21 +3937,47 @@ func _test_trio_buffs() -> void:
 		_check("bronze Incubation is +3 flat mana a charge",
 			is_equal_approx(spire.mana_per_charge(), 11.0),
 			"%.1f" % spire.mana_per_charge())
-		_check("and +50% health on top, as a percentage",
-			is_equal_approx(spire.stat(StatModifier.Stat.MAX_HP), hp0 * 1.5),
+		# It is the mana buff and the HOST buff now. The health rider is gone on
+		# purpose: a bigger Spire is worth very little, because the unit spends
+		# itself the moment its bar fills and was never going to be hit much.
+		_check("and it no longer touches the Spire's health at all",
+			is_equal_approx(spire.stat(StatModifier.Stat.MAX_HP), hp0),
 			"%.0f from %.0f" % [spire.stat(StatModifier.Stat.MAX_HP), hp0])
+		_check("what it adds instead is bodies: +1/+2/+3 raised per cast",
+			incubation.extra_summons_at(BuffData.Rarity.BRONZE) == 1
+				and incubation.extra_summons_at(BuffData.Rarity.SILVER) == 2
+				and incubation.extra_summons_at(BuffData.Rarity.GOLD) == 3,
+			"%d/%d/%d" % [
+				incubation.extra_summons_at(BuffData.Rarity.BRONZE),
+				incubation.extra_summons_at(BuffData.Rarity.SILVER),
+				incubation.extra_summons_at(BuffData.Rarity.GOLD)])
 
 		var gold_spire := UnitInstance.create(_find("spire"), BoardModel.TEAM_A)
 		var ghp := gold_spire.stat(StatModifier.Stat.MAX_HP)
 		gold_spire.apply_modifiers(incubation.modifiers_for(BuffData.Rarity.GOLD))
 		var inc_g := incubation.magnitude(BuffData.Rarity.GOLD)
-		_check("gold Incubation reaches its full mana and health numbers",
+		_check("gold Incubation reaches its full mana number",
 			is_equal_approx(gold_spire.mana_per_charge(), 8.0 + inc_g.x)
-				and is_equal_approx(gold_spire.stat(StatModifier.Stat.MAX_HP),
-					ghp * (1.0 + inc_g.y)),
+				and is_equal_approx(gold_spire.stat(StatModifier.Stat.MAX_HP), ghp),
 			"%.1f/s, %.0f hp" % [
 				gold_spire.mana_per_charge(),
 				gold_spire.stat(StatModifier.Stat.MAX_HP)])
+
+		# And the number the sim actually reads, not just the number on the card.
+		var host_board := BoardModel.new()
+		var caster := UnitInstance.create(_find("spire"), BoardModel.TEAM_A)
+		host_board.force_place(caster, Vector2i(2, 2))
+		host_board.force_place(UnitInstance.create(
+			_find("warden"), BoardModel.TEAM_B), Vector2i(2, 9))
+		var host_sim := CombatSim.new()
+		var tb := TeamBuffs.new()
+		tb.add(incubation, BuffData.Rarity.GOLD)
+		host_sim.team_buffs[BoardModel.TEAM_A] = tb
+		host_sim.setup(host_board, 5)
+		_check("a gold Spire raises three more than a plain one",
+			host_sim.summon_want(caster, _find("spire").ability)
+				== _find("spire").ability.summon_count + 3,
+			"wants %d" % host_sim.summon_want(caster, _find("spire").ability))
 
 	var confluence := pool.by_id(&"confluence")
 	if confluence != null:
@@ -4019,7 +4112,7 @@ func _test_unit_codex() -> void:
 	_check("a card shows health, damage and rate",
 		card.contains("hp") and card.contains("damage") and card.contains("attacks/s"))
 	_check("a card says how the bar fills",
-		card.contains("20 mana per attack landed"))
+		card.contains("16 mana per attack landed"))
 
 	var archer_card := UnitCodex.card(_find("archer"))
 	_check("a bar that fills by attacking says how many attacks that is",
@@ -4412,10 +4505,14 @@ func _test_summons_land_close() -> void:
 
 	var sim := CombatSim.new()
 	sim.setup(board, 63)
+	# The FIRST one. A tier 6 now calls six, and there are only eight tiles at a
+	# unit's shoulder, so the later ones legitimately take the next ring out —
+	# what is being tested here is that it starts at the shoulder.
 	var at := Vector2i(-1, -1)
 	for e in sim.events:
 		if e.kind == "summon":
 			at = e.cell
+			break
 	_check("the opening wisp arrives", at != Vector2i(-1, -1))
 	if at == Vector2i(-1, -1):
 		return
@@ -5518,6 +5615,10 @@ func _test_sudden_death() -> void:
 	_check("the winner is a real side", result != CombatSim.RESULT_DRAW
 		or slog.elapsed < CombatSim.DEFAULT_TIMEOUT)
 
+	# Whether THIS fixture overruns is a balance accident — it has flipped twice
+	# already when unrelated numbers moved. So the announcement is checked only
+	# when the round actually got that far; that it fires once and once only is
+	# pinned deterministically in _test_sudden_death_rules() instead.
 	var announced := false
 	for e in slog.events:
 		if e.kind == "sudden_death":
@@ -5526,9 +5627,14 @@ func _test_sudden_death() -> void:
 				float(e.at) > CombatSim.SUDDEN_DEATH
 					and float(e.at) < CombatSim.SUDDEN_DEATH + 1.0,
 				"announced at %.1fs" % float(e.at))
-	_check("and it is announced exactly once",
-		announced and _count_events(slog, "sudden_death") == 1,
-		"%d announcements" % _count_events(slog, "sudden_death"))
+	if announced:
+		_check("and it is announced exactly once",
+			_count_events(slog, "sudden_death") == 1,
+			"%d announcements" % _count_events(slog, "sudden_death"))
+	else:
+		_check("the round ended before the clock ever got there",
+			slog.elapsed <= CombatSim.SUDDEN_DEATH + CombatSim.TICK,
+			"ran %.1fs with no announcement" % slog.elapsed)
 
 	# It presses both sides equally, so it cannot decide a round by itself.
 	var wins := [0, 0]
@@ -5546,6 +5652,610 @@ func _test_sudden_death() -> void:
 			wins[who] += 1
 	_check("a mirror duel under pressure is still near even",
 		absi(wins[0] - wins[1]) <= 8, "A %d / B %d" % [wins[0], wins[1]])
+
+
+func _test_a_stuck_unit_gives_up() -> void:
+	_section("A unit that cannot get anywhere stops being stubborn")
+
+	# Three units: one hunter and two marks. The hunter locks on to the first,
+	# and the test then makes that first one permanently unreachable by the only
+	# means that matters here — the clock. A unit that has landed nothing for
+	# STUBBORN_AFTER seconds is, by definition, one whose current plan is not
+	# working, whatever the reason.
+	BoardModel.reset_map()
+	var b := BoardModel.new()
+	var hunter := UnitInstance.create(
+		BoardModel.at_tier(_must_find("reaver"), 3), BoardModel.TEAM_A)
+	b.force_place(hunter, Vector2i(2, 4))
+	var first := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 3), BoardModel.TEAM_B)
+	b.force_place(first, Vector2i(2, 6))
+	var second := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 3), BoardModel.TEAM_B)
+	b.force_place(second, Vector2i(3, 6))
+	var sim := CombatSim.new()
+	sim.setup(b, 313)
+
+	hunter.target = first
+	hunter.dry_spell = 0.0
+	_check("while it is getting somewhere it keeps the target it has",
+		sim._choose_enemy(hunter) == first)
+
+	# Now it has been stuck. Same board, same distances — the only thing that
+	# changed is that nothing has happened for eight seconds.
+	# Forty times, because the replacement is drawn off the seeded rng from
+	# everyone in range. Once would pass by luck against a two-enemy board even
+	# if the old target were still in the running, which is exactly the bug this
+	# is here to catch.
+	var stuck_with_it := 0
+	for i in 40:
+		hunter.target = first
+		hunter.dry_spell = CombatSim.STUBBORN_AFTER
+		var got := sim._choose_enemy(hunter)
+		if got == first or got == null:
+			stuck_with_it += 1
+	_check("after long enough with nothing to show for it, it picks someone else",
+		stuck_with_it == 0, "kept the old target %d times in 40" % stuck_with_it)
+	hunter.target = first
+	hunter.dry_spell = CombatSim.STUBBORN_AFTER
+	sim._choose_enemy(hunter)
+	_check("and the wait restarts, so it commits to the new one",
+		is_zero_approx(hunter.dry_spell), "%.1fs" % hunter.dry_spell)
+
+	# Giving up must never mean standing there with no target at all. With one
+	# enemy left there is nobody else to want, and battering at the only body on
+	# the board beats freezing solid — which is the bug this whole rule exists to
+	# fix, and it would be embarrassing to reintroduce it here.
+	BoardModel.reset_map()
+	var lone_board := BoardModel.new()
+	var lone_hunter := UnitInstance.create(
+		BoardModel.at_tier(_must_find("reaver"), 3), BoardModel.TEAM_A)
+	lone_board.force_place(lone_hunter, Vector2i(2, 4))
+	var only := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 3), BoardModel.TEAM_B)
+	lone_board.force_place(only, Vector2i(2, 6))
+	var lone_sim := CombatSim.new()
+	lone_sim.setup(lone_board, 314)
+	lone_hunter.target = only
+	lone_hunter.dry_spell = CombatSim.STUBBORN_AFTER * 4.0
+	_check("with only one enemy alive it keeps hold of that one",
+		lone_sim._choose_enemy(lone_hunter) == only)
+
+	# And it must not fire before the wall-breaking has had its chance, or a unit
+	# would wander off the wall it just started digging through.
+	_check("giving up comes after impatience, not before",
+		CombatSim.STUBBORN_AFTER > CombatSim.IMPATIENT_AFTER,
+		"%.1fs against %.1fs" % [
+			CombatSim.STUBBORN_AFTER, CombatSim.IMPATIENT_AFTER])
+
+
+func _test_the_apex_beam_goes_through_stone() -> void:
+	_section("The apex beam goes through stone")
+	BoardModel.reset_map()
+	var b := BoardModel.new()
+	var apex := UnitInstance.create(
+		BoardModel.at_tier(_must_find("transcendence"), 6), BoardModel.TEAM_A)
+	b.force_place(apex, Vector2i(2, 1))
+	var mark := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 1), BoardModel.TEAM_B)
+	b.force_place(mark, Vector2i(2, 4))
+	# Something standing BEHIND the wall, which is what the pierce has to reach.
+	var behind := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 1), BoardModel.TEAM_B)
+	b.force_place(behind, Vector2i(2, 9))
+	var sim := CombatSim.new()
+	sim.setup(b, 77)
+	sim.crit_chance = 0.0
+
+	_check("the apex shoots through walls", sim.shoots_through_walls(apex))
+	var clear_line := sim.beam_cells(apex.cell, mark.cell, apex.team, true).size()
+	for x in BoardModel.WIDTH:
+		BoardModel.raise_wall(Vector2i(x, 6), 500.0)
+	_check("there is now a wall across the board",
+		not BoardModel.line_of_fire(apex.cell, behind.cell, apex.team))
+	_check("and the beam still runs the whole length of the board",
+		sim.beam_cells(apex.cell, mark.cell, apex.team, true).size() == clear_line,
+		"%d cells with the wall up, %d without" % [
+			sim.beam_cells(apex.cell, mark.cell, apex.team, true).size(),
+			clear_line])
+	# An ordinary beam — one that does NOT have unlimited range — still stops.
+	_check("a beam without unlimited range still stops at the stone",
+		sim.beam_cells(apex.cell, mark.cell, apex.team, false).size() < clear_line,
+		"%d cells" % sim.beam_cells(apex.cell, mark.cell, apex.team, false).size())
+
+	# And the thing behind the wall is actually caught, not merely drawn over.
+	var caught := sim._pierce_beyond(apex.cell, mark, 8, apex.team, true)
+	var reached := false
+	for v in caught:
+		if v == behind:
+			reached = true
+	_check("the pierce reaches a unit standing behind the wall", reached,
+		"caught %d units" % caught.size())
+	_check("and without the flag it does not",
+		sim._pierce_beyond(apex.cell, mark, 8, apex.team, false).is_empty())
+
+	# Through the real call site, not the helper. The checks above prove
+	# beam_cells CAN go through stone; this proves the thing that draws the beam
+	# actually asks it to — without this, _beam_wash could pass `false` for ever
+	# and every check above would stay green.
+	var before := sim.events.size()
+	sim._beam_wash(apex, mark, 10.0, {})
+	var drawn := 0
+	for i in range(before, sim.events.size()):
+		var e: Dictionary = sim.events[i]
+		if e.kind == "beam":
+			drawn = (e.get("cells", []) as Array).size()
+	_check("the beam the apex actually fires runs past the wall",
+		drawn == clear_line, "drew %d cells, a clear line is %d" % [
+			drawn, clear_line])
+	BoardModel.reset_map()
+
+
+func _test_unlimited_range_ignores_walls() -> void:
+	_section("Unlimited range shoots over everything")
+	BoardModel.reset_map()
+	var b := BoardModel.new()
+	# The Sentry, which is the roster's unlimited-range unit. The Leech reaches
+	# the whole board through its ABILITY's targeting, which is a different thing
+	# and is not what this rule touches.
+	var shooter := UnitInstance.create(
+		BoardModel.at_tier(load("res://data/units/sentry_t1.tres") as UnitData, 1),
+		BoardModel.TEAM_A)
+	b.force_place(shooter, Vector2i(2, 2))
+	var mark := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 1), BoardModel.TEAM_B)
+	b.force_place(mark, Vector2i(2, 8))
+	var sim := CombatSim.new()
+	sim.setup(b, 404)
+	_check("the Sentry is an unlimited-range unit",
+		shooter.range_band() == UnitData.RangeBand.UNLIMITED,
+		shooter.range_name())
+	_check("with a clear board it has its shot", sim._has_shot(shooter, mark))
+
+	# A wall straight across the line between them.
+	for x in BoardModel.WIDTH:
+		BoardModel.raise_wall(Vector2i(x, 5), 500.0)
+	_check("the wall really is in the way",
+		not BoardModel.line_of_fire(shooter.cell, mark.cell, shooter.team))
+	_check("and unlimited range shoots over it anyway",
+		sim._has_shot(shooter, mark))
+
+	# One band below unlimited still needs a clear line — this is the one band
+	# that ignores walls, not "long range ignores walls".
+	var bowman := UnitInstance.create(
+		BoardModel.at_tier(_must_find("culverin"), 1), BoardModel.TEAM_A)
+	b.force_place(bowman, Vector2i(3, 2))
+	_check("a Culverin is not unlimited",
+		bowman.range_band() != UnitData.RangeBand.UNLIMITED, bowman.range_name())
+	_check("so the same wall still stops it",
+		not sim._has_shot(bowman, mark))
+	BoardModel.reset_map()
+
+
+func _test_buffs_stack_across_rarities() -> void:
+	_section("The same buff at two rarities is two buffs")
+	var pool := _pool()
+	var windfall := pool.by_id(&"windfall")
+	_check("Windfall is on the roster", windfall != null)
+	if windfall == null:
+		return
+
+	var tb := TeamBuffs.new()
+	tb.add(windfall, BuffData.Rarity.BRONZE)
+	tb.add(windfall, BuffData.Rarity.SILVER)
+	var chances := tb.merge_extra_unit_chances()
+	_check("holding it twice gives two separate rolls, not one bigger one",
+		chances.size() == 2, "%d rolls" % chances.size())
+	if chances.size() == 2:
+		_check("and each roll keeps its own rarity's number",
+			is_equal_approx(chances[0], windfall.bronze.x)
+				and is_equal_approx(chances[1], windfall.silver.x),
+			"%.2f / %.2f" % [chances[0], chances[1]])
+
+	# The rule that matters: two rolls can BOTH land, which a single summed
+	# chance can never do. 10% + 20% summed is a 30% chance of one extra unit
+	# and a 0% chance of two; rolled separately it is a 2% chance of two.
+	var both := 0
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 918
+	for i in 4000:
+		var landed := 0
+		for c in chances:
+			if rng.randf() < c:
+				landed += 1
+		if landed == 2:
+			both += 1
+	_check("so a merge can proc both of them at once",
+		both > 0, "never happened in 4000 merges")
+
+	# Stat buffs were already additive through apply_to(); this pins it, because
+	# "stacks" has to mean the same thing for every kind of buff.
+	var ironwall := pool.by_id(&"ironwall")
+	if ironwall != null:
+		var w := UnitInstance.create(_must_find("warden"), BoardModel.TEAM_A)
+		var base := w.stat(StatModifier.Stat.MAX_HP)
+		var stack := TeamBuffs.new()
+		stack.add(ironwall, BuffData.Rarity.BRONZE)
+		stack.add(ironwall, BuffData.Rarity.SILVER)
+		stack.apply_to(w)
+		_check("two Ironwalls are worth both of their numbers",
+			is_equal_approx(w.stat(StatModifier.Stat.MAX_HP),
+				base * (1.0 + ironwall.bronze.x + ironwall.silver.x)),
+			"%.0f from %.0f" % [w.stat(StatModifier.Stat.MAX_HP), base])
+
+	# And the summed kinds keep summing, which is the correct reading of
+	# "independent but applied at the same time" for a per-second number.
+	var mending := pool.by_id(&"mending_wind")
+	if mending != null:
+		var regen := TeamBuffs.new()
+		regen.add(mending, BuffData.Rarity.BRONZE)
+		regen.add(mending, BuffData.Rarity.GOLD)
+		_check("two regens heal for both of their shares",
+			is_equal_approx(regen.regen_fraction(),
+				mending.bronze.x + mending.gold.x),
+			"%.3f" % regen.regen_fraction())
+
+
+func _test_forced_march() -> void:
+	_section("Forced March — and the inverted stat behind it")
+	var pool := _pool()
+	var buff := pool.by_id(&"forced_march")
+	_check("Forced March is on the roster", buff != null)
+	if buff == null:
+		return
+	_check("it is global", buff.is_global()
+		and buff.kind == BuffData.Kind.STAT)
+	_check("the row reads the way a player reads it: 50/75/100",
+		is_equal_approx(buff.bronze.x, 0.50)
+		and is_equal_approx(buff.silver.x, 0.75)
+		and is_equal_approx(buff.gold.x, 1.00),
+		"%.2f/%.2f/%.2f" % [buff.bronze.x, buff.silver.x, buff.gold.x])
+	_check("and it drives MOVE_TIME",
+		buff.stat_a == StatModifier.Stat.MOVE_TIME)
+	_check("which the engine knows is inverted",
+		StatModifier.Stat.MOVE_TIME in StatModifier.INVERTED_STATS)
+
+	# The whole point. MOVE_TIME is seconds per tile, so a buff row of +0.50 has to
+	# come out as a NEGATIVE percentage or the army gets slower. This is the check
+	# that would have caught shipping it backwards.
+	var mods := buff.modifiers_for(BuffData.Rarity.BRONZE)
+	_check("bronze produces exactly one modifier", mods.size() == 1,
+		"%d modifiers" % mods.size())
+	if mods.size() != 1:
+		return
+	_check("and it is a NEGATIVE percentage, not the +50 from the row",
+		mods[0].value < 0.0, "%.4f" % mods[0].value)
+	_check("worth 1/1.5 of the time, which is what a 50% speed gain means",
+		is_equal_approx(mods[0].value, 1.0 / 1.5 - 1.0),
+		"%.4f against %.4f" % [mods[0].value, 1.0 / 1.5 - 1.0])
+
+	# Measured on a unit, at every rarity, as a real speed multiple.
+	var want := {BuffData.Rarity.BRONZE: 1.5, BuffData.Rarity.SILVER: 1.75,
+		BuffData.Rarity.GOLD: 2.0}
+	var wrong: PackedStringArray = []
+	for rarity in want:
+		var u := UnitInstance.create(_must_find("warden"), BoardModel.TEAM_A)
+		var before := u.stat(StatModifier.Stat.MOVE_TIME)
+		var tb := TeamBuffs.new()
+		tb.add(buff, rarity)
+		tb.apply_to(u)
+		var after := u.stat(StatModifier.Stat.MOVE_TIME)
+		var times_faster := before / maxf(after, 0.0001)
+		if not is_equal_approx(times_faster, want[rarity]):
+			wrong.append("%s: %.3fx, wanted %.2fx" % [
+				BuffData.rarity_name(rarity), times_faster, want[rarity]])
+	_check("bronze/silver/gold move 1.5x, 1.75x and 2x as fast",
+		wrong.is_empty(), "; ".join(wrong))
+
+	# And it is faster on the actual clock, not just in the stat table.
+	BoardModel.reset_map()
+	var plain := UnitInstance.create(_must_find("warden"), BoardModel.TEAM_A)
+	var quick := UnitInstance.create(_must_find("warden"), BoardModel.TEAM_A)
+	var tbq := TeamBuffs.new()
+	tbq.add(buff, BuffData.Rarity.GOLD)
+	tbq.apply_to(quick)
+	_check("a gold-buffed unit spends less time per tile than a plain one",
+		quick.stat(StatModifier.Stat.MOVE_TIME)
+			< plain.stat(StatModifier.Stat.MOVE_TIME),
+		"%.3fs against %.3fs" % [quick.stat(StatModifier.Stat.MOVE_TIME),
+			plain.stat(StatModifier.Stat.MOVE_TIME)])
+
+	# Nothing else must have been flipped by the inversion rule.
+	var drums := pool.by_id(&"war_drums")
+	if drums != null:
+		var dmods := drums.modifiers_for(BuffData.Rarity.BRONZE)
+		_check("an ordinary stat buff is untouched by the inversion",
+			dmods.size() == 1 and dmods[0].value > 0.0
+			and is_equal_approx(dmods[0].value, drums.bronze.x),
+			"%.3f against %.3f" % [
+				0.0 if dmods.is_empty() else dmods[0].value, drums.bronze.x])
+
+	# The card has to read as speed, not as the field it drives.
+	var card := buff.describe(BuffData.Rarity.GOLD)
+	_check("the card says movement speed, not move time",
+		card.to_lower().contains("movement speed")
+		and not card.to_lower().contains("move time"), card)
+
+
+func _test_the_militia_buff() -> void:
+	_section("Militia — the small units only")
+	var pool := _pool()
+	var buff := pool.by_id(&"militia")
+	_check("Militia is on the roster", buff != null)
+	if buff == null:
+		return
+	_check("it is global, and a stat buff", buff.is_global()
+		and buff.kind == BuffData.Kind.STAT)
+	_check("it runs 50/75/100% on health and attack alike",
+		is_equal_approx(buff.bronze.x, 0.50) and is_equal_approx(buff.bronze.y, 0.50)
+		and is_equal_approx(buff.silver.x, 0.75)
+		and is_equal_approx(buff.gold.x, 1.00) and buff.uses_second_stat,
+		"%.2f/%.2f/%.2f" % [buff.bronze.x, buff.silver.x, buff.gold.x])
+	_check("and it stops at tier 3", buff.max_tier == 3,
+		"ceiling is %d" % buff.max_tier)
+
+	# The ceiling is the whole point, so it is checked at every tier rather than
+	# at one on each side of the line.
+	var covered: PackedStringArray = []
+	for tier in range(1, 7):
+		var u := UnitInstance.create(
+			BoardModel.at_tier(_must_find("warden"), tier), BoardModel.TEAM_A)
+		if buff.applies_to(u):
+			covered.append("t%d" % tier)
+	_check("tiers 1 to 3 are covered and 4 to 6 are not",
+		covered == PackedStringArray(["t1", "t2", "t3"]), str(covered))
+
+	# And the stats actually land, through the same path the game uses.
+	var small := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 2), BoardModel.TEAM_A)
+	var big := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 5), BoardModel.TEAM_A)
+	var small_hp := small.stat(StatModifier.Stat.MAX_HP)
+	var small_dmg := small.stat(StatModifier.Stat.ATTACK_DAMAGE)
+	var big_hp := big.stat(StatModifier.Stat.MAX_HP)
+	var tb := TeamBuffs.new()
+	tb.add(buff, BuffData.Rarity.GOLD)
+	tb.apply_to(small)
+	tb.apply_to(big)
+	_check("a tier 2 doubles its health and its attack at gold",
+		is_equal_approx(small.stat(StatModifier.Stat.MAX_HP), small_hp * 2.0)
+		and is_equal_approx(small.stat(StatModifier.Stat.ATTACK_DAMAGE),
+			small_dmg * 2.0),
+		"%.0f hp from %.0f" % [small.stat(StatModifier.Stat.MAX_HP), small_hp])
+	_check("and a tier 5 gets nothing at all",
+		is_equal_approx(big.stat(StatModifier.Stat.MAX_HP), big_hp),
+		"%.0f hp from %.0f" % [big.stat(StatModifier.Stat.MAX_HP), big_hp])
+
+	# A unit that merges past the ceiling loses it at the round boundary, which is
+	# where resync runs. That is the honest reading of a buff for small units.
+	var grown := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 3), BoardModel.TEAM_A)
+	tb.apply_to(grown)
+	_check("a tier 3 has it", grown.stat(StatModifier.Stat.MAX_HP)
+		> BoardModel.at_tier(_must_find("warden"), 3).max_hp)
+	var promoted := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 4), BoardModel.TEAM_A)
+	tb.resync(promoted)
+	_check("and once it is a tier 4, a resync takes it away",
+		is_equal_approx(promoted.stat(StatModifier.Stat.MAX_HP),
+			BoardModel.at_tier(_must_find("warden"), 4).max_hp),
+		"%.0f hp" % promoted.stat(StatModifier.Stat.MAX_HP))
+
+	# The card has to say so, or it reads as an ordinary global buff.
+	var card := buff.describe(BuffData.Rarity.SILVER)
+	_check("the card names the tier ceiling",
+		card.contains("tier 3") and card.to_lower().contains("below"), card)
+
+
+func _test_the_round_shield_buff() -> void:
+	_section("Aegis Wall")
+	var pool := _pool()
+	var buff := pool.by_id(&"aegis_wall")
+	_check("Aegis Wall is on the roster", buff != null)
+	if buff == null:
+		return
+	_check("it is a global buff, not one unit's",
+		buff.is_global() and buff.kind == BuffData.Kind.ROUND_SHIELD)
+	_check("it runs 1000/2000/3000",
+		is_equal_approx(buff.bronze.x, 1000.0)
+			and is_equal_approx(buff.silver.x, 2000.0)
+			and is_equal_approx(buff.gold.x, 3000.0),
+		"%.0f/%.0f/%.0f" % [buff.bronze.x, buff.silver.x, buff.gold.x])
+
+	BoardModel.reset_map()
+	var b := BoardModel.new()
+	var mine := UnitInstance.create(
+		BoardModel.at_tier(_must_find("archer"), 1), BoardModel.TEAM_A)
+	b.force_place(mine, Vector2i(2, 2))
+	var theirs := UnitInstance.create(
+		BoardModel.at_tier(_must_find("archer"), 1), BoardModel.TEAM_B)
+	b.force_place(theirs, Vector2i(2, 9))
+	var sim := CombatSim.new()
+	var tb := TeamBuffs.new()
+	tb.add(buff, BuffData.Rarity.BRONZE)
+	sim.team_buffs[BoardModel.TEAM_A] = tb
+	sim.setup(b, 55)
+	_check("every unit on the buffed side starts the round shielded",
+		mine.shield >= 1000.0, "%.0f" % mine.shield)
+	_check("and the other side gets nothing", is_zero_approx(theirs.shield),
+		"%.0f" % theirs.shield)
+
+	# Flat, so it is not capped by the unit's own shield_cap — a number that
+	# belongs to the Warden's bulwark and is zero for almost everyone else. An
+	# Archer with shield_cap 0 must still get the full grant.
+	_check("the grant ignores the unit's own shield cap entirely",
+		mine.data.shield_cap < 1000.0 and mine.shield >= 1000.0,
+		"cap %.0f, got %.0f" % [mine.data.shield_cap, mine.shield])
+
+
+func _test_engineer_sentries_scale() -> void:
+	_section("Engineer sentries by tier")
+	var engineer := _must_find("engineer")
+	var ab: AbilityData = engineer.ability
+	_check("Assemble is still a retinue", ab != null and ab.summon_retinue)
+	if ab == null:
+		return
+	var sim := CombatSim.new()
+	var caps: PackedInt32Array = []
+	for tier in range(1, 7):
+		var at_tier := UnitInstance.create(
+			BoardModel.at_tier(engineer, tier), BoardModel.TEAM_A)
+		caps.append(sim.summon_cap(at_tier, ab))
+	_check("the sentry cap goes 1, 1, 2, 2, 3, 3 across the six tiers",
+		caps == PackedInt32Array([1, 1, 2, 2, 3, 3]), str(caps))
+
+	# One at a time, though. A Sentry is built on the Engineer's own tile, and
+	# there is only one of those.
+	BoardModel.reset_map()
+	var b := BoardModel.new()
+	var eng := UnitInstance.create(
+		BoardModel.at_tier(engineer, 5), BoardModel.TEAM_A)
+	b.force_place(eng, Vector2i(2, 2))
+	b.force_place(UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 1), BoardModel.TEAM_B),
+		Vector2i(2, 9))
+	var live := CombatSim.new()
+	live.setup(b, 77)
+	_check("a tier 5 Engineer is entitled to three",
+		live.summon_cap(eng, ab) == 3)
+	_check("but only ever builds one per cast",
+		live.summon_want(eng, ab) <= 1,
+		"wants %d" % live.summon_want(eng, ab))
+
+
+func _pressure_stage() -> Dictionary:
+	## Two Wardens, a whole board apart, with the clock under the operator's
+	## control. Nothing here happens on its own.
+	BoardModel.reset_map()
+	var b := BoardModel.new()
+	var hitter := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 3), BoardModel.TEAM_A)
+	b.force_place(hitter, Vector2i(2, 1))
+	var mark := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 3), BoardModel.TEAM_B)
+	b.force_place(mark, Vector2i(2, 9))
+	var sim := CombatSim.new()
+	sim.setup(b, 811)
+	sim.crit_chance = 0.0
+	return {sim = sim, hitter = hitter, mark = mark}
+
+
+func _into_sudden_death(sim: CombatSim) -> void:
+	## Winds the clock to the mark and lets the sim notice, without running two
+	## minutes of battle to get there. _tick_pressure is the whole transition, so
+	## driving it directly tests the same code the clock would.
+	sim.elapsed = CombatSim.SUDDEN_DEATH + CombatSim.TICK
+	sim._tick_pressure()
+
+
+func _test_sudden_death_rules() -> void:
+	_section("Sudden death doubles the fight and stops the mending")
+
+	# It happens once. _tick_pressure runs on every tick of the round, so without
+	# the _sudden_death latch this would announce fifteen seconds' worth.
+	var once := _pressure_stage()
+	_into_sudden_death(once.sim)
+	for i in 20:
+		once.sim.elapsed += CombatSim.TICK
+		once.sim._tick_pressure()
+	_check("sudden death is announced exactly once, not on every tick after it",
+		_count_events(once.sim, "sudden_death") == 1,
+		"%d announcements" % _count_events(once.sim, "sudden_death"))
+
+	# Where the line is. 1:45 of a 2:00 round, so the last fifteen seconds.
+	_check("sudden death starts at 1:45",
+		is_equal_approx(CombatSim.SUDDEN_DEATH, 105.0),
+		"%.1fs" % CombatSim.SUDDEN_DEATH)
+	_check("which leaves fifteen seconds of it",
+		is_equal_approx(CombatSim.DEFAULT_TIMEOUT - CombatSim.SUDDEN_DEATH, 15.0),
+		"%.1fs" % (CombatSim.DEFAULT_TIMEOUT - CombatSim.SUDDEN_DEATH))
+
+	# Attack speed. The swing timer is the reciprocal, so twice the speed is half
+	# the interval.
+	var s := _pressure_stage()
+	var calm: float = s.sim.attack_interval(s.mark)
+	_check("before the mark a unit swings at its own speed",
+		is_equal_approx(calm, s.mark.attack_interval()),
+		"%.3fs against %.3fs" % [calm, s.mark.attack_interval()])
+	_into_sudden_death(s.sim)
+	_check("pressure steps to exactly double, not a ramp",
+		is_equal_approx(s.sim.pressure(), 2.0), "%.2f" % s.sim.pressure())
+	_check("and every unit swings twice as fast",
+		is_equal_approx(s.sim.attack_interval(s.mark), calm * 0.5),
+		"%.3fs against %.3fs" % [s.sim.attack_interval(s.mark), calm * 0.5])
+
+	# Damage. The same blow, from the same unit, on either side of the line.
+	var calm_stage := _pressure_stage()
+	calm_stage.mark.shield = 0.0
+	var before: float = calm_stage.mark.current_hp
+	calm_stage.sim._damage(calm_stage.mark, 40.0, calm_stage.hitter)
+	var calm_loss: float = before - calm_stage.mark.current_hp
+
+	var hot := _pressure_stage()
+	hot.mark.shield = 0.0
+	_into_sudden_death(hot.sim)
+	var hot_before: float = hot.mark.current_hp
+	hot.sim._damage(hot.mark, 40.0, hot.hitter)
+	var hot_loss: float = hot_before - hot.mark.current_hp
+	_check("the same blow takes twice as much off",
+		is_equal_approx(hot_loss, calm_loss * 2.0),
+		"%.1f against %.1f" % [hot_loss, calm_loss * 2.0])
+
+	# Healing, from the one place every healer goes through.
+	var heal := _pressure_stage()
+	heal.mark.current_hp = 10.0
+	heal.mark.heal(50.0)
+	_check("a unit can be healed before the mark",
+		heal.mark.current_hp > 10.0, "%.1f hp" % heal.mark.current_hp)
+	_into_sudden_death(heal.sim)
+	var held: float = heal.mark.current_hp
+	heal.mark.heal(50.0)
+	_check("and cannot be healed after it",
+		is_equal_approx(heal.mark.current_hp, held),
+		"%.1f became %.1f" % [held, heal.mark.current_hp])
+
+	# Shields. Gaining is off; what is already standing is left alone, because
+	# "no more shields" and "your armour falls off" are very different rules and
+	# only one of them was asked for.
+	var sh := _pressure_stage()
+	sh.mark.shield = 0.0
+	sh.mark.add_shield(100.0, 999.0)
+	_check("a shield can be gained before the mark",
+		sh.mark.shield > 0.0, "%.1f" % sh.mark.shield)
+	_into_sudden_death(sh.sim)
+	var standing: float = sh.mark.shield
+	sh.mark.add_shield(100.0, 999.0)
+	_check("and cannot be gained after it",
+		is_equal_approx(sh.mark.shield, standing),
+		"%.1f became %.1f" % [standing, sh.mark.shield])
+	_check("but the shield already standing is not stripped", standing > 0.0,
+		"%.1f left" % standing)
+
+	# The other two things suppression blocks are NOT sudden death's business. If
+	# these ever start failing, somebody has folded recovery_denied into
+	# is_suppressed() and quietly switched off the Archer and the Wellspring for
+	# the last fifteen seconds of every round.
+	_check("a unit in sudden death is not 'suppressed'",
+		not sh.mark.is_suppressed())
+
+	# Anything that arrives mid-sudden-death arrives under the same rules.
+	var late := _pressure_stage()
+	_into_sudden_death(late.sim)
+	var minion := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 1), BoardModel.TEAM_A)
+	late.sim._pending_units.append(minion)
+	late.sim._absorb_new_units()
+	_check("a unit summoned during sudden death cannot mend either",
+		minion.recovery_denied)
+	minion.current_hp = 5.0
+	minion.heal(50.0)
+	_check("and proving it, healing does nothing to it",
+		is_equal_approx(minion.current_hp, 5.0), "%.1f hp" % minion.current_hp)
+
+	# And it belongs to the round that ran out of clock, not the next one.
+	minion.reset_for_battle()
+	_check("the next round starts with mending switched back on",
+		not minion.recovery_denied)
 
 
 func _overkill_stage(victim_tier: int) -> Dictionary:
@@ -5628,52 +6338,6 @@ func _test_overkill_is_measured_against_the_whole_bar() -> void:
 		not _death_flag(large.sim, large.mark.uid, "overkill"),
 		"%.0f damage against a %.0f bar" % [
 			blow, large.mark.stat(StatModifier.Stat.MAX_HP)])
-
-
-func _test_every_death_names_its_unit() -> void:
-	_section("Every death says which unit it was")
-
-	# The view needs this to pick a voice line, and it cannot ask the roster: a
-	# summon that was never on the loadout has no row there to find.
-	var stage := _overkill_stage(3)
-	stage.sim._damage(stage.mark, 999999.0, stage.killer)
-	var named := ""
-	for e in stage.sim.events:
-		if e.kind == "death" and int(e.uid) == stage.mark.uid:
-			named = String(e.get("unit_id", ""))
-	_check("the death carries the unit's id", named == "warden",
-		"named '%s'" % named)
-
-	# Including the one death that is not a kill. A unit that spends itself still
-	# drops a body, and the body still belongs to somebody.
-	var spire := _find_consuming_caster()
-	if spire == null:
-		_check("no self-consuming unit on the roster to check", true)
-		return
-	BoardModel.reset_map()
-	var b := BoardModel.new()
-	var caster := UnitInstance.create(BoardModel.at_tier(spire, 3),
-		BoardModel.TEAM_A)
-	b.force_place(caster, Vector2i(3, 3))
-	var foe := UnitInstance.create(
-		BoardModel.at_tier(_must_find("warden"), 1), BoardModel.TEAM_B)
-	b.force_place(foe, Vector2i(3, 9))
-	var sim := CombatSim.new()
-	sim.setup(b, 41)
-	sim._consume_caster(caster)
-	var spent := ""
-	for e in sim.events:
-		if e.kind == "death" and int(e.uid) == caster.uid:
-			spent = String(e.get("unit_id", ""))
-	_check("a spent caster's death names it too", spent == String(spire.id),
-		"named '%s', expected '%s'" % [spent, spire.id])
-
-
-func _find_consuming_caster() -> UnitData:
-	for u in _roster().units:
-		if u.ability != null and u.ability.consumes_caster:
-			return u
-	return null
 
 
 func _count_events(sim: CombatSim, kind: String) -> int:
@@ -6349,10 +7013,37 @@ func _test_high_ground_rules() -> void:
 		not BoardModel.in_reach(swordsman.cell, holder.cell,
 			sim.reach_against(swordsman, holder)))
 
-	# ...and on the stairs it still cannot, because the stairs are ground.
+	# ...but from the STAIRS it can. The steps are the fighting ground of an
+	# assault: a melee line that had to finish the climb before it could swing
+	# would be picked apart one body at a time by whoever is waiting at the top.
 	swordsman.cell = step
-	_check("and it still cannot from the stairs — those are the way up, not up",
-		sim.reach_against(swordsman, holder) == 0)
+	_check("but from the stairs it can swing up onto the terrace",
+		sim.reach_against(swordsman, holder) > 0,
+		"reach %d" % sim.reach_against(swordsman, holder))
+	_check("and the man at the top is actually within that reach",
+		BoardModel.in_reach(swordsman.cell, holder.cell,
+			sim.reach_against(swordsman, holder)))
+
+	# The steps are not a terrace, though. A unit on them is halfway up: it can
+	# reach, and it can be reached back, and a bow on them gains nothing.
+	var below := UnitInstance.create(
+		BoardModel.at_tier(_must_find("reaver"), 1), BoardModel.TEAM_A)
+	b.force_place(below, Vector2i(2, 3))
+	_check("a melee unit on the ground can still hit one on the stairs",
+		sim.reach_against(below, swordsman) > 0,
+		"reach %d" % sim.reach_against(below, swordsman))
+	var bowman := UnitInstance.create(
+		BoardModel.at_tier(_must_find("archer"), 1), BoardModel.TEAM_B)
+	b.force_place(bowman, Vector2i(1, 3))
+	var flat_reach: int = sim.reach_against(bowman, below)
+	bowman.cell = step
+	_check("and a bow on the stairs gains no elevation band",
+		sim.reach_against(bowman, below) == flat_reach,
+		"%d from the steps against %d on the flat" % [
+			sim.reach_against(bowman, below), flat_reach])
+	bowman.cell = Vector2i(1, 3)
+	below.cell = Vector2i(2, 3)
+	swordsman.cell = step
 
 	# Climb, and everything is ordinary again.
 	var was := ground
@@ -6512,9 +7203,9 @@ func _test_the_round_clock() -> void:
 		"%.0fs" % CombatSim.DEFAULT_TIMEOUT)
 	# Escalation is the backstop, not the rule. If it started early enough to
 	# finish most fights the clock would never decide anything.
-	_check("and hits only start escalating in the last thirty seconds",
-		is_equal_approx(CombatSim.DEFAULT_TIMEOUT - CombatSim.SUDDEN_DEATH, 30.0),
-		"escalation begins at %.0fs of %.0f" % [
+	_check("and sudden death only takes the last fifteen seconds",
+		is_equal_approx(CombatSim.DEFAULT_TIMEOUT - CombatSim.SUDDEN_DEATH, 15.0),
+		"sudden death begins at %.0fs of %.0f" % [
 			CombatSim.SUDDEN_DEATH, CombatSim.DEFAULT_TIMEOUT])
 
 	# Decided on BODIES, not health. Both sides here are at full health, so a
@@ -7201,14 +7892,14 @@ func _test_the_ground_keeps_burning() -> void:
 
 
 func _test_siphon_answers_the_biggest_thing() -> void:
-	_section("The Parasite against something enormous")
-	var para := _must_find("parasite")
+	_section("The Leech against something enormous")
+	var para := _must_find("leech")
 	var ab: AbilityData = para.ability
 	_check("Siphon is a drain", ab != null and ab.kind == AbilityData.Kind.DRAIN)
 	_check("it takes 2.5% of max health a second",
 		is_equal_approx(ab.drain_percent, 0.025),
 		"%.3f" % ab.drain_percent)
-	_check("the Parasite has innate lifesteal", para.lifesteal > 0.0,
+	_check("the Leech has innate lifesteal", para.lifesteal > 0.0,
 		"%.2f" % para.lifesteal)
 
 	BoardModel.reset_map()
@@ -7217,7 +7908,7 @@ func _test_siphon_answers_the_biggest_thing() -> void:
 	b.force_place(p, Vector2i(0, 0))
 	# The thing it is meant to answer. A tier 6 SPIRE, not a Transcendence: the
 	# first version of this used a Transcendence and its unlimited-range beam
-	# killed the Parasite two seconds in, so the drain ended and the test measured
+	# killed the Leech two seconds in, so the drain ended and the test measured
 	# nothing. The Spire is rooted, harmless and enormous, which is exactly the
 	# shape being tested without the shooting back.
 	var whale := UnitInstance.create(
@@ -7230,7 +7921,7 @@ func _test_siphon_answers_the_biggest_thing() -> void:
 	var sim := CombatSim.new()
 	sim.setup(b, 75)
 	var far := BoardModel.tile_distance(p.cell, whale.cell)
-	_check("the whale is far outside the Parasite's reach",
+	_check("the whale is far outside the Leech's reach",
 		far > p.attack_reach(), "%d tiles against a reach of %d" % [far, p.attack_reach()])
 	sim._resolve_ability(p)
 	_check("it fastened onto the biggest thing anyway", sim.drains_on(whale) == 1,
@@ -7248,7 +7939,7 @@ func _test_siphon_answers_the_biggest_thing() -> void:
 	_check("it loses a fixed slice of its maximum every second",
 		absf(taken - full * 0.025 * 2.0) < full * 0.02,
 		"%.0f gone from %.0f over 2s" % [taken, full])
-	_check("and the Parasite heals off it", p.current_hp > heal_from,
+	_check("and the Leech heals off it", p.current_hp > heal_from,
 		"it is still on %.0f" % p.current_hp)
 
 	# Stacking: a second cast doubles the rate rather than refreshing it.
@@ -7267,7 +7958,7 @@ func _test_siphon_answers_the_biggest_thing() -> void:
 	# a rounding error of each other, which is why the first version of this test
 	# passed just as happily with the wrong one.
 	var b2 := BoardModel.new()
-	var p2 := UnitInstance.create(_must_find("parasite"), BoardModel.TEAM_A)
+	var p2 := UnitInstance.create(_must_find("leech"), BoardModel.TEAM_A)
 	b2.force_place(p2, Vector2i(0, 0))
 	var hurt := UnitInstance.create(
 		BoardModel.at_tier(_must_find("spire"), 6), BoardModel.TEAM_B)
@@ -7302,7 +7993,7 @@ func _test_siphon_ignores_shields() -> void:
 	_section("Nothing hides behind a shield")
 	BoardModel.reset_map()
 	var b := BoardModel.new()
-	var p := UnitInstance.create(_must_find("parasite"), BoardModel.TEAM_A)
+	var p := UnitInstance.create(_must_find("leech"), BoardModel.TEAM_A)
 	b.force_place(p, Vector2i(0, 0))
 	var warden := UnitInstance.create(
 		BoardModel.at_tier(_must_find("warden"), 4), BoardModel.TEAM_B)
@@ -7337,7 +8028,7 @@ func _test_the_new_ranged_buffs() -> void:
 		elif x.id == &"hunger":
 			hun = x
 	_check("the Culverin has its own buff", enf != null)
-	_check("and so does the Parasite", hun != null)
+	_check("and so does the Leech", hun != null)
 	if enf == null or hun == null:
 		return
 	_check("Enfilade is attack speed at 20 / 40 / 60%",
@@ -7360,8 +8051,8 @@ func _test_the_new_ranged_buffs() -> void:
 			hun.bronze.y, hun.silver.y, hun.gold.y, hun.flat_b])
 
 	# The range bonus has to actually reach further on the board.
-	var plain := UnitInstance.create(_must_find("parasite"), BoardModel.TEAM_A)
-	var buffed := UnitInstance.create(_must_find("parasite"), BoardModel.TEAM_A)
+	var plain := UnitInstance.create(_must_find("leech"), BoardModel.TEAM_A)
+	var buffed := UnitInstance.create(_must_find("leech"), BoardModel.TEAM_A)
 	var tb := TeamBuffs.new()
 	tb.add(hun, BuffData.Rarity.BRONZE)
 	tb.apply_to(buffed)
@@ -8051,6 +8742,402 @@ func _test_blight_shuts_the_target_down() -> void:
 	sim._resolve_haste(archer, quick)
 	_check("and it can stack again", archer.haste_stacks > earned,
 		"%d" % archer.haste_stacks)
+
+
+func _breaker_lane(tier: int, blocker_team: int, gap: int) -> Dictionary:
+	## A Breaker on TEAM_A at the top of a column with something `gap` tiles down
+	## the same column. TEAM_A charges toward higher y, so "down the column" is
+	## straight at the enemy half.
+	BoardModel.reset_map()
+	var b := BoardModel.new()
+	var runner := UnitInstance.create(
+		BoardModel.at_tier(_must_find("breaker"), tier), BoardModel.TEAM_A)
+	b.force_place(runner, Vector2i(2, 1))
+	var mark := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 6), blocker_team)
+	b.force_place(mark, Vector2i(2, 1 + gap))
+	# Somewhere off the lane so the round never ends underneath the test.
+	b.force_place(UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 1), BoardModel.TEAM_B),
+		Vector2i(5, 9))
+	var sim := CombatSim.new()
+	sim.crit_chance = 0.0
+	return {sim = sim, board = b, runner = runner, mark = mark}
+
+
+func _test_the_breaker_charges() -> void:
+	_section("The Breaker, and what it runs into")
+	var breaker := _must_find("breaker")
+	var ab: AbilityData = breaker.ability
+	_check("Onslaught is a CHARGE", ab != null
+		and ab.kind == AbilityData.Kind.CHARGE)
+	if ab == null:
+		return
+	_check("and it fires at the opening bell", breaker.casts_at_battle_start)
+	_check("it costs no mana, because it only ever happens once",
+		is_zero_approx(breaker.mana_per_attack))
+
+	# Which way is forward. Getting this backwards would send both sides running
+	# for their own back wall, so it is pinned rather than assumed.
+	var sim := CombatSim.new()
+	_check("TEAM_A charges toward the far half",
+		sim.charge_direction(BoardModel.TEAM_A) == Vector2i(0, 1))
+	_check("and TEAM_B charges the other way",
+		sim.charge_direction(BoardModel.TEAM_B) == Vector2i(0, -1))
+
+	# An enemy four tiles down the lane. The charge should close the gap, stop
+	# short of it, damage it and stun it.
+	var stage := _breaker_lane(3, BoardModel.TEAM_B, 4)
+	var mark: UnitInstance = stage.mark
+	var runner: UnitInstance = stage.runner
+	var full: float = mark.current_hp
+	stage.sim.setup(stage.board, 71)
+	_check("it ends up next to what it hit",
+		BoardModel.tile_distance(runner.cell, mark.cell) == 1,
+		"runner at %s, mark at %s" % [runner.cell, mark.cell])
+	_check("the mark took the charge", mark.current_hp < full,
+		"%.0f hp of %.0f" % [mark.current_hp, full])
+	_check("and it is stunned", mark.is_stunned(),
+		"%.2fs left" % mark.stun_left)
+	# A stun is a stun, not a freeze. The freeze carries a damage amp and cancels
+	# on-death effects; neither belongs to a unit that got run into.
+	_check("stunned is not frozen", not mark.is_frozen())
+	_check("so it takes no extra damage from being stunned",
+		is_equal_approx(mark.frozen_damage_taken(), 1.0))
+	_check("but it cannot move, swing or cast",
+		not mark.can_move_now() and not mark.can_attack_now() and mark.is_held())
+
+	# Both numbers scale with tier.
+	var small := _breaker_lane(1, BoardModel.TEAM_B, 4)
+	var big := _breaker_lane(6, BoardModel.TEAM_B, 4)
+	var small_full: float = small.mark.current_hp
+	var big_full: float = big.mark.current_hp
+	small.sim.setup(small.board, 71)
+	big.sim.setup(big.board, 71)
+	var small_hit: float = small_full - small.mark.current_hp
+	var big_hit: float = big_full - big.mark.current_hp
+	_check("a tier 6 charge hits far harder than a tier 1",
+		big_hit > small_hit * 4.0,
+		"%.0f against %.0f" % [big_hit, small_hit])
+	_check("and stuns for far longer",
+		big.mark.stun_left > small.mark.stun_left * 4.0,
+		"%.2fs against %.2fs" % [big.mark.stun_left, small.mark.stun_left])
+
+	# An ALLY in the lane stops it and takes nothing. No friendly fire anywhere
+	# else in this game, and inventing it here would make the unit a trap.
+	var friendly := _breaker_lane(3, BoardModel.TEAM_A, 4)
+	var ally_full: float = friendly.mark.current_hp
+	friendly.sim.setup(friendly.board, 71)
+	_check("an ally in the lane is not hit",
+		is_equal_approx(friendly.mark.current_hp, ally_full),
+		"%.0f hp of %.0f" % [friendly.mark.current_hp, ally_full])
+	_check("and is not stunned", not friendly.mark.is_stunned())
+	_check("but it did stop the charge short of it",
+		BoardModel.tile_distance(friendly.runner.cell, friendly.mark.cell) == 1,
+		"runner at %s" % friendly.runner.cell)
+
+	# An empty lane. It runs the length of the board and achieves nothing, which
+	# is the cost that makes placement the whole unit.
+	BoardModel.reset_map()
+	var empty := BoardModel.new()
+	var lonely := UnitInstance.create(
+		BoardModel.at_tier(breaker, 3), BoardModel.TEAM_A)
+	empty.force_place(lonely, Vector2i(1, 1))
+	empty.force_place(UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 1), BoardModel.TEAM_B),
+		Vector2i(4, 9))
+	var lone_sim := CombatSim.new()
+	lone_sim.setup(empty, 72)
+	_check("a charge into an empty lane runs to the far wall",
+		lonely.cell.y > 6, "ended at %s" % lonely.cell)
+	var wasted := false
+	for e in lone_sim.events:
+		if e.kind == "ability" and int(e.uid) == lonely.uid \
+				and bool(e.get("wasted", false)):
+			wasted = true
+	_check("and is reported as a wasted cast", wasted)
+
+	# A wall stops it. The charge is a body at speed, not a siege engine.
+	#
+	# The wall has to go up AFTER setup(): setup calls BoardModel.clear_changes()
+	# because terrain damage is battle state, so a wall raised before it is gone
+	# by the time the opener fires. The charge is then invoked directly, which is
+	# the only way to put a wall in front of an opener at all.
+	BoardModel.reset_map()
+	var walled := BoardModel.new()
+	var blocked := UnitInstance.create(
+		BoardModel.at_tier(breaker, 3), BoardModel.TEAM_A)
+	walled.force_place(blocked, Vector2i(2, 1))
+	var behind := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 6), BoardModel.TEAM_B)
+	walled.force_place(behind, Vector2i(2, 5))
+	var wall_sim := CombatSim.new()
+	wall_sim.crit_chance = 0.0
+	wall_sim.setup(walled, 73)
+	# Put it back where it started, then wall the lane and charge again.
+	walled.force_place(blocked, Vector2i(2, 1))
+	_check("the lane is clear before the wall goes up",
+		BoardModel.raise_wall(Vector2i(2, 3), 500.0)
+		and BoardModel.is_blocked(Vector2i(2, 3)))
+	# The first setup already charged and stunned it, so both are wiped before the
+	# walled charge — otherwise this checks the leftovers of the previous one.
+	behind.stun_left = 0.0
+	behind.current_hp = behind.stat(StatModifier.Stat.MAX_HP)
+	var behind_full: float = behind.current_hp
+	wall_sim._resolve_charge(blocked, ab)
+	_check("stone stops the charge", blocked.cell == Vector2i(2, 2),
+		"ended at %s" % blocked.cell)
+	_check("and what was behind the wall is untouched",
+		is_equal_approx(behind.current_hp, behind_full) and not behind.is_stunned(),
+		"%.0f hp of %.0f" % [behind.current_hp, behind_full])
+	BoardModel.reset_map()
+
+	# The stun wears off on the clock.
+	var timed := _breaker_lane(1, BoardModel.TEAM_B, 4)
+	timed.sim.setup(timed.board, 74)
+	var was: float = timed.mark.stun_left
+	_check("the stun starts with time on it", was > 0.0)
+	for i in 40:
+		timed.sim.step()
+	_check("and it runs down", timed.mark.stun_left < was
+		or not timed.mark.is_alive(),
+		"%.2fs left" % timed.mark.stun_left)
+
+	# A Seraph can lift it, because a stun is a cleansable debuff.
+	var held := UnitInstance.create(_must_find("warden"), BoardModel.TEAM_A)
+	held.stun_left = 3.0
+	var lifted := held.cleanse()
+	_check("a cleanse lifts a stun", not held.is_stunned()
+		and lifted.has("Stunned"), str(lifted))
+
+
+func _test_avalanche() -> void:
+	_section("Avalanche")
+	var pool := _pool()
+	var buff := pool.by_id(&"avalanche")
+	_check("Avalanche is on the roster", buff != null)
+	if buff == null:
+		return
+	_check("it belongs to the Breaker", String(buff.unit_id) == "breaker")
+	_check("it adds 1, 2 and 3 seconds of stun",
+		is_equal_approx(buff.stun_bonus_at(BuffData.Rarity.BRONZE), 1.0)
+		and is_equal_approx(buff.stun_bonus_at(BuffData.Rarity.SILVER), 2.0)
+		and is_equal_approx(buff.stun_bonus_at(BuffData.Rarity.GOLD), 3.0),
+		"%.1f/%.1f/%.1f" % [buff.stun_bonus_at(BuffData.Rarity.BRONZE),
+			buff.stun_bonus_at(BuffData.Rarity.SILVER),
+			buff.stun_bonus_at(BuffData.Rarity.GOLD)])
+	_check("and 50, 75 and 100% more charge damage",
+		is_equal_approx(buff.charge_bonus_at(BuffData.Rarity.BRONZE), 0.50)
+		and is_equal_approx(buff.charge_bonus_at(BuffData.Rarity.SILVER), 0.75)
+		and is_equal_approx(buff.charge_bonus_at(BuffData.Rarity.GOLD), 1.00),
+		"%.2f/%.2f/%.2f" % [buff.charge_bonus_at(BuffData.Rarity.BRONZE),
+			buff.charge_bonus_at(BuffData.Rarity.SILVER),
+			buff.charge_bonus_at(BuffData.Rarity.GOLD)])
+
+	# Through the sim, not just off the card.
+	var plain := _breaker_lane(3, BoardModel.TEAM_B, 4)
+	var plain_full: float = plain.mark.current_hp
+	plain.sim.setup(plain.board, 81)
+	var plain_hit: float = plain_full - plain.mark.current_hp
+	var plain_stun: float = plain.mark.stun_left
+
+	var buffed := _breaker_lane(3, BoardModel.TEAM_B, 4)
+	var buffed_full: float = buffed.mark.current_hp
+	var tb := TeamBuffs.new()
+	tb.add(buff, BuffData.Rarity.GOLD)
+	buffed.sim.team_buffs[BoardModel.TEAM_A] = tb
+	buffed.sim.setup(buffed.board, 81)
+	var buffed_hit: float = buffed_full - buffed.mark.current_hp
+
+	_check("a gold Avalanche doubles the charge damage",
+		is_equal_approx(buffed_hit, plain_hit * 2.0),
+		"%.0f against %.0f" % [buffed_hit, plain_hit * 2.0])
+	_check("and adds three whole seconds of stun",
+		is_equal_approx(buffed.mark.stun_left, plain_stun + 3.0),
+		"%.2fs against %.2fs" % [buffed.mark.stun_left, plain_stun + 3.0])
+
+	# It is the Breaker's buff, so it must not lengthen anyone else's stun.
+	var other := UnitInstance.create(_must_find("warden"), BoardModel.TEAM_A)
+	_check("it does nothing for a unit that is not a Breaker",
+		is_zero_approx(tb.stun_bonus_for(other))
+		and is_zero_approx(tb.charge_bonus_for(other)))
+
+	var card := buff.describe(BuffData.Rarity.GOLD)
+	_check("the card mentions both halves",
+		card.to_lower().contains("stun") and card.to_lower().contains("harder"),
+		card)
+
+
+func _test_status_registry() -> void:
+	_section("The status list")
+
+	# The table is the list. Anything that walks it — cleanse, the round reset —
+	# gets a new status for free, so these checks are about the table staying
+	# honest rather than about any one effect.
+	_check("every status in the enum has a row in the table",
+		UnitInstance.STATUSES.size() == UnitInstance.Status.size(),
+		"%d rows for %d statuses" % [
+			UnitInstance.STATUSES.size(), UnitInstance.Status.size()])
+	var seen := {}
+	var named := 0
+	for row in UnitInstance.STATUSES:
+		seen[row.id] = true
+		if not String(row.name).is_empty():
+			named += 1
+	_check("no status is listed twice and none is nameless",
+		seen.size() == UnitInstance.STATUSES.size()
+		and named == UnitInstance.STATUSES.size())
+
+	# Sudden death is a debuff that must NOT be cleansable — it is a rule of the
+	# clock, not a spell, and a Seraph switching it off would quietly undo the
+	# last fifteen seconds of every round.
+	for row in UnitInstance.STATUSES:
+		if row.id == UnitInstance.Status.NO_RECOVERY:
+			_check("sudden death is a debuff but is not cleansable",
+				row.debuff and not row.cleansable)
+		if row.id == UnitInstance.Status.TAUNT:
+			_check("a self-inflicted taunt is not a debuff at all",
+				not row.debuff)
+
+	# has_status and clear_status have to agree with each other for every row, or
+	# a cleanse reports lifting something it did not lift.
+	var u := UnitInstance.create(_must_find("warden"), BoardModel.TEAM_A)
+	var disagreed: PackedStringArray = []
+	for row in UnitInstance.STATUSES:
+		_set_status(u, row.id)
+		if not u.has_status(row.id):
+			disagreed.append("%s never reads as set" % row.name)
+			continue
+		u.clear_status(row.id)
+		if u.has_status(row.id):
+			disagreed.append("%s survives being cleared" % row.name)
+	_check("every status can be set, seen and cleared",
+		disagreed.is_empty(), "; ".join(disagreed))
+
+	# And the round boundary clears all of them, cleansable or not.
+	var fresh := UnitInstance.create(_must_find("warden"), BoardModel.TEAM_A)
+	for row in UnitInstance.STATUSES:
+		_set_status(fresh, row.id)
+	fresh.reset_for_battle()
+	var left: PackedStringArray = []
+	for row in UnitInstance.STATUSES:
+		if fresh.has_status(row.id):
+			left.append(row.name)
+	_check("a new round starts with every status cleared",
+		left.is_empty(), "still on: %s" % ", ".join(left))
+
+
+func _set_status(u: UnitInstance, s: UnitInstance.Status) -> void:
+	## Puts a status on a unit by hand, for tests that care that the plumbing
+	## works rather than which ability does the applying.
+	match s:
+		UnitInstance.Status.POISON:
+			u.apply_dot(5.0, 4, 0.5, -1)
+		UnitInstance.Status.FROZEN:
+			u.frozen_left = 2.0
+			u.frozen_amp = 1.5
+		UnitInstance.Status.STUNNED:
+			u.stun_left = 2.0
+		UnitInstance.Status.TAUNT:
+			u.taunt_left = 2.0
+		UnitInstance.Status.REFLECT:
+			u.reflect_left = 2.0
+		UnitInstance.Status.STEALTH:
+			u.stealth_left = 2.0
+		UnitInstance.Status.HASTE:
+			u.haste_stacks = 3
+		UnitInstance.Status.NO_RECOVERY:
+			u.recovery_denied = true
+
+
+func _test_seraph_cleanses() -> void:
+	_section("The Seraph lifts what is on you")
+	var seraph := _must_find("seraph")
+	var ab: AbilityData = seraph.ability
+	_check("Benediction is flagged as a cleanse", ab != null and ab.cleanses)
+	if ab == null:
+		return
+	_check("and it is the only one on the roster", _cleansers() == 1,
+		"%d abilities cleanse" % _cleansers())
+
+	# Poison and a freeze at once, on a unit hurt enough to be the Seraph's pick.
+	BoardModel.reset_map()
+	var b := BoardModel.new()
+	var healer := UnitInstance.create(
+		BoardModel.at_tier(seraph, 3), BoardModel.TEAM_A)
+	b.force_place(healer, Vector2i(2, 3))
+	var patient := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 3), BoardModel.TEAM_A)
+	b.force_place(patient, Vector2i(2, 4))
+	b.force_place(UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 1), BoardModel.TEAM_B),
+		Vector2i(2, 9))
+	var sim := CombatSim.new()
+	sim.setup(b, 61)
+	sim.crit_chance = 0.0
+
+	patient.shield = 0.0
+	patient.current_hp = patient.stat(StatModifier.Stat.MAX_HP) * 0.3
+	# A suppressing poison, which is the Vexer's — it blocks healing outright.
+	patient.apply_dot(8.0, 6, 0.5, -1, 0.25, 0.0, 1.0, true)
+	patient.frozen_left = 3.0
+	patient.frozen_amp = 1.6
+	_check("the patient starts poisoned and frozen",
+		patient.has_status(UnitInstance.Status.POISON)
+		and patient.has_status(UnitInstance.Status.FROZEN))
+	_check("and the poison is the kind that blocks healing",
+		patient.is_suppressed())
+
+	var before: float = patient.current_hp
+	sim._resolve_burst_heal(healer, ab)
+
+	_check("the poison is gone",
+		not patient.has_status(UnitInstance.Status.POISON))
+	_check("the freeze is gone too",
+		not patient.has_status(UnitInstance.Status.FROZEN))
+	# The ordering check, and the reason it matters: cleansing AFTER the heal
+	# would lift the poison off a unit the heal had just bounced off.
+	_check("and the heal landed in the same cast, not the next one",
+		patient.current_hp > before,
+		"%.0f hp, was %.0f" % [patient.current_hp, before])
+	_check("the vulnerability the poison carried went with it",
+		is_equal_approx(patient.vulnerability(), 1.0),
+		"%.2f" % patient.vulnerability())
+	_check("and so did the freeze's damage amp",
+		is_equal_approx(patient.frozen_damage_taken(), 1.0))
+
+	var told := false
+	for e in sim.events:
+		if e.kind == "cleanse" and int(e.uid) == patient.uid:
+			told = true
+			var removed: Array = e.get("removed", [])
+			_check("the cleanse says what it took off",
+				removed.has("Poison") and removed.has("Frozen"), str(removed))
+	_check("a cleanse is announced", told)
+
+	# Sudden death is not something a Seraph can undo.
+	patient.recovery_denied = true
+	patient.current_hp = patient.stat(StatModifier.Stat.MAX_HP) * 0.3
+	patient.apply_dot(8.0, 6, 0.5, -1)
+	sim._resolve_burst_heal(healer, ab)
+	_check("it lifts the poison even under sudden death",
+		not patient.has_status(UnitInstance.Status.POISON))
+	_check("but sudden death itself stays on",
+		patient.has_status(UnitInstance.Status.NO_RECOVERY))
+
+	# Nothing to lift is not an event. A Seraph healing a plain wounded ally
+	# should not spam a label saying it cleansed nothing.
+	var quiet := UnitInstance.create(_must_find("warden"), BoardModel.TEAM_A)
+	_check("cleansing a clean unit removes nothing and says nothing",
+		quiet.cleanse().is_empty())
+
+
+func _cleansers() -> int:
+	var n := 0
+	for u in _roster().units:
+		if u.ability != null and u.ability.cleanses:
+			n += 1
+	return n
 
 
 func _freeze_stage(tier: int) -> Dictionary:

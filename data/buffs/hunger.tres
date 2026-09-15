@@ -6,7 +6,7 @@
 script = ExtResource("1_31g7k")
 id = &"hunger"
 display_name = "Hunger"
-unit_id = &"parasite"
+unit_id = &"leech"
 bronze = Vector2(0.25, 1)
 silver = Vector2(0.5, 2)
 gold = Vector2(0.75, 3)

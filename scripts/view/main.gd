@@ -33,6 +33,17 @@ var _buffs: BuffPool = BuffPool.new()
 var _team_buffs: Dictionary = {}
 var _buff_rng := RandomNumberGenerator.new()
 var _picker: BuffPicker = null
+
+## The track this MATCH drew. Held so the boss rule has something to put back
+## when the tier 6 that triggered it is off the board again.
+var _match_track := ""
+
+## How many times the boss rule has been asked. Exists for one reason: the smoke
+## test checks it against the number of rounds played, which is the only way to
+## prove the round loop still CALLS _refresh_music(). Testing the rule itself is
+## easy; testing that anybody asks it is what kept slipping — three separate
+## bugs this week were a working function nothing called.
+var music_checks := 0
 var _bars: Dictionary = {}
 var _force: ForceBar = null
 var _rosters: Dictionary = {}
@@ -94,8 +105,10 @@ func _on_handover_ready() -> void:
 func _ready() -> void:
 	# Rolled ONCE, here, and never touched again. The playlist decides which track
 	# a match gets; it does not shuffle between rounds. A match is one piece of
-	# music from the first prep phase to the last body.
-	Audio.play_music(GameSetup.roll_battle_track())
+	# music from the first prep phase to the last body — the boss rule below is
+	# the single exception, and it puts this track back when the tier 6 is gone.
+	_match_track = GameSetup.roll_battle_track()
+	Audio.play_music(_match_track)
 	# The map decides the board's shape, so it has to be chosen before anything
 	# asks the board how big it is.
 	if GameSetup.maps.is_empty():
@@ -390,8 +403,29 @@ func _begin_prep() -> void:
 	if not _pvp():
 		_ai_merge_pass()
 
+	_refresh_music()
 	_prep_queue = _human_teams()
 	_open_prep_turn(_prep_queue[0], int(placed[_prep_queue[0]]))
+
+
+func _refresh_music() -> void:
+	music_checks += 1
+	# Checked at the top of every prep phase, once the round's units are on the
+	# board — which is the earliest the answer is knowable and the latest it is
+	# still useful, since the player is about to look at the board and see the
+	# thing the music is announcing.
+	#
+	# Merging up to a tier 6 mid-prep does not switch the track. That is
+	# deliberate: the music changing under a drag would be a jolt in the middle of
+	# the one part of the game that wants a steady head, and the next round will
+	# pick it up.
+	if not GameSetup.is_boss_round(board):
+		Audio.play_music(_match_track)
+		return
+	var boss := GameSetup.roll_boss_track()
+	# No boss files on disk is a perfectly ordinary state — the match track just
+	# keeps playing.
+	Audio.play_music(boss if not boss.is_empty() else _match_track)
 
 
 func _resync_buffs() -> void:
@@ -532,10 +566,13 @@ func _on_drag_dropped(from: Vector2i, to: Vector2i) -> void:
 func _proc_note() -> String:
 	var procs := board.last_merge_procs
 	var parts: PackedStringArray = []
-	if procs.get("extra_tier", false):
+	var tiers := int(procs.get("extra_tiers", 0))
+	if tiers == 1:
 		parts.append("Promotion pushed it up a tier!")
-	if procs.get("extra_unit", null) != null:
-		var extra: UnitInstance = procs.extra_unit
+	elif tiers > 1:
+		parts.append("Promotion pushed it up %d tiers!" % tiers)
+	var extras: Array = procs.get("extra_units", [])
+	for extra in extras:
 		parts.append("Windfall summoned a %s!" % extra.data.display_name)
 	if parts.is_empty():
 		return ""
@@ -563,14 +600,15 @@ func _celebrate_merge(at: Vector2i) -> void:
 
 func _show_merge_procs(at: Vector2i) -> void:
 	var procs := board.last_merge_procs
-	if procs.get("extra_tier", false):
+	if int(procs.get("extra_tiers", 0)) > 0:
 		Audio.play_promotion()
 		_board_view.flash_cells([at], Color(1.0, 0.84, 0.35, 0.65), 0.9)
-		_board_view.spawn_label(_board_view.cell_to_pos(at), "PROMOTION!",
+		_board_view.spawn_label(_board_view.cell_to_pos(at),
+			"PROMOTION!" if int(procs.extra_tiers) == 1
+				else "PROMOTION x%d!" % int(procs.extra_tiers),
 			Color(1.0, 0.86, 0.40))
-	if procs.get("extra_unit", null) != null:
+	for extra in procs.get("extra_units", []) as Array:
 		Audio.play_windfall()
-		var extra: UnitInstance = procs.extra_unit
 		_board_view.flash_cells([extra.cell], Color(0.55, 0.88, 0.62, 0.65), 0.9)
 		_board_view.spawn_label(_board_view.cell_to_pos(extra.cell), "WINDFALL!",
 			Color(0.58, 0.92, 0.66))
@@ -653,9 +691,15 @@ func _fielded_ids(team: int) -> Dictionary:
 
 
 func _taken_ids(team: int) -> Array:
+	# Only what is already held AT THE RARITY BEING OFFERED. Holding a bronze
+	# Windfall does not take Windfall off the table — a silver one is a second,
+	# independent instance that rolls on its own, which is the whole point of
+	# letting the rarities stack. Holding the bronze one does stop a second
+	# bronze, because two identical picks would be indistinguishable.
 	var out: Array = []
 	for p in _buffs_for(team).picks:
-		out.append(p.buff.id)
+		if int(p.rarity) == int(_pick_rarity):
+			out.append(p.buff.id)
 	return out
 
 

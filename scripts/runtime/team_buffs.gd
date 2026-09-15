@@ -85,6 +85,14 @@ func hp_damage_fraction() -> float:
 	return _sum(BuffData.Kind.PERCENT_HP_DAMAGE)
 
 
+func round_shield() -> float:
+	## A flat number of shield points handed to every unit on the side at the
+	## opening bell. Flat, not a share of health, so it is worth most to the
+	## smallest bodies on the board — a tier 1 gets a bar many times its own, a
+	## tier 6 barely notices.
+	return _sum(BuffData.Kind.ROUND_SHIELD)
+
+
 func extra_draw() -> int:
 	return roundi(_sum(BuffData.Kind.EXTRA_DRAW))
 
@@ -110,6 +118,39 @@ func extra_raises_for(u: UnitInstance) -> int:
 		if buff.kind != BuffData.Kind.STAT or not buff.applies_to(u):
 			continue
 		extra += buff.extra_raises_at(p.rarity)
+	return extra
+
+
+func extra_summons_for(u: UnitInstance) -> int:
+	# Summed like extra_raises, and for the same reason.
+	var extra := 0
+	for p in picks:
+		var buff: BuffData = p.buff
+		if buff.kind != BuffData.Kind.STAT or not buff.applies_to(u):
+			continue
+		extra += buff.extra_summons_at(p.rarity)
+	return extra
+
+
+func stun_bonus_for(u: UnitInstance) -> float:
+	# Summed like the rest of the riders: two picks that both lengthen the stun
+	# should both count.
+	var extra := 0.0
+	for p in picks:
+		var buff: BuffData = p.buff
+		if buff.kind != BuffData.Kind.STAT or not buff.applies_to(u):
+			continue
+		extra += buff.stun_bonus_at(p.rarity)
+	return extra
+
+
+func charge_bonus_for(u: UnitInstance) -> float:
+	var extra := 0.0
+	for p in picks:
+		var buff: BuffData = p.buff
+		if buff.kind != BuffData.Kind.STAT or not buff.applies_to(u):
+			continue
+		extra += buff.charge_bonus_at(p.rarity)
 	return extra
 
 
@@ -142,12 +183,26 @@ func wild_merge() -> bool:
 	return false
 
 
-func merge_extra_unit_chance() -> float:
-	return clampf(_sum(BuffData.Kind.MERGE_EXTRA_UNIT), 0.0, 1.0)
+func _chances(kind: BuffData.Kind) -> Array[float]:
+	# One entry per PICK, not one total. Two picks of the same buff at different
+	# rarities are two separate rolls that can both land — a bronze and a silver
+	# Windfall is a chance at two extra units, not a fatter chance at one. Adding
+	# the numbers together would have been the easy thing and it is a different
+	# rule: 20% + 40% summed can never give you two.
+	var out: Array[float] = []
+	for p in picks:
+		var buff: BuffData = p.buff
+		if buff.kind == kind:
+			out.append(clampf(buff.magnitude(p.rarity).x, 0.0, 1.0))
+	return out
 
 
-func merge_extra_tier_chance() -> float:
-	return clampf(_sum(BuffData.Kind.MERGE_EXTRA_TIER), 0.0, 1.0)
+func merge_extra_unit_chances() -> Array[float]:
+	return _chances(BuffData.Kind.MERGE_EXTRA_UNIT)
+
+
+func merge_extra_tier_chances() -> Array[float]:
+	return _chances(BuffData.Kind.MERGE_EXTRA_TIER)
 
 
 func full_roster_modifiers() -> Array[StatModifier]:

@@ -19,6 +19,29 @@ const TIER_COLORS: Array[Color] = [
 ]
 
 
+## Whether unit art is drawn at all. Lives HERE, in the view layer, rather than
+## on the settings autoload: UnitView and UnitIcon are the two things that draw a
+## unit, and the headless model suite loads both. An autoload does not exist in
+## `--script` mode, so reaching for one from here stops those scripts compiling
+## and silently skips every test that touches them — which is exactly what
+## happened when this was tried the other way round.
+##
+## GameSetup owns the SETTING and writes it down to here; this is where the
+## drawing reads it.
+static var portraits_on := true
+
+
+static func portrait_for(d: UnitData) -> Texture2D:
+	## The one place anything asks whether a unit has art to draw. Returning null
+	## rather than a flag is deliberate: null is already what "this unit has no
+	## art" means everywhere downstream, so switching portraits off takes the
+	## exact path an art-less unit takes and there is no second placeholder look
+	## to keep in step with the first.
+	if not portraits_on or d == null:
+		return null
+	return d.sprite
+
+
 static func tier_color(tier: int) -> Color:
 	return TIER_COLORS[clampi(tier - 1, 0, TIER_COLORS.size() - 1)]
 
@@ -282,8 +305,12 @@ func _draw() -> void:
 	# portrait it is the muted ground the art reads against; without one it is the
 	# unit's whole colour. Same rect either way, so a unit that gains art later
 	# keeps its footprint exactly.
+	# Asked once and reused, so the plate and the art can never disagree about
+	# whether there is a portrait — which would leave the muted "there is art
+	# here" ground with nothing standing on it.
+	var art_tex := portrait_for(unit.data)
 	var fill: Color = unit.data.accent.lerp(tint, 0.06 * float(tier - 1))
-	if unit.data.sprite != null:
+	if art_tex != null:
 		# Behind art, the accent has to stop competing with it: pulled most of the
 		# way to grey and darkened well below the portrait's own midtones. It is
 		# there to say whose unit this is and what tier, not to be looked at.
@@ -291,12 +318,12 @@ func _draw() -> void:
 	fill.a = alpha
 	draw_rect(body, fill, true)
 
-	if unit.data.sprite != null:
+	if art_tex != null:
 		# Inset inside the plate so a rim of the muted ground shows all the way
 		# round, and drawn HERE — after the plate, before the ring and the bars —
 		# so nothing readable ends up underneath it.
 		var art := body.grow(-4.0)
-		draw_texture_rect(unit.data.sprite, art, false, Color(1, 1, 1, alpha))
+		draw_texture_rect(art_tex, art, false, Color(1, 1, 1, alpha))
 	else:
 		var initial := String(unit.data.display_name).substr(0, 1).to_upper()
 		var font := ThemeDB.fallback_font
