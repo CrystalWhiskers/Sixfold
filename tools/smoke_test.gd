@@ -46,7 +46,7 @@ var _roster_after := -1
 
 
 func _ready() -> void:
-	print("\n=== Six by Eleven — scene smoke test ===\n")
+	print("\n=== Sixfold — scene smoke test ===\n")
 	var packed := load("res://scenes/main.tscn") as PackedScene
 	if packed == null:
 		push_error("main.tscn failed to load")
@@ -54,7 +54,7 @@ func _ready() -> void:
 		return
 	GameSetup.reload_catalogue()
 	GameSetup.mode = GameSetup.Mode.VS_COMPUTER
-	var forced := OS.get_environment("SIXBYELEVEN_SEED")
+	var forced := OS.get_environment("SIXFOLD_SEED")
 	if not forced.is_empty():
 		GameSetup.debug_seed = forced.to_int()
 		print("(forced match seed %d)" % GameSetup.debug_seed)
@@ -158,10 +158,13 @@ func _process(_delta: float) -> void:
 			# a board the round loop could not resolve and the suite hung in the
 			# battle phase — a mutating check belongs where there is nothing left to
 			# disturb.
+			_check_banned_buffs_reach_the_picker()
 			_check_the_boss_rule_reaches_the_music()
 			_check_the_charge_reaches_the_view()
+			_check_the_assassin_cloaks_before_it_jumps()
+			_check_possession_reaches_the_view()
 			var asked: int = _main.music_checks - _music_checks_at_start
-			_check("the boss rule was asked at every prep phase",
+			_check("the boss rule was asked at every round start",
 				asked >= _rounds_played and asked > 0,
 				"asked %d times over %d rounds" % [asked, _rounds_played])
 			_report()
@@ -320,10 +323,19 @@ func _check_hover_reads_a_buff(bar: BuffBar) -> void:
 
 func _check_cards_are_on_screen(picker: BuffPicker) -> void:
 	var screen := Rect2(Vector2.ZERO, picker.get_viewport_rect().size)
-	var cards := picker._column.get_children()
+	# The column ends with the reroll row, which is not an option card. Dropped by
+	# identity rather than by counting from the end, so adding anything else to the
+	# column later cannot quietly make this miscount again.
+	var cards: Array[Node] = []
+	for child in picker._column.get_children():
+		if child != picker._reroll and not child.is_ancestor_of(picker._reroll):
+			cards.append(child)
 	_check("the picker built a card for every option",
 		cards.size() == picker._options.size(),
 		"%d cards for %d options" % [cards.size(), picker._options.size()])
+	_check("and a reroll below them", picker._reroll != null
+		and picker.rerolls_left() > 0,
+		"%d rerolls" % picker.rerolls_left())
 
 	var offenders: PackedStringArray = []
 	var last_bottom := -1.0
@@ -911,9 +923,17 @@ func _check_the_boss_rule_reaches_the_music() -> void:
 
 
 func _check_the_charge_reaches_the_view() -> void:
-	# The model suite proves the charge resolves. This proves the VIEW does
-	# something with it — the "charge" and "stun" events have to be handled, or the
-	# unit teleports with no streak and no label and it reads as a bug.
+	# The model suite proves the charge resolves. This proves the VIEW does something with
+	# it — the charge events have to be handled, or the unit teleports with no streak and
+	# no label and it reads as a bug.
+	#
+	# The log below is the shape the simulation emits now: a "charge" that announces the
+	# lane, one "charge_step" per tile with its own duration, and a "charge_end" at the
+	# impact. It used to be a single "charge" event carrying the whole run, and the view
+	# invented a duration for it and pinned the event log until the slide finished —
+	# because the simulation resolved everything in one instant and the damage would
+	# otherwise have landed while the runner was still three tiles away. The travel time
+	# lives in the simulation now, so the view has nothing to paper over.
 	var view := BoardView.new()
 	add_child(view)
 	view.fit_to(Rect2(Vector2.ZERO, Vector2(900, 700)))
@@ -926,33 +946,231 @@ func _check_the_charge_reaches_the_view() -> void:
 	var v := view.ensure_view(runner)
 	var player := BattlePlayer.new()
 	add_child(player)
+	var per_tile := 0.35
 	var log: Array[Dictionary] = []
 	log.append({kind = "spawn", t = 0.0, uid = runner.uid, cell = Vector2i(2, 1),
 		hp = 100.0, max_hp = 100.0, has_ability = true})
 	log.append({kind = "charge", t = 0.0, uid = runner.uid, from = Vector2i(2, 1),
-		to = Vector2i(2, 5), hit = true, target_cell = Vector2i(2, 6),
+		dir = Vector2i(0, 1), per_tile = per_tile,
 		cells = [Vector2i(2, 2), Vector2i(2, 3), Vector2i(2, 4), Vector2i(2, 5)]})
-	log.append({kind = "stun", t = 0.0, uid = runner.uid, cell = Vector2i(2, 6),
-		seconds = 1.35})
+	for i in 4:
+		log.append({kind = "charge_step", t = per_tile * float(i),
+			uid = runner.uid, from = Vector2i(2, 1 + i), to = Vector2i(2, 2 + i),
+			duration = per_tile})
+	log.append({kind = "charge_end", t = per_tile * 4.0, uid = runner.uid,
+		cell = Vector2i(2, 5), hit = true, target_cell = Vector2i(2, 6),
+		dir = Vector2i(0, 1)})
+	log.append({kind = "stun", t = per_tile * 4.0, uid = runner.uid,
+		cell = Vector2i(2, 6), seconds = 1.35})
 	log.append({kind = "counts", t = 999.0, a = 1, b = 1})
 	player.play(view, log, {runner.uid: runner})
 	player._process(0.05)
 
-	# Checked in BOARD space, not pixels: the drawn position also carries the
-	# impact lunge, which is a few pixels of deliberate overshoot and would make an
-	# exact pixel comparison fail for the right reason at the wrong time.
+	# Checked in BOARD space, not pixels: the drawn position also carries the impact
+	# lunge, which is a few pixels of deliberate overshoot and would make an exact pixel
+	# comparison fail for the right reason at the wrong time.
+	var start_at: Vector2 = player._pos.get(runner.uid, Vector2.ZERO)
+	_check("the charge is animated as a run, not a teleport",
+		v != null and player._moves.has(runner.uid),
+		"no move registered for the runner")
+	_check("and the run is uneased, because a charge has no wind-up",
+		bool((player._moves.get(runner.uid, {}) as Dictionary).get("linear", false)))
+	_check("it has not arrived yet",
+		not start_at.is_equal_approx(Vector2(2.5, 5.5)),
+		"already at %s" % start_at)
+	# The absence of the hold is the whole point and it is worth asserting rather than
+	# assuming: a hold reappearing here would mean the travel time had been taken back
+	# out of the simulation and the view had gone back to faking it.
+	_check("and the log is NOT pinned, because the simulation did the waiting",
+		is_zero_approx(player._hold), "%.3fs hold" % player._hold)
+
+	# Let it finish. The unit has to end up exactly where the simulation put it — an
+	# animation that lands anywhere else desyncs the view from the model for the rest of
+	# the round.
+	for i in 60:
+		player._process(0.05)
 	var landed: Vector2 = player._pos.get(runner.uid, Vector2.ZERO)
-	_check("the charge moved the unit to the far end of the lane",
-		v != null and landed.is_equal_approx(Vector2(2.5, 5.5)),
-		"ended at %s tiles" % landed)
-	_check("and it is not left walking there as if it strolled",
-		not player._moves.has(runner.uid))
+	_check("and it ends the run at the far end of the lane",
+		landed.is_equal_approx(Vector2(2.5, 5.5)), "ended at %s tiles" % landed)
 	_check("the lane and the stun both drew something",
 		view._flashes.size() >= 2, "%d flashes" % view._flashes.size())
 
 	player.stop()
 	player.queue_free()
 	view.queue_free()
+
+
+func _check_the_assassin_cloaks_before_it_jumps() -> void:
+	# The simulation resolves the vanish and the strike in one instant. Played back
+	# honestly that means the Assassin is already behind its victim on the frame the
+	# cloak is drawn, which reads as a bug — so the log is held for a beat on the
+	# vanish. This proves the beat exists and that the blink is on the far side of
+	# it, not merely that the stealth event is handled.
+	var view := BoardView.new()
+	add_child(view)
+	view.fit_to(Rect2(Vector2.ZERO, Vector2(900, 700)))
+	BoardModel.reset_map()
+	var model := BoardModel.new()
+	var killer := UnitInstance.create(
+		load("res://data/units/assassin_t3.tres") as UnitData, BoardModel.TEAM_A)
+	model.force_place(killer, Vector2i(2, 1))
+	view.bind(model)
+	view.ensure_view(killer)
+	var player := BattlePlayer.new()
+	add_child(player)
+	var log: Array[Dictionary] = []
+	log.append({kind = "spawn", t = 0.0, uid = killer.uid, cell = Vector2i(2, 1),
+		hp = 100.0, max_hp = 100.0, has_ability = true})
+	# The order the simulation emits them in, which is the point being tested.
+	log.append({kind = "stealth", t = 0.0, uid = killer.uid, on = true,
+		duration = 2.0, cell = Vector2i(2, 1)})
+	log.append({kind = "blink", t = 0.0, uid = killer.uid, from = Vector2i(2, 1),
+		to = Vector2i(2, 8)})
+	log.append({kind = "counts", t = 999.0, a = 1, b = 1})
+	player.play(view, log, {killer.uid: killer})
+	player._process(0.05)
+
+	var v := view.view_for(killer.uid)
+	_check("the cloak goes on", v != null and v.hidden_unit)
+	_check("and the log waits a beat before the jump",
+		player._hold > 0.0, "%.3fs hold" % player._hold)
+	var at: Vector2 = player._pos.get(killer.uid, Vector2.ZERO)
+	_check("so it has not jumped yet",
+		at.is_equal_approx(Vector2(2.5, 1.5)), "already at %s" % at)
+	for i in 30:
+		player._process(0.05)
+	_check("and then it is behind its victim",
+		(player._pos.get(killer.uid, Vector2.ZERO) as Vector2)
+			.is_equal_approx(Vector2(2.5, 8.5)),
+		"ended at %s" % player._pos.get(killer.uid, Vector2.ZERO))
+
+	player.stop()
+	player.queue_free()
+	view.queue_free()
+
+
+func _check_possession_reaches_the_view() -> void:
+	# The model suite proves the possession resolves. This proves the view does
+	# something with it, which for this unit is unusually load-bearing: the Usurper
+	# comes OFF the board, and a view left behind would be a unit standing on a tile
+	# the model says is empty for the rest of the round.
+	var view := BoardView.new()
+	add_child(view)
+	view.fit_to(Rect2(Vector2.ZERO, Vector2(900, 700)))
+	BoardModel.reset_map()
+	var model := BoardModel.new()
+	var thief := UnitInstance.create(
+		load("res://data/units/usurper_t3.tres") as UnitData, BoardModel.TEAM_A)
+	var host := UnitInstance.create(
+		load("res://data/units/warden_t3.tres") as UnitData, BoardModel.TEAM_B)
+	model.force_place(thief, Vector2i(2, 1))
+	model.force_place(host, Vector2i(2, 8))
+	view.bind(model)
+	view.ensure_view(thief)
+	view.ensure_view(host)
+	var player := BattlePlayer.new()
+	add_child(player)
+	var log: Array[Dictionary] = []
+	for u in [thief, host]:
+		log.append({kind = "spawn", t = 0.0, uid = (u as UnitInstance).uid,
+			cell = (u as UnitInstance).cell, hp = 100.0, max_hp = 100.0,
+			has_ability = true})
+	log.append({kind = "possess", t = 0.0, uid = thief.uid, cell = Vector2i(2, 1),
+		host_uid = host.uid, host_cell = Vector2i(2, 8), team = BoardModel.TEAM_A,
+		forced_tier = 0, host_name = "Warden III", hp = 880.0, max_hp = 880.0})
+	log.append({kind = "counts", t = 999.0, a = 2, b = 0})
+	player.play(view, log, {thief.uid: thief, host.uid: host})
+	player._process(0.05)
+
+	_check("the Usurper's view goes when it gets inside something",
+		view.view_for(thief.uid) == null)
+	_check("and it is not given the death animation on the way",
+		not player._pos.has(thief.uid))
+	_check("the host is still drawn, with the new bar",
+		view.view_for(host.uid) != null)
+	_check("something was said about it",
+		not view._floaters.is_empty(), "%d floaters" % view._floaters.size())
+
+	# And it comes back as a husk.
+	var husk_log: Array[Dictionary] = []
+	husk_log.append({kind = "husk", t = 0.0, uid = thief.uid,
+		cell = Vector2i(2, 8), from_uid = host.uid, hp = 1.0, max_hp = 1.0})
+	husk_log.append({kind = "counts", t = 999.0, a = 1, b = 0})
+	model.remove(host)
+	model.force_place(thief, Vector2i(2, 8))
+	player.play(view, husk_log, {thief.uid: thief, host.uid: host})
+	player._process(0.05)
+	_check("a husk is drawn again when its puppet falls",
+		view.view_for(thief.uid) != null)
+	var hp: Dictionary = player._hp.get(thief.uid, {})
+	_check("on one health of one",
+		is_equal_approx(float(hp.get("cur", 0.0)), 1.0)
+		and is_equal_approx(float(hp.get("max", 0.0)), 1.0), str(hp))
+
+	player.stop()
+	player.queue_free()
+	view.queue_free()
+
+
+func _check_banned_buffs_reach_the_picker() -> void:
+	# The custom screen can ban a buff; the menu suite proves the switch writes it
+	# down. This proves the ROUND LOOP reads it — a banned buff that still turns up in
+	# the picker is a switch that does nothing, and nothing else in the game would
+	# notice.
+	print("\nBanned buffs")
+	var pool := BuffPool.new()
+	pool.load_all()
+	if pool.buffs.size() < 4:
+		_check("there are buffs to ban", false)
+		return
+	var was_custom := GameSetup.custom
+	var was_banned := GameSetup.custom_banned.duplicate()
+	GameSetup.custom = true
+	GameSetup.custom_banned = {}
+
+	# A HANDFUL banned, not almost all of them. Written the other way round first —
+	# ban everything but one — and it failed about one run in three for a reason that
+	# had nothing to do with the bans: BuffPool.offer() deliberately ignores the
+	# exclusions when they empty the pool, so a starved offer hands back EVERY buff.
+	# Which buffs are left also depends on what is fielded, so whether the pool
+	# starved varied with the board. See CustomPanel.floor_allowed().
+	var banned: Array[StringName] = []
+	for i in mini(6, pool.buffs.size() - BuffPool.OPTIONS):
+		banned.append(pool.buffs[i].id)
+		GameSetup.set_banned(pool.buffs[i].id, true)
+	_check("there are bans to test with", banned.size() >= 3,
+		"%d banned of %d buffs" % [banned.size(), pool.buffs.size()])
+	var excluded: Array = _main._taken_ids(_main.PLAYER_TEAM)
+	var missing: PackedStringArray = []
+	for id in banned:
+		if not excluded.has(id):
+			missing.append(String(id))
+	_check("the round loop folds every ban into its exclusions",
+		missing.is_empty(), "%s never reached the offer" % ", ".join(missing))
+	# The real board's fielded units, so the pool is not starved by this test's own
+	# arrangement and the fallback above never fires.
+	var fielded: Dictionary = _main._fielded_ids(_main.PLAYER_TEAM)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4242
+	var leaked: PackedStringArray = []
+	for i in 60:
+		for b in pool.offer(rng, BuffPool.OPTIONS, excluded, fielded,
+				BuffData.Rarity.GOLD):
+			if banned.has(b.id):
+				leaked.append(String(b.id))
+	_check("and a banned buff never comes up", leaked.is_empty(),
+		"%s got through" % ", ".join(leaked))
+	# The offer still fills, so the bans cost the player options rather than picks.
+	var short := 0
+	for i in 20:
+		if pool.offer(rng, BuffPool.OPTIONS, excluded, fielded,
+				BuffData.Rarity.GOLD).size() < BuffPool.OPTIONS:
+			short += 1
+	_check("while the picker still gets a full three to choose from", short == 0,
+		"%d of 20 offers came up short" % short)
+
+	GameSetup.custom_banned = was_banned
+	GameSetup.custom = was_custom
 
 
 func _check_unbound_board_survives() -> void:

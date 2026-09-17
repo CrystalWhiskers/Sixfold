@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/abilities/usurpation.tres" id="1_bkbuv"]
+[ext_resource type="Resource" path="res://data/units/usurper_t5.tres" id="2_24bti"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_1ipja"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="4_hxhkq"]
+
+[resource]
+script = ExtResource("3_1ipja")
+id = &"usurper"
+display_name = "Usurper IV"
+tier = 4
+max_hp = 640.0
+attack_damage = 80.0
+attack_speed = 0.7
+move_time = 0.8300000000000001
+sight_range = 5
+ability = ExtResource("1_bkbuv")
+mana_per_attack = 0.0
+casts_at_battle_start = true
+next_tier = ExtResource("2_24bti")
+note = "It does not fight. At the bell it gets inside an enemy of its own tier and that unit spends the round on your side; the Usurper is off the board while it holds. Below its tier it drags the host up to its own; above its tier it bursts against it and dies. Everything it is worth is sitting inside something the enemy is allowed to shoot — kill the host and it falls out with one health, slow, and nothing can heal it. A husk that lands one blow is inside whatever it hit."
+sprite = ExtResource("4_hxhkq")
+accent = Color(0.45, 0.3, 0.58, 1)

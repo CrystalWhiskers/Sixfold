@@ -88,6 +88,8 @@ const COL_AURA_EDGE := Color(0.52, 0.82, 0.94, 0.55)
 
 const COL_STAIRS := Color(0.24, 0.29, 0.27)
 const COL_STAIRS_MARK := Color(0.62, 0.76, 0.66, 0.70)
+const COL_GATE := Color(0.16, 0.26, 0.30)
+const COL_GATE_MARK := Color(0.52, 0.84, 0.90, 0.80)
 const COL_BARRIER := Color(0.72, 0.66, 0.52)
 const COL_FOG := Color(0.09, 0.10, 0.13)
 const COL_FOG_HATCH := Color(0.20, 0.23, 0.29, 0.55)
@@ -702,6 +704,8 @@ func _draw() -> void:
 				_draw_high(r)
 			elif BoardModel.is_stairs(cell):
 				_draw_stairs(r)
+			elif BoardModel.is_gate(cell):
+				_draw_gate(r)
 
 	_draw_aura_zones()
 
@@ -958,6 +962,16 @@ func _draw_stairs(r: Rect2) -> void:
 			Vector2(r.end.x - inset, y), COL_STAIRS_MARK, 2.0)
 
 
+func _draw_gate(r: Rect2) -> void:
+	# Concentric rings. Not an arrow and not a staircase: a gate has no direction —
+	# it works both ways and from either side — so anything with a point on it would
+	# be telling the player something untrue.
+	var centre := r.position + Vector2(tile_size, tile_size) * 0.5
+	for k in 3:
+		draw_arc(centre, tile_size * (0.16 + 0.11 * float(k)), 0.0, TAU, 24,
+			Color(COL_GATE_MARK, COL_GATE_MARK.a * (0.9 - 0.2 * float(k))), 1.6)
+
+
 func _draw_barriers() -> void:
 	if board == null:
 		return
@@ -988,6 +1002,8 @@ func _tile_color(cell: Vector2i) -> Color:
 		return COL_HIGH
 	if BoardModel.is_stairs(cell):
 		return COL_STAIRS
+	if BoardModel.is_gate(cell):
+		return COL_GATE
 	if board != null and board.is_neutral(cell):
 		return COL_NEUTRAL
 	if board != null and board.can_deploy(player_team, cell):

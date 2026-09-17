@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_uqyxf"]
+
+[resource]
+script = ExtResource("1_uqyxf")
+id = &"usurpation"
+display_name = "Usurpation"
+description = "At the opening bell it gets inside an enemy of its own tier and that unit changes sides for the rest of the round — it fights for you, keeping everything its owner gave it, and the Usurper itself is gone from the board while it holds the reins. Below its tier it drags the host up to its own tier for the round; the owner does not keep the promotion. Above its tier it cannot get in at all and bursts against it instead, killing itself for damage that grows with how badly it was outmatched. Kill the host and the Usurper falls out of it with one health that nothing can raise, and slow — but if that husk lands a single blow, it is inside whatever it just hit."
+kind = 21
+cast_time = 0.3
+possess_seconds_per_tier = 2.5

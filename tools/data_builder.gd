@@ -11,12 +11,31 @@ const TIERS := 6
 const HP_SCALE := 2.0
 const DMG_SCALE := 2.0
 
+## Every unit's stride, multiplied. One number for the whole game's walking pace,
+## rather than thirty-two edits to the `move` column.
+##
+## Above 1.0 is SLOWER: move_time is seconds per tile. Slowing everything down does
+## two things at once and both were the point of setting it —
+##
+##   * It gives the movement buffs something to act on. Forced March measured at
+##     about two points of win rate, which is nothing, because movement only
+##     matters until the lines meet and at the old pace they met almost at once.
+##   * It narrows the gap between bows and blades by paying the bows for the walk.
+##     A bow's whole case is the shots it gets before contact, and at the old pace
+##     that was one or two.
+##
+## The ceiling on this number is the CLOCK, not taste: sudden death lands at 105
+## seconds and the sim times out at 120, so a pace that pushes ordinary rounds past
+## the first turns a last-ditch rule into the normal state of every fight. Measured
+## before it was chosen — see the note in the balance findings.
+const MOVE_SCALE := 1.6
+
 # A map is fair when the halves match: an odd board needs the neutral divider,
 # an even one splits on its own and must not have it.
 const MAP_TABLE := [
 
 	{
-		id = &"standard", name = "Standard", w = 6, h = 11, neutral = true,
+		id = &"standard", name = "Standard", w = 6, h = 10, neutral = false,
 		note = "The default. Five rows each with a no-man's row between them.",
 	},
 	{
@@ -24,11 +43,11 @@ const MAP_TABLE := [
 		note = "Short and undivided — the two front ranks start in each other's faces.",
 	},
 	{
-		id = &"the_pit", name = "The Pit", w = 4, h = 9, neutral = true,
+		id = &"the_pit", name = "The Pit", w = 4, h = 8, neutral = false,
 		note = "Narrow and shallow. Sixteen tiles a side, so you merge or you drown.",
 	},
 	{
-		id = &"broad_front", name = "Broad Front", w = 9, h = 11, neutral = true,
+		id = &"broad_front", name = "Broad Front", w = 9, h = 10, neutral = false,
 		note = "Wide and divided. Room to spread out, and a long walk to the enemy.",
 	},
 	{
@@ -36,19 +55,18 @@ const MAP_TABLE := [
 		note = "Wide, shallow, no divider. Everything is in range of everything almost at once.",
 	},
 	{
-		id = &"the_long_march", name = "The Long March", w = 5, h = 15, neutral = true,
+		id = &"the_long_march", name = "The Long March", w = 5, h = 14, neutral = false,
 		note = "A deep corridor. Ranged units get to fire for a long time before anything arrives.",
 	},
 	{
-		id = &"the_duel", name = "The Duel", w = 3, h = 7, neutral = true,
+		id = &"the_duel", name = "The Duel", w = 3, h = 6, neutral = false,
 		note = "Three tiles wide and nine to a side. There is no flank, no cover and nowhere to put a mistake.",
 	},
 	{
-		id = &"killing_field", name = "Killing Field", w = 13, h = 9, neutral = true,
+		id = &"killing_field", name = "Killing Field", w = 13, h = 8, neutral = false,
 		rows = [
 			"^^^^^^^^^^^^^",
 			"...//...//...",
-			".............",
 			".............",
 			".............",
 			".............",
@@ -59,33 +77,31 @@ const MAP_TABLE := [
 		note = "Thirteen wide and shallow, with a firing step along both backs. Almost everything is in range of almost everything from the opening tick.",
 	},
 	{
-		id = &"the_steppes", name = "The Steppes", w = 11, h = 13, neutral = true,
+		id = &"the_steppes", name = "The Steppes", w = 11, h = 12, neutral = false,
 		rows = [
 			"^^^^^^^^^^^",
-			"..//...//..",
+			"O.//...//..",
 			"..^^^^^^^..",
 			"....//.....",
 			"....^^^....",
 			"....//.....",
-			"...........",
 			"....//.....",
 			"....^^^....",
 			"....//.....",
 			"..^^^^^^^..",
-			"..//...//..",
+			"O.//...//..",
 			"^^^^^^^^^^^",
 		],
 		note = "Wide open ground in terraces. Every ridge is a range band for whoever gets to it, and the back rank of each side is the highest ground on the board.",
 	},
 	{
-		id = &"the_cauldron", name = "The Cauldron", w = 11, h = 11, neutral = true,
+		id = &"the_cauldron", name = "The Cauldron", w = 11, h = 10, neutral = false,
 		rows = [
 			"..//...//..",
 			".^^^^^^^^^.",
 			".^.......^.",
 			".^.......^.",
 			".^.......^.",
-			".^/...../^.",
 			".^.......^.",
 			".^.......^.",
 			".^.......^.",
@@ -95,14 +111,13 @@ const MAP_TABLE := [
 		note = "A rim of high ground all the way round a low floor. Ranged units want the wall; melee wants them off it.",
 	},
 	{
-		id = &"the_quarry", name = "The Quarry", w = 9, h = 11, neutral = true,
+		id = &"the_quarry", name = "The Quarry", w = 9, h = 10, neutral = false,
 		rows = [
 			".........",
 			".........",
 			".........",
 			".#.#.#.#.",
 			".........",
-			"#.#.#.#.#",
 			".........",
 			".#.#.#.#.",
 			".........",
@@ -112,14 +127,13 @@ const MAP_TABLE := [
 		note = "Loose stone scattered across the middle. Nothing is truly blocked, but no shot crosses the board cleanly, and pierce and beams die on the first block they meet.",
 	},
 	{
-		id = &"the_shatter", name = "The Shatter", w = 9, h = 11, neutral = true,
+		id = &"the_shatter", name = "The Shatter", w = 9, h = 10, neutral = false,
 		rows = [
 			".........",
 			"..X...X..",
 			".........",
 			"X..X.X..X",
 			".........",
-			".X.X.X.X.",
 			".........",
 			"X..X.X..X",
 			".........",
@@ -129,14 +143,13 @@ const MAP_TABLE := [
 		note = "The Quarry with holes where the stone was. The walk is the same and the cover is gone: everything can see everything, and nothing can walk straight at it.",
 	},
 	{
-		id = &"the_grove", name = "The Grove", w = 7, h = 11, neutral = true,
+		id = &"the_grove", name = "The Grove", w = 7, h = 10, neutral = false,
 		rows = [
 			".......",
 			"..#.#..",
 			".#...#.",
 			"...#...",
 			".#...#.",
-			"..#.#..",
 			".#...#.",
 			"...#...",
 			".#...#.",
@@ -146,13 +159,12 @@ const MAP_TABLE := [
 		note = "Stone pillars scattered the whole way down. There is no clean shot anywhere on this board — everything happens at the range you find each other.",
 	},
 	{
-		id = &"the_warrens", name = "The Warrens", w = 6, h = 11, neutral = true,
+		id = &"the_warrens", name = "The Warrens", w = 6, h = 10, neutral = false,
 		rows = [
 			"......",
 			".####.",
 			"......",
 			"..##..",
-			"......",
 			"......",
 			"......",
 			"..##..",
@@ -163,14 +175,13 @@ const MAP_TABLE := [
 		note = "Blocks of stone break both halves into lanes. Nothing walks straight at anything.",
 	},
 	{
-		id = &"the_spine", name = "The Spine", w = 9, h = 11, neutral = true,
+		id = &"the_spine", name = "The Spine", w = 9, h = 10, neutral = false,
 		rows = [
 			"....#....",
 			"....#....",
 			".........",
 			"....#....",
 			"....#....",
-			".........",
 			"....#....",
 			"....#....",
 			".........",
@@ -180,12 +191,11 @@ const MAP_TABLE := [
 		note = "One wall down the length of the board with three doors through it. Two lanes that can reinforce each other, but only at three places, and never by shooting across.",
 	},
 	{
-		id = &"the_ring", name = "The Ring", w = 9, h = 11, neutral = true,
+		id = &"the_ring", name = "The Ring", w = 9, h = 10, neutral = false,
 		rows = [
 			".........",
 			".........",
 			".........",
-			"..#####..",
 			"..#####..",
 			"..#####..",
 			"..#####..",
@@ -197,13 +207,12 @@ const MAP_TABLE := [
 		note = "A block of stone in the dead centre that nothing crosses and nothing sees through. The fight is two separate flank fights, and neither side can help the other.",
 	},
 	{
-		id = &"three_roads", name = "Three Roads", w = 11, h = 13, neutral = true,
+		id = &"three_roads", name = "Three Roads", w = 11, h = 12, neutral = false,
 		rows = [
 			"...........",
 			"...........",
 			"...#...#...",
 			"...#...#...",
-			"...%...%...",
 			"...%...%...",
 			"...%...%...",
 			"...%...%...",
@@ -216,7 +225,7 @@ const MAP_TABLE := [
 		note = "Three lanes, walled off from each other the whole way, meeting only behind each side's own lines. You are not fighting one battle here, you are funding three — unless you brought a Sapper. The middle of both dividing walls is breakable stone: knock a hole in it and the map stops being three fights and becomes one. The stone nearest each base is permanent, so nobody digs straight into your back line.",
 	},
 	{
-		id = &"the_breach", name = "The Breach", w = 11, h = 13, neutral = true,
+		id = &"the_breach", name = "The Breach", w = 11, h = 12, neutral = false,
 		rows = [
 			"...........",
 			"...........",
@@ -224,7 +233,6 @@ const MAP_TABLE := [
 			".%%%#%#%%%.",
 			".%%%%%%%%%.",
 			".%%%#%#%%%.",
-			".%%%%%%%%%.",
 			".%%%#%#%%%.",
 			".%%%%%%%%%.",
 			".%%%#%#%%%.",
@@ -235,31 +243,33 @@ const MAP_TABLE := [
 		note = "A slab of breakable stone filling the whole middle of the board, with permanent pillars through it that nothing can shift. Without a Sapper there are two narrow lanes round the outside and a very long walk; with one you cut your own road through the middle and decide where the fight happens. The pillars mean the slab never fully disappears.",
 	},
 	{
-		id = &"four_corners", name = "Four Corners", w = 11, h = 11, neutral = true,
+		id = &"four_corners", name = "Four Corners", w = 11, h = 10, neutral = false,
 		rows = [
-			".....#.....",
 			".....#.....",
 			".....#.....",
 			".....#.....",
 			"##.#####.##",
 			"...........",
+			"...........",
 			"##.#####.##",
 			".....#.....",
 			".....#.....",
 			".....#.....",
-			".....#.....",
 		],
-		note = "Two rooms each side, one gate each, and a single hallway across the middle. You commit to a left or a right before you know where they went.",
+		# The hallway WAS the divider row, so undividing the board sealed the four
+		# rooms off from each other — the left and right halves of each side had no
+		# connection at all. Rebuilt as a two-row hallway with the wall band moved out
+		# a row, which is the same map and mirrors correctly on an even board.
+		note = "Two rooms each side, one gate each, and a hallway across the middle. You commit to a left or a right before you know where they went.",
 	},
 	{
-		id = &"the_gauntlet", name = "The Gauntlet", w = 7, h = 13, neutral = true,
+		id = &"the_gauntlet", name = "The Gauntlet", w = 7, h = 12, neutral = false,
 		rows = [
 			".......",
 			".......",
 			"#####..",
 			".......",
 			"..#####",
-			".......",
 			".......",
 			".......",
 			"..#####",
@@ -285,30 +295,33 @@ const MAP_TABLE := [
 		note = "No divider, a boulder in each half, and a long ridge at the back of both. Short, high and mean.",
 	},
 	{
-		id = &"the_keep", name = "The Keep", w = 9, h = 11, neutral = true,
+		id = &"the_keep", name = "The Keep", w = 9, h = 10, neutral = false,
 		rows = [
 			".........",
 			".........",
 			".........",
-			"..#####..",
+			"..##/##..",
 			"..#^^^#..",
-			"../^^^/..",
 			"..#^^^#..",
-			"..#####..",
+			"..##/##..",
 			".........",
 			".........",
 			".........",
 		],
-		note = "One fortress, dead centre, two doors on the neutral row, nine tiles of high ground inside and stone on every other side. Whoever gets in first owns the middle of the board.",
+		# The doors used to be on the divider row, which is the one row that is now
+		# gone — the keep came out of the undividing sealed, six tiles of high ground
+		# nothing could ever climb. Moved to the front and back walls instead, which
+		# is a better map anyway: one door faces each side, so the race for the middle
+		# is symmetrical rather than sideways.
+		note = "One fortress, dead centre. A single door in the wall facing each side, six tiles of high ground inside and stone everywhere else. Whoever gets through their door first owns the middle of the board — and the only way out is back through it.",
 	},
 	{
-		id = &"the_redoubt", name = "The Redoubt", w = 9, h = 11, neutral = true,
+		id = &"the_redoubt", name = "The Redoubt", w = 9, h = 10, neutral = false,
 		rows = [
 			".........",
 			".#######.",
 			".#.....#.",
 			".##.#.##.",
-			".........",
 			".........",
 			".........",
 			".##.#.##.",
@@ -319,13 +332,12 @@ const MAP_TABLE := [
 		note = "A walled fort at each end with two gates and a road around the outside. Archers inside cannot be shot at until something comes through a gate at them.",
 	},
 	{
-		id = &"the_anvil", name = "The Anvil", w = 9, h = 11, neutral = true,
+		id = &"the_anvil", name = "The Anvil", w = 9, h = 10, neutral = false,
 		rows = [
 			".........",
 			".........",
 			"..../....",
 			"...X/X...",
-			"..X^^^X..",
 			"..X^^^X..",
 			"..X^^^X..",
 			"...X/X...",
@@ -336,11 +348,10 @@ const MAP_TABLE := [
 		note = "A high plateau ringed by a dry moat, with one ramp on each side. Holding it means every archer you own gains a range band and shoots over the moat at everything below.",
 	},
 	{
-		id = &"ramparts", name = "Ramparts", w = 7, h = 11, neutral = true,
+		id = &"ramparts", name = "Ramparts", w = 7, h = 10, neutral = false,
 		rows = [
 			".^^^^^.",
 			"..//...",
-			".......",
 			".......",
 			".......",
 			".......",
@@ -352,17 +363,15 @@ const MAP_TABLE := [
 		],
 		lines = [
 			[0, 4, 0, 5], [1, 4, 1, 5], [5, 4, 5, 5], [6, 4, 6, 5],
-			[0, 6, 0, 5], [1, 6, 1, 5], [5, 6, 5, 5], [6, 6, 6, 5],
 		],
 		note = "Barriers with no thickness pinch the middle to three columns. The back rank of each side is a firing step.",
 	},
 	{
-		id = &"crossroads", name = "Crossroads", w = 11, h = 11, neutral = true,
+		id = &"crossroads", name = "Crossroads", w = 11, h = 10, neutral = false,
 		rows = [
 			"XXX.....XXX",
 			"XXX.....XXX",
 			"XXX.....XXX",
-			"...........",
 			"...........",
 			"...........",
 			"...........",
@@ -374,12 +383,11 @@ const MAP_TABLE := [
 		note = "A plus. Both sides come down a narrow approach into a middle that is suddenly the full width of the board.",
 	},
 	{
-		id = &"the_bridge", name = "The Bridge", w = 7, h = 11, neutral = true,
+		id = &"the_bridge", name = "The Bridge", w = 7, h = 10, neutral = false,
 		rows = [
 			".......",
 			"./.../.",
 			".^...^.",
-			"XX...XX",
 			"XX...XX",
 			"XX...XX",
 			"XX...XX",
@@ -391,13 +399,12 @@ const MAP_TABLE := [
 		note = "Two shores joined by a three-wide crossing. Everything has to funnel over it, and the high ground on each bank overlooks the whole span.",
 	},
 	{
-		id = &"the_hourglass", name = "The Hourglass", w = 9, h = 11, neutral = true,
+		id = &"the_hourglass", name = "The Hourglass", w = 9, h = 10, neutral = false,
 		rows = [
 			".........",
 			".........",
 			"X.......X",
 			"XX./^..XX",
-			"XXX...XXX",
 			"XXX...XXX",
 			"XXX...XXX",
 			"XX./^..XX",
@@ -408,13 +415,12 @@ const MAP_TABLE := [
 		note = "Wide at both ends and three tiles across in the middle, with the pinch overlooked from either side.",
 	},
 	{
-		id = &"the_chasm", name = "The Chasm", w = 9, h = 11, neutral = true,
+		id = &"the_chasm", name = "The Chasm", w = 9, h = 10, neutral = false,
 		rows = [
 			".........",
 			".........",
 			".^^...^^.",
 			"./...../.",
-			".XXXXXXX.",
 			".XXXXXXX.",
 			".XXXXXXX.",
 			"./...../.",
@@ -425,14 +431,13 @@ const MAP_TABLE := [
 		note = "A trench splits the field end to end, and the only ways over it are the two flanks. Archers duel across the gap from the first second; anything with a sword has a long walk to make.",
 	},
 	{
-		id = &"the_shoals", name = "The Shoals", w = 11, h = 11, neutral = true,
+		id = &"the_shoals", name = "The Shoals", w = 11, h = 10, neutral = false,
 		rows = [
 			"...XX.XX...",
 			"...XX.XX...",
 			"...........",
 			"XX.XXXXX.XX",
 			"XX.XXXXX.XX",
-			"...........",
 			"XX.XXXXX.XX",
 			"XX.XXXXX.XX",
 			"...........",
@@ -442,13 +447,12 @@ const MAP_TABLE := [
 		note = "Islands joined by necks a single tile wide. Nothing here blocks a shot and almost everything blocks a step, so the necks are killing grounds long before anything reaches them.",
 	},
 	{
-		id = &"the_causeway", name = "The Causeway", w = 7, h = 15, neutral = true,
+		id = &"the_causeway", name = "The Causeway", w = 7, h = 14, neutral = false,
 		rows = [
 			".......",
 			".......",
 			".......",
 			"XX...XX",
-			"XXX.XXX",
 			"XXX.XXX",
 			"XXX.XXX",
 			"XXX.XXX",
@@ -463,21 +467,20 @@ const MAP_TABLE := [
 		note = "One tile wide for eight rows, in full view of both shores the whole way. Holes do not stop an arrow, so crossing means walking single file through everything they have.",
 	},
 	{
-		id = &"the_cage", name = "The Cage", w = 7, h = 11, neutral = true,
+		id = &"the_cage", name = "The Cage", w = 7, h = 10, neutral = false,
 		lines = [
 			[0, 1, 0, 2], [1, 1, 1, 2], [2, 1, 2, 2], [3, 1, 3, 2],
 			[4, 1, 4, 2], [2, 3, 2, 4], [3, 3, 3, 4], [4, 3, 4, 4],
 			[5, 3, 5, 4], [6, 3, 6, 4], [1, 4, 1, 5], [2, 4, 2, 5],
-			[3, 4, 3, 5], [4, 4, 4, 5], [5, 4, 5, 5], [1, 5, 1, 6],
-			[2, 5, 2, 6], [3, 5, 3, 6], [4, 5, 4, 6], [5, 5, 5, 6],
-			[2, 6, 2, 7], [3, 6, 3, 7], [4, 6, 4, 7], [5, 6, 5, 7],
-			[6, 6, 6, 7], [0, 8, 0, 9], [1, 8, 1, 9], [2, 8, 2, 9],
-			[3, 8, 3, 9], [4, 8, 4, 9],
+			[3, 4, 3, 5], [4, 4, 4, 5], [5, 4, 5, 5], [2, 5, 2, 6],
+			[3, 5, 3, 6], [4, 5, 4, 6], [5, 5, 5, 6], [6, 5, 6, 6],
+			[0, 7, 0, 8], [1, 7, 1, 8], [2, 7, 2, 8], [3, 7, 3, 8],
+			[4, 7, 4, 8],
 		],
 		note = "Every barrier here is waist-high: you can see and shoot the whole board from anywhere on it, and walk almost nowhere directly. Ranged units read this as an open field. Melee reads it as a maze.",
 	},
 	{
-		id = &"the_labyrinth", name = "The Labyrinth", w = 9, h = 25, neutral = true,
+		id = &"the_labyrinth", name = "The Labyrinth", w = 9, h = 24, neutral = false,
 		rows = [
 			".........",
 			".........",
@@ -490,7 +493,6 @@ const MAP_TABLE := [
 			"#.#.#.#.#",
 			"#.#.###.#",
 			"#.......#",
-			"#.###.###",
 			"#.###.###",
 			"#.###.###",
 			"#.......#",
@@ -508,10 +510,10 @@ const MAP_TABLE := [
 		note = "A real maze. Each side musters in the open ground at its own end, and everything between is one tile wide — dead ends, blind corners, and two ways through the middle. Nothing sees anything until it turns the corner into it.",
 	},
 	{
-		id = &"the_compound", name = "The Compound", w = 12, h = 21, neutral = true,
+		id = &"the_compound", name = "The Compound", w = 12, h = 20, neutral = false,
 		rows = [
 			"..#..#...#..",
-			"^/...#..../^",
+			"^/.O.#..../^",
 			"..#..#...#..",
 			".###.##.###.",
 			"..#......#..",
@@ -520,7 +522,6 @@ const MAP_TABLE := [
 			"#.#.####.#.#",
 			"..#......#..",
 			"#.##.##.##.#",
-			"............",
 			"#.##.##.##.#",
 			"..#......#..",
 			"#.#.####.#.#",
@@ -529,19 +530,18 @@ const MAP_TABLE := [
 			"..#......#..",
 			".###.##.###.",
 			"..#..#...#..",
-			"^/...#..../^",
+			"^/.O.#..../^",
 			"..#..#...#..",
 		],
 		note = "The biggest board there is: 81 tiles a side, cut into a warren of two- and three-tile rooms. Four gates cross the middle, so a fight here is never one fight — it is six little ones in separate rooms that cannot see each other.",
 	},
 	{
-		id = &"the_terrace", name = "The Terrace", w = 9, h = 15, neutral = true,
+		id = &"the_terrace", name = "The Terrace", w = 9, h = 14, neutral = false,
 		rows = [
 			".........",
 			".^^^^^^^.",
 			".^^^^^^^.",
 			"..//.//..",
-			".........",
 			".........",
 			".........",
 			".........",
@@ -556,7 +556,7 @@ const MAP_TABLE := [
 		note = "A second layer, and each side gets one. Put your shooters on the terrace and they cannot be touched by any melee unit standing on the ground — not at a penalty, at all — while anything shooting up at them loses a band of range, so a Long-ranged Archer has to walk to Medium to reach. The four staircases in front of each terrace are the only way up, and they are wide enough for two. Everything about this map is the question of whether the assault gets up the stairs before the shooters on top of them win.",
 	},
 	{
-		id = &"the_defile", name = "The Defile", w = 9, h = 13, neutral = true,
+		id = &"the_defile", name = "The Defile", w = 9, h = 12, neutral = false,
 		rows = [
 			".........",
 			".//...//.",
@@ -564,7 +564,6 @@ const MAP_TABLE := [
 			".^^...^^.",
 			".^^...^^.",
 			".^^...^^.",
-			".^^#.#^^.",
 			".^^...^^.",
 			".^^...^^.",
 			".^^...^^.",
@@ -575,14 +574,13 @@ const MAP_TABLE := [
 		note = "One tile wide in the middle, and two raised roads either side of it. Everything on the ground has to come through that single gap; everything on the causeways walks the length of the board untouched by any melee unit below. Taking the low road means a queue. Taking the high road means being seen the whole way and having only two staircases to get off at. There is no third option.",
 	},
 	{
-		id = &"the_crown", name = "The Crown", w = 9, h = 13, neutral = true,
+		id = &"the_crown", name = "The Crown", w = 9, h = 12, neutral = false,
 		rows = [
 			".........",
 			".........",
 			".........",
 			".........",
 			"...///...",
-			"..^^^^^..",
 			"..^^^^^..",
 			"..^^^^^..",
 			"...///...",
@@ -627,7 +625,7 @@ const UNIT_TABLE := [
 		note = "The hardest, fastest swing in the game, and the fastest legs, behind less health than a Lancer. Everything it does is on the front foot: it wins any exchange it starts and loses any exchange it is caught in.",
 	},
 	{
-		id = &"vexer", name = "Vexer", hp = 85.0, dmg = 6.0, spd = 2.4,
+		id = &"vexer", name = "Vexer", hp = 100.0, dmg = 6.0, spd = 2.4,
 		move = 0.45, range = "MEDIUM", sight = 4, type = "RANGED",
 		accent = Color(0.45, 0.40, 0.66),
 		ability = &"blight", mana = 12.0,
@@ -651,8 +649,8 @@ const UNIT_TABLE := [
 		id = &"aegis", name = "Aegis", hp = 210.0, dmg = 20.0, spd = 0.45,
 		move = 0.80, range = "MELEE", sight = 3, type = "MELEE",
 		accent = Color(0.48, 0.52, 0.66),
-		ability = &"retribution", mana = 22.0, resist = 0.15,
-		note = "Shrugs off 15% of everything before anything else is counted, and answers whatever is standing next to it with twice what it was given. It does not out-damage anything; it makes hitting it a bad idea.",
+		ability = &"retribution", mana = 22.0, resist = 0.75,
+		note = "Shrugs off 75% of everything before anything else is counted, and answers whatever is standing next to it with twice what it was given. It does not out-damage anything; it makes hitting it a bad idea.",
 	},
 	{
 		id = &"tyrant", name = "Tyrant", hp = 240.0, dmg = 40.0, spd = 0.9,
@@ -679,8 +677,8 @@ const UNIT_TABLE := [
 		id = &"revenant", name = "Revenant", hp = 105.0, dmg = 13.0, spd = 0.85,
 		move = 0.46, range = "MELEE", sight = 4, type = "MELEE",
 		accent = Color(0.50, 0.55, 0.50),
-		ability = &"second_wind", mana = 25.0,
-		note = "A coin flip on every death, and it comes back whole. Kill it twice, or thrice.",
+		ability = &"second_wind", mana = 0.0,
+		note = "A coin flip on every death, and it comes back whole. Kill it twice, or thrice. There is no bar to fill and nothing to spend — the roll happens because it died.",
 	},
 	{
 		id = &"assassin", name = "Assassin", hp = 60.0, dmg = 12.0, spd = 1.2,
@@ -705,12 +703,16 @@ const UNIT_TABLE := [
 	},
 	{
 		id = &"transcendence", name = "Transcendence", hp = 165.0, dmg = 22.0, spd = 0.45,
-		move = 0.62, range = "UNLIMITED", sight = 6, type = "RANGED",
+		move = 0.62, range = "MEDIUM", sight = 6, type = "RANGED",
 		accent = Color(0.58, 0.56, 0.44),
 		mana = 0.0, magnet = true, beam = true,
+		# Unlimited range, and the shooting-through-walls that comes with it, are now
+		# the APEX only. Below tier 6 it is a medium-range beam. That makes the merge
+		# the moment the unit becomes what it is named after, instead of a tier 1
+		# already holding the strongest range band in the game.
 		apex = {hp = 4.0, dmg = 4.0, range = "UNLIMITED", pierce = 100,
 			endless = true, wash = 0.5, spd = 0.35},
-		note = "No ability, no tricks, and slower to swing than anything else on the board — but its range has no limit at any tier, so it opens fire the instant the bell rings, from wherever you left it, over any wall in the way. Every merge it touches comes out Transcendence, and at tier 6 the shot becomes a beam that takes the rank behind the target with it — once every six seconds or so, which makes what it is aimed at matter far more than how often it fires.",
+		note = "No ability, no tricks, and slower to swing than anything else on the board. Below tier 6 it is a medium-range beam and has to be placed like one. At tier 6 its range stops having a limit at all: it opens fire the instant the bell rings, from wherever you left it, over any wall in the way, and the shot becomes a beam that takes the rank behind the target with it — once every six seconds or so, which makes what it is aimed at matter far more than how often it fires. Every merge it touches comes out Transcendence, so the ladder to that apex is the shortest in the game.",
 	},
 	{
 		id = &"conjurer", name = "Conjurer", hp = 190.0, dmg = 7.0, spd = 0.6,
@@ -732,6 +734,13 @@ const UNIT_TABLE := [
 		accent = Color(0.48, 0.30, 0.44),
 		ability = &"siphon", mana = 18.0, lifesteal = 0.25,
 		note = "Drinks a quarter of everything it deals, from range, quickly. Its bar reaches across the whole board and fastens onto the single biggest thing the other side has — and then takes a fixed slice of that maximum every second whatever happens to it. It is the answer to a tier 6 Transcendence, and it is nearly useless against eight small ones.",
+	},
+	{
+		id = &"usurper", name = "Usurper", hp = 80.0, dmg = 10.0, spd = 0.7,
+		move = 0.52, range = "MELEE", sight = 5, type = "MELEE",
+		accent = Color(0.45, 0.30, 0.58),
+		ability = &"usurpation", mana = 0.0, opens = true,
+		note = "It does not fight. At the bell it gets inside an enemy of its own tier and that unit spends the round on your side; the Usurper is off the board while it holds. Below its tier it drags the host up to its own; above its tier it bursts against it and dies. Everything it is worth is sitting inside something the enemy is allowed to shoot — kill the host and it falls out with one health, slow, and nothing can heal it. A husk that lands one blow is inside whatever it hit.",
 	},
 	{
 		id = &"breaker", name = "Breaker", hp = 150.0, dmg = 26.0, spd = 0.55,
@@ -758,8 +767,8 @@ const UNIT_TABLE := [
 		id = &"vigil", name = "Vigil", hp = 130.0, dmg = 10.0, spd = 0.7,
 		move = 0.72, range = "MEDIUM", sight = 4, type = "SPELL",
 		accent = Color(0.56, 0.60, 0.70),
-		ability = &"lament", mana = 0.0, grief = 25.0,
-		note = "Its bar does not move when it swings and does not move when it kills. It fills only when your own side loses someone, four deaths to a cast — so it is dead weight in a fight you are winning and the reason you win the one you are losing. Every tier is one more body it hands back.",
+		ability = &"lament", mana = 0.0, grief = 12.5,
+		note = "Its bar does not move when it swings and does not move when it kills. It fills only when your own side loses someone, eight deaths to a cast — so it is dead weight in a fight you are winning and the reason you win the one you are losing. Every tier is one more body it hands back.",
 	},
 	{
 		id = &"paragon", name = "Paragon", hp = 150.0, dmg = 20.0, spd = 0.75,
@@ -787,8 +796,8 @@ const UNIT_TABLE := [
 		id = &"devourer", name = "Devourer", hp = 120.0, dmg = 20.0, spd = 0.9,
 		move = 0.44, range = "MELEE", sight = 4, type = "MELEE",
 		accent = Color(0.52, 0.24, 0.34),
-		ability = &"gorge", mana = 0.0, grief = 25.0,
-		note = "Ordinary until your side starts dying. Five of your own buys the change, and after that it is a different unit: far more health, faster hands, faster legs, and every bar it fills from then on arms a swing that deletes whatever it touches, however much health that thing has. It cannot start this itself — something of yours has to fall first.",
+		ability = &"gorge", mana = 0.0, grief = 12.5,
+		note = "Ordinary until your side starts dying. Eight of your own buys the change, and after that it is a different unit: far more health, faster hands, faster legs, and every bar it fills from then on arms a swing that deletes whatever it touches, however much health that thing has. It cannot start this itself — something of yours has to fall first.",
 	},
 	{
 		id = &"spire", name = "Spire", hp = 200.0, dmg = 0.0, spd = 0.5,
@@ -805,6 +814,23 @@ const UNIT_TABLE := [
 		ability = &"assemble", mana = 0.0, regen = 4.0, opens = true,
 		repair = 5.0,
 		note = "Opens every round building a Sentry where it stands, exposed while it works, then steps off and leaves it standing there. Barely fights. It repairs an adjacent friendly Mechanical unit every second, and it will go to a damaged one rather than advance — so it tends its turret instead of dying on someone's spear.",
+	},
+	{
+		# 130 / 6 / 0.85 is measured, not guessed. The first build was 150 / 18 / 0.85,
+		# which won 85% of 300 tier-3 matches against a 49.5% baseline — and 66.7% with
+		# the rage slope switched off entirely, which is what said the BODY was the
+		# problem before the ability was. The feeble swing is doing two jobs: it puts
+		# the unit at 53.5%, in the middle of the pack, and it makes the mechanic
+		# RELIABLE. A Martyr that wins fights at full health is never ground down, so
+		# the 150/18 version only reached its window in 72% of rounds; this one reaches
+		# it in 94%, at about fourteen seconds in. Its damage per second at full health
+		# is down among the casters — only the Pyre, the Conjurer and the Pariah swing
+		# softer, and for all three the swing is beside the point — on purpose.
+		id = &"martyr", name = "Martyr", hp = 130.0, dmg = 6.0, spd = 0.85,
+		move = 0.44, range = "MELEE", sight = 4, type = "MELEE",
+		accent = Color(0.78, 0.30, 0.40),
+		ability = &"martyrdom", mana = 0.0,
+		note = "Every point of health it loses is damage and attack speed back. Below half it stops waiting for the enemy and opens its own veins, and it cannot be talked out of it — from there it is on a clock nobody can stop, getting worse to stand in front of the whole way down. At the bottom it does not fall over: it keeps swinging at nothing to lose for a few seconds, through three enemies at a time, and then it is gone. Mediocre at full health on purpose. You are not buying a fighter, you are buying the last eight seconds of one.",
 	},
 	{
 		id = &"wisp", name = "Wisp", hp = 38.0, dmg = 5.0, spd = 1.3,
@@ -867,7 +893,7 @@ const ABILITY_TABLE := [
 	},
 	{
 		id = &"second_wind", name = "Second Wind", kind = "REVIVE", cast_time = 0.3,
-		desc = "A coin flip on every death: back up a second later at full health, as good as new.",
+		desc = "Passive. A coin flip on every death: back up a second later at full health, as good as new. It is not cast and it cannot be held back for a better moment — dying is the trigger.",
 		revive_chance = 0.5, revive_delay = 1.0, revive_hp_percent = 1.0,
 	},
 	{
@@ -896,9 +922,20 @@ const ABILITY_TABLE := [
 	},
 	{
 		id = &"onslaught", name = "Onslaught", kind = "CHARGE", cast_time = 0.2,
-		desc = "At the opening bell it runs straight forward down its own column until something stops it. The first ENEMY in the lane takes 1.2 times its attack damage per tier and is stunned for 0.45 seconds per tier — no moving, no swinging, no casting. An ally in the way blocks the charge and takes nothing; so does a wall. It moves whether or not it connects, so a charge into an empty lane leaves it standing at the far end having done nothing at all.",
+		desc = "At the opening bell it puts its head down and runs straight forward down its own column. It crosses about three tiles a second — far faster than anything walks, but not instant, and you can see the lane it is coming down. Whatever enemy it reaches FIRST takes 1.2 times its attack damage per tier and is stunned for 0.45 seconds per tier: no moving, no swinging, no casting. It picks that target on arrival, not on setting off, so a unit that steps out of the lane in time is missed entirely and a unit that wanders into it gets hit instead. An ally in the way blocks the charge and takes nothing; so does a wall; and a stun or a freeze knocks it out of the run altogether. It moves whether or not it connects, so a charge into an empty lane leaves it standing at the far end having done nothing at all.",
 		charge_damage_per_tier = 1.2, stun_seconds_per_tier = 0.45,
 		charge_distance = 11,
+		# 0.35s a tile — about 2.4 seconds to cross the whole board, roughly three times
+		# a unit's walking pace. Measured against 0.22 and 0.50; see the note in
+		# tools/measure_charge.gd, and be aware this figure is a compromise rather than a
+		# clean optimum.
+		charge_tile_seconds = 0.35,
+	},
+	{
+		id = &"usurpation", name = "Usurpation", kind = "POSSESS", cast_time = 0.3,
+		desc = "At the opening bell it gets inside an enemy of its own tier and that unit changes sides for the rest of the round — it fights for you, keeping everything its owner gave it, and the Usurper itself is gone from the board while it holds the reins. Below its tier it drags the host up to its own tier for the round; the owner does not keep the promotion. Above its tier it cannot get in at all and bursts against it instead, killing itself for damage that grows with how badly it was outmatched. Kill the host and the Usurper falls out of it with one health that nothing can raise, and slow — but if that husk lands a single blow, it is inside whatever it just hit.",
+		possess_forces_tier = true, husk_move_mult = 2.6,
+		backlash_per_tier = 1.0, possess_seconds_per_tier = 2.5,
 	},
 	{
 		id = &"retribution", name = "Retribution", kind = "REFLECT", cast_time = 0.5,
@@ -950,7 +987,26 @@ const ABILITY_TABLE := [
 	{
 		id = &"siphon", name = "Siphon", kind = "DRAIN", cast_time = 0.5,
 		desc = "Reaches across the whole board — no range limit at all — and fastens onto whichever enemy has the largest maximum health. From then until that unit dies it loses 2.5% of that maximum every second. Shields are not counted, so nothing hides behind one, and the bite does not shrink as the victim wears down. Several Siphons stack on the same victim, and the Leech heals off every tick of it.",
-		drain_percent = 0.025, drain_interval = 1.0,
+		drain_percent = 0.025, drain_percent_per_tier = 0.005, drain_interval = 1.0,
+	},
+	{
+		id = &"martyrdom", name = "Martyrdom", kind = "FRENZY", cast_time = 0.3,
+		desc = "Passive, and there is nothing to spend. Every point of health it is missing is damage and attack speed back: on its last sliver it hits twice as hard, twice as fast. Below half health it starts bleeding 2.5% of its maximum every second of its own accord and nothing stops that — no healing outruns it for long, and a shield does not touch it, because it comes from the inside. At zero health it does not fall: for two and a half seconds it keeps standing, hitting for twice again as much, 60% faster, moving half again as quick, and cutting through three enemies at once. Then it goes, and it does not come back. Freeze it before the bleed finishes and it dies frozen like anything else — window and all.",
+		# 0.025/s — a fortieth of the bar a second, so twenty seconds from the threshold
+		# to zero — is measured. At 0.05 the tier ladder came out INVERTED: 55.5% at
+		# tier 1 falling to 26.5% at tier 6, which is a unit you are punished for
+		# merging. The cause is not subtle once measured: at tier 6 the unit sits at
+		# 51.5% with the bleed switched off and 26.5% with it, and rounds get longer as
+		# tiers rise, so a Martyr that has bled out by fourteen seconds leaves its side
+		# fighting four-against-five for most of a big round and almost none of a small
+		# one. Same lesson as the Usurper — body count beats power. Halving the bleed
+		# flattens it to 54.5 / 60.0 / 58.5 / 54.0 / 50.5 / 51.5 and the window still
+		# opens in 90-96% of rounds, because the enemy was always doing most of the work
+		# of getting it there; the bleed decides how long it LIVES, not whether it fires.
+		rage_per_missing = 1.0, frenzy_threshold = 0.50, frenzy_decay = 0.025,
+		frenzy_seconds = 2.5,
+		frenzy_damage = 1.00, frenzy_attack_speed = 0.60, frenzy_move = 0.50,
+		frenzy_pierce = 3,
 	},
 	{
 		id = &"overflow", name = "Overflow", kind = "MANA_AURA", cast_time = 0.4,
@@ -975,6 +1031,11 @@ const BUFF_TABLE = [
 		stun_bonus = Vector3(1.0, 2.0, 3.0),
 		charge_bonus = Vector3(0.50, 0.75, 1.00),
 		b = Vector2(0.0, 0.0), s = Vector2(0.0, 0.0), g = Vector2(0.0, 0.0)},
+	{id = &"reins", name = "Reins", kind = "STAT", weight = 1.0,
+		unit = &"usurper", stat_a = "MOVE_TIME",
+		host_move = Vector3(0.75, 1.50, 2.25),
+		host_power = Vector3(0.50, 0.75, 1.00),
+		b = Vector2(0.75, 0.0), s = Vector2(1.50, 0.0), g = Vector2(2.25, 0.0)},
 	{id = &"rupture", name = "Rupture", kind = "PERCENT_HP_DAMAGE", weight = 1.0,
 		b = Vector2(0.01, 0.0), s = Vector2(0.02, 0.0), g = Vector2(0.03, 0.0)},
 	{id = &"windfall", name = "Windfall", kind = "MERGE_EXTRA_UNIT", weight = 1.0,
@@ -1084,6 +1145,10 @@ const BUFF_TABLE = [
 	{id = &"spite", name = "Spite", kind = "STAT", weight = 1.0,
 		unit = &"pariah", stat_a = "ATTACK_SPEED", stat_b = "MAX_HP", two = true,
 		b = Vector2(0.25, 0.50), s = Vector2(0.50, 1.00), g = Vector2(0.75, 1.50)},
+	{id = &"rapture", name = "Rapture", kind = "STAT", weight = 1.0,
+		unit = &"martyr", stat_a = "ATTACK_DAMAGE", stat_b = "ATTACK_SPEED",
+		two = true, frenzy_seconds_at_gold = 5.0,
+		b = Vector2(0.50, 0.20), s = Vector2(1.00, 0.40), g = Vector2(2.00, 0.60)},
 	{id = &"ascension", name = "Ascension", kind = "STAT", weight = 1.0,
 		unit = &"transcendence", stat_a = "MAX_HP", stat_b = "ATTACK_DAMAGE", two = true,
 		b = Vector2(0.50, 0.50), s = Vector2(1.00, 1.00), g = Vector2(1.50, 1.50)},
@@ -1118,7 +1183,7 @@ const BUFF_TABLE = [
 
 
 func build() -> String:
-	print("Generating data for Six by Eleven...")
+	print("Generating data for Sixfold...")
 	var clash := _duplicate_ids()
 	if clash != "":
 		push_error(clash)
@@ -1251,6 +1316,16 @@ func _prune_by_id(folder: String, table: Array) -> void:
 	var keep := {}
 	for row in table:
 		keep[String(row.id)] = true
+	# The buff index is generated, lives in the same folder, and is not a row in any
+	# table, so the orphan sweep would otherwise delete the very thing that stops
+	# orphans mattering.
+	#
+	# Defensive, not load-bearing, and worth saying so: _prune_stale() runs BEFORE
+	# _make_buffs() in build(), so the index is rewritten immediately after any sweep
+	# that removed it, and deleting this line breaks no test. It is here so that
+	# reordering build() — or calling the sweep on its own — cannot quietly leave the
+	# game reading the folder again.
+	keep[BUFF_INDEX] = true
 	var dir := DirAccess.open(folder)
 	if dir == null:
 		return
@@ -1311,6 +1386,9 @@ func _make_abilities() -> Dictionary:
 			"aura_radius", "revive_chance", "revive_delay", "revive_hp_percent",
 			"heal_percent", "heal_percent_per_tier", "heal_radius", "cleanses",
 				"charge_damage_per_tier", "stun_seconds_per_tier", "charge_distance",
+				"charge_tile_seconds",
+				"possess_forces_tier", "husk_move_mult", "backlash_per_tier",
+				"possess_seconds_per_tier",
 				"summon_max",
 				"summon_count", "summon_random", "summon_cap_by_tier", "summon_per_tier", "mana_aura_radius",
 				"summon_persists", "consumes_caster", "summon_adjacent",
@@ -1320,7 +1398,7 @@ func _make_abilities() -> Dictionary:
 				"terrain_at_caster",
 				"shell_attack_multiple", "shell_direct", "shell_splash",
 				"shell_flight", "shell_arm", "field_damage", "field_seconds",
-				"drain_percent", "drain_interval",
+				"drain_percent", "drain_percent_per_tier", "drain_interval",
 				"freeze_seconds_per_tier", "freeze_amp_per_tier",
 				"raise_per_tier", "raise_hp_percent",
 				"ascend_hp_mult", "ascend_attack_speed_mult", "ascend_move_mult",
@@ -1332,7 +1410,10 @@ func _make_abilities() -> Dictionary:
 				"dot_current_hp_percent", "dot_falloff", "dot_suppresses",
 				"burst_damage",
 				"burst_attack_multiple",
-				"splash_damage", "splash_radius", "pierce_targets", "pierce_damage_mult"]:
+				"splash_damage", "splash_radius", "pierce_targets", "pierce_damage_mult",
+				"rage_per_missing", "frenzy_threshold", "frenzy_decay",
+				"frenzy_seconds", "frenzy_damage", "frenzy_attack_speed",
+				"frenzy_move", "frenzy_pierce"]:
 			if row.has(key):
 				a.set(key, row[key])
 		_save(a, "%s/%s.tres" % [ABILITY_DIR, row.id])
@@ -1388,7 +1469,7 @@ func _make_units(abilities: Dictionary) -> LoadoutData:
 			u.max_hp = snappedf(row.hp * mult_hp, 1.0)
 			u.attack_damage = snappedf(row.dmg * mult_dmg, 0.5)
 			u.attack_speed = row.spd
-			u.move_time = row.move
+			u.move_time = snappedf(row.move * MOVE_SCALE, 0.01)
 			u.attack_range = UnitData.RangeBand[row.range]
 			u.sight_range = row.sight
 			u.attack_type = UnitData.AttackType[row.type]
@@ -1506,7 +1587,34 @@ func _make_buffs() -> void:
 		b.max_tier = row.get("max_tier", 0)
 		b.stun_bonus = row.get("stun_bonus", Vector3.ZERO)
 		b.charge_bonus = row.get("charge_bonus", Vector3.ZERO)
+		b.host_move = row.get("host_move", Vector3.ZERO)
+		b.host_power = row.get("host_power", Vector3.ZERO)
+		b.frenzy_seconds_at_gold = row.get("frenzy_seconds_at_gold", 0.0)
 		_save(b, "%s/%s.tres" % [BUFF_DIR, row.id])
+	_write_buff_index()
+
+
+const BUFF_INDEX := "index"
+
+
+func _write_buff_index() -> void:
+	## The list of buffs that exist, saved beside them.
+	##
+	## BuffPool used to build the pool by reading the folder, and this line is the fix
+	## for a bug that had been live for months: the pruning below only deletes orphans
+	## in the copy the builder is RUN against, so any machine that had ever held an
+	## older build kept the cut buffs on disk and its game went on offering them. Seven
+	## of them, in one case. No test saw it, because the folder the tests run against is
+	## the folder the builder just cleaned.
+	##
+	## Units were never exposed to this, because a unit is in the game only if
+	## roster.tres names it. This gives buffs the same contract.
+	var index := BuffIndex.new()
+	var ids: Array[StringName] = []
+	for row in BUFF_TABLE:
+		ids.append(row.id)
+	index.ids = ids
+	_save(index, "%s/%s.tres" % [BUFF_DIR, BUFF_INDEX])
 
 
 const PORTRAIT_DIR := "res://assets/portraits"

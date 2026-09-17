@@ -77,6 +77,18 @@ var pending_target_uid: int = -1
 
 var shield: float = 0.0
 
+## Seconds before the whole shield pool fizzles out, or 0 when there is nothing to
+## run down.
+##
+## The clock belongs to the POOL, not to each contribution. It starts when a shield
+## arrives on a unit that had none, and a second shield landing inside the window
+## is added on without touching it — so a Warden that re-shields at four seconds has
+## a bigger pool that still goes at seven, rather than an ever-renewing one. That is
+## the whole of the rule and it is the reason there is one timer here rather than a
+## list of timed layers: a list would let a unit keep a shield alive indefinitely by
+## topping it up, which is what this replaces.
+var shield_left: float = 0.0
+
 var battle_modifiers: Array[StatModifier] = []
 var haste_stacks: int = 0
 var stealth_left: float = 0.0
@@ -112,6 +124,51 @@ var recovery_denied: bool = false
 ## CombatSim — but it is real state about the unit, so it lives on the unit.
 var dry_spell: float = 0.0
 
+## Seconds before a ranged unit may give ground again.
+##
+## A retreat costs this unit a swing — see CombatSim._give_ground — so it has to
+## be rate-limited or a bow followed by a melee unit steps and swings alternately
+## for the whole round at half its damage. Set to one full attack cycle on every
+## step back, so the unit always gets a proper shot in between.
+var kite_hold: float = 0.0
+
+## Whether this unit has already gone through a gate this round.
+##
+## Currently redundant, and kept deliberately. CombatSim.GATE_TRANSITS_PER_TEAM is
+## one, so a side gets a single transit and no unit can reach a second one anyway —
+## but that cap is a number somebody may raise, and the moment it is above one this
+## flag is what stops a unit walking back and forth. The pads sit a row in from each
+## back rank, so standing on your own pad makes THEIR back rank close and standing on
+## theirs makes YOURS close; a unit whose target ends up behind it would commute.
+##
+## A flag rather than a cooldown because "you committed that body to the flank" is
+## the decision the gate is meant to create, and a flag cannot be tuned wrong.
+var gate_used: bool = false
+
+## The Martyr's two pieces of state.
+##
+## `frenzy_left` is seconds of death immunity remaining — the window at zero health
+## where the unit is still standing and still swinging. `frenzy_spent` is what makes
+## it once per round: without it, every subsequent blow would restart the window and
+## the unit would never die at all.
+##
+## Zero health but not dead is the whole trick, and it is why is_alive() consults this
+## rather than only the health bar. Every count, every targeting sweep and the win
+## condition read is_alive(), so there is exactly one place that has to agree.
+var frenzy_left: float = 0.0
+var frenzy_spent: bool = false
+
+## A charge in progress: how many tiles it still has in it, which way it is going, and
+## how long until it reaches the next tile.
+##
+## State on the unit rather than a row in a list on the simulation — unlike the
+## Culverin's shells — because a charge IS the unit moving. It occupies tiles as it goes,
+## it can be stopped by a wall or a body, and it can be knocked out of it by a stun. A
+## shell is a thing in the air with no relationship to its firer once it is away.
+var charge_left: int = 0
+var charge_step: Vector2i = Vector2i.ZERO
+var charge_timer: float = 0.0
+
 var taunt_left: float = 0.0
 var reflect_left: float = 0.0
 
@@ -145,6 +202,40 @@ var permanent: bool = false
 # Set when an ability used its caster up. Like `permanent`, it outlives
 # reset_for_battle: it is what keeps the unit out of next round's roster.
 var consumed: bool = false
+
+# Possession. Three fields and they answer three different questions.
+#
+# `home_team` and `home_data` are what this unit WAS before anybody took it over:
+# the side it belongs to and the tier row it was drawn at. They exist so
+# reset_for_battle() can hand it back. Getting this wrong does not produce a
+# subtle bug — it permanently transfers a unit out of its owner's roster, because
+# _restore_roster() places every unit by its `team`.
+#
+# `puppeteer_uid` is the Usurper currently inside this unit, or -1. It is what
+# stops two Usurpers taking the same host.
+#
+# `host_uid` is the unit THIS unit is inside, or -1. Only an Usurper ever sets it.
+var home_team: int = -1
+var home_data: UnitData = null
+var puppeteer_uid: int = -1
+var host_uid: int = -1
+
+# What the puppeteer LENT this host — the Reins buff's host-only half. Recorded so
+# a timed release can take back exactly those modifiers and nothing else: the host
+# may also be carrying its own side's empowerment and full-roster bonuses, and
+# clearing battle_modifiers wholesale would silently delete those.
+var lent_modifiers: Array[StatModifier] = []
+
+# Seconds of grip left, or -1 for a hold that lasts the whole round. Lives on the
+# HOST rather than on the puppeteer because the host is the thing being held, and
+# because a husk that re-infects has to start a fresh clock on its new victim.
+var possess_left: float = -1.0
+
+# The husk. One health, and nothing may change it — no healing, no shield, no
+# max-health buff. "1 hp that cannot be changed" is a promise about the number on
+# the bar, so it is enforced at the place the number is read rather than at the
+# handful of places that might raise it.
+var hp_locked: bool = false
 
 var dots: Array[Dictionary] = []
 
@@ -213,7 +304,19 @@ func stat(s: StatModifier.Stat) -> float:
 			flat += m.value
 		else:
 			pct += m.value
+	# The husk's health is pinned before any modifier is consulted, which is what
+	# "cannot be changed" has to mean: a max-health buff, a Militia pick and a
+	# forced tier all have to arrive here and be ignored.
+	if hp_locked and s == StatModifier.Stat.MAX_HP:
+		return 1.0
 	var v := (_base(s) + flat) * (1.0 + pct)
+	# The Martyr's two multipliers, applied after the modifiers rather than as
+	# modifiers: they change every time the health bar moves, and a modifier list that
+	# had to be rewritten on every point of damage would be wrong the moment anything
+	# read it between the hit and the rewrite.
+	if s == StatModifier.Stat.ATTACK_DAMAGE or s == StatModifier.Stat.ATTACK_SPEED:
+		v *= rage()
+	v *= frenzy_bonus(s)
 	if s in StatModifier.INVERTED_STATS:
 		return maxf(v, MIN_TIME)
 	return maxf(v, 0.0)
@@ -265,6 +368,18 @@ func is_reflecting() -> bool:
 	return reflect_left > 0.0
 
 
+func is_charging() -> bool:
+	## Mid-run. A charging unit gets no turn of its own — it is committed, and the
+	## simulation's charge tick is what moves it.
+	return charge_left > 0
+
+
+func stop_charging() -> void:
+	charge_left = 0
+	charge_step = Vector2i.ZERO
+	charge_timer = 0.0
+
+
 func is_frozen() -> bool:
 	return frozen_left > 0.0
 
@@ -300,6 +415,63 @@ func taunt_damage_taken() -> float:
 	if not is_taunting() or data.ability == null:
 		return 1.0
 	return maxf(data.ability.taunt_damage_taken, 0.0)
+
+
+func missing_fraction() -> float:
+	## How much of its health bar is gone, 0.0 at full and 1.0 at empty.
+	##
+	## Deliberately NOT using stat() on anything this feeds, or the rage multiplier
+	## below would recurse through its own maximum.
+	var full := stat(StatModifier.Stat.MAX_HP)
+	if full <= 0.0:
+		return 0.0
+	return clampf(1.0 - current_hp / full, 0.0, 1.0)
+
+
+func rage() -> float:
+	## The Martyr's scaling: harder and faster the worse it is doing.
+	##
+	## Linear in missing health rather than stepped, so there is no threshold to play
+	## around — every point of damage it takes is worth something, which is what makes
+	## standing it in front of an Archer a real decision.
+	##
+	## Applied to attack damage and attack speed only. Applying it to the health bar it
+	## is computed FROM would be a loop, and applying it to movement would make a
+	## wounded Martyr outrun the line it is supposed to be part of.
+	if data == null or data.ability == null:
+		return 1.0
+	var ab := data.ability
+	if ab.kind != AbilityData.Kind.FRENZY:
+		return 1.0
+	return 1.0 + maxf(ab.rage_per_missing, 0.0) * missing_fraction()
+
+
+func frenzy_bonus(s: StatModifier.Stat) -> float:
+	## The extra on top while the window is open. Separate from rage() because these
+	## arrive all at once at zero health rather than climbing with the bar, and because
+	## this one DOES touch movement — the last charge is meant to cross ground.
+	if not is_frenzied() or data == null or data.ability == null:
+		return 1.0
+	var ab := data.ability
+	match s:
+		StatModifier.Stat.ATTACK_DAMAGE:
+			return 1.0 + maxf(ab.frenzy_damage, 0.0)
+		StatModifier.Stat.ATTACK_SPEED:
+			return 1.0 + maxf(ab.frenzy_attack_speed, 0.0)
+		StatModifier.Stat.MOVE_TIME:
+			# Seconds per tile, so FASTER is a smaller number. Divided rather than
+			# multiplied for the same reason BuffData._signed exists.
+			return 1.0 / (1.0 + maxf(ab.frenzy_move, 0.0))
+	return 1.0
+
+
+func pierce_now() -> int:
+	## How many units one swing reaches. Its ordinary pierce, except inside the window
+	## where the dying blow cuts through the rank in front of it.
+	var base := maxi(data.pierce_targets, 1)
+	if not is_frenzied() or data.ability == null:
+		return base
+	return maxi(base, maxi(data.ability.frenzy_pierce, 1))
 
 
 func exposure() -> float:
@@ -352,7 +524,15 @@ func is_hidden() -> bool:
 
 
 func is_alive() -> bool:
-	return state != State.DEAD and current_hp > 0.0
+	# Zero health is normally death. A Martyr inside its window is the one exception,
+	# and it is checked HERE rather than at the dozen places that ask, because
+	# "standing" has to mean the same thing to the targeting, the counts and the win
+	# condition or the board and the scoreboard disagree.
+	return state != State.DEAD and (current_hp > 0.0 or frenzy_left > 0.0)
+
+
+func is_frenzied() -> bool:
+	return frenzy_left > 0.0
 
 
 func is_committed() -> bool:
@@ -375,7 +555,12 @@ func take_damage(amount: float) -> float:
 		shield -= absorbed
 		amount -= absorbed
 	current_hp = maxf(current_hp - amount, 0.0)
-	if current_hp <= 0.0:
+	# Zero health means dead, EXCEPT inside a Martyr's window. Without that second
+	# clause the very next hit after the window opened would set DEAD again, and a
+	# DEAD unit gets no turn in step() and fails is_alive() — the unit would still
+	# be on the board, still be a target, and do nothing at all until its clock ran
+	# out. The window is the one state where the health bar is not the authority.
+	if current_hp <= 0.0 and frenzy_left <= 0.0:
 		state = State.DEAD
 		target = null
 	return amount
@@ -397,13 +582,42 @@ func spend_mana() -> void:
 	mana = 0.0
 
 
-func add_shield(amount: float, cap: float) -> void:
+func add_shield(amount: float, cap: float, seconds := 0.0) -> void:
 	# Same reasoning as heal(). Note this stops shields being GAINED and does not
 	# strip the ones already there: a Warden that opened with its bulwark keeps it
 	# and simply cannot top it up.
-	if is_suppressed() or recovery_denied:
+	#
+	# THE one place a shield is gained. Every source goes through here — the
+	# Warden's bulwark, the Colossus hardening, the Aegis Wall buff — so the
+	# duration cannot be attached at three sites and forgotten at a fourth.
+	if is_suppressed() or recovery_denied or hp_locked:
 		return
+	var had := shield > 0.0
 	shield = minf(maxf(shield, 0.0) + amount, cap)
+	if shield <= 0.0 or seconds <= 0.0:
+		return
+	if not had:
+		# A fresh pool on a bare unit starts the clock. One that was already standing
+		# keeps the clock it had: topping up must not renew it.
+		shield_left = seconds
+
+
+func tick_shield(delta: float) -> bool:
+	## Runs the pool's clock down. Returns true when it just fizzled, so the caller
+	## can tell the view the bar has gone.
+	if shield_left <= 0.0:
+		return false
+	if shield <= 0.0:
+		# Absorbed to nothing before the clock ran out. The clock goes with it, so
+		# the next shield this unit gains starts a fresh one.
+		shield_left = 0.0
+		return false
+	shield_left -= delta
+	if shield_left > 0.0:
+		return false
+	shield_left = 0.0
+	shield = 0.0
+	return true
 
 
 func add_battle_modifier(m: StatModifier) -> void:
@@ -451,6 +665,11 @@ func heal(amount: float) -> void:
 	# mean all of them, and a rule enforced in six places is a rule with five
 	# chances to be forgotten when a seventh healer is written.
 	if amount <= 0.0 or not is_alive() or is_suppressed() or recovery_denied:
+		return
+	# A husk stays on one health for as long as it lives. Healing it is the most
+	# obvious way to break that promise, so it is refused here as well as being
+	# impossible through max health.
+	if hp_locked:
 		return
 	current_hp = minf(current_hp + amount, stat(StatModifier.Stat.MAX_HP))
 
@@ -528,7 +747,61 @@ func cleanse() -> Array[String]:
 	return removed
 
 
+func is_riding() -> bool:
+	## Inside a host: off the board entirely, taking no turns and reachable by
+	## nothing. The only way out is the host dying.
+	return host_uid >= 0
+
+
+func is_possessed() -> bool:
+	## Being ridden. Its team says the puppeteer's side, and every count, every
+	## targeting sweep and the win condition itself read `team` live, so nothing
+	## else has to be told.
+	return puppeteer_uid >= 0
+
+
+func is_husk() -> bool:
+	## What is left of an Usurper once its host has been killed under it: one
+	## health that nothing can raise, and slow. `hp_locked` IS the husk — there is
+	## no second flag to fall out of step with it.
+	return hp_locked
+
+
+func release_possession() -> void:
+	## Hands a unit back to whoever owned it, and clears every trace of having been
+	## held. Called at the round boundary for every unit, so a possession can never
+	## outlive the round it happened in — and mid-round by CombatSim when a timed
+	## grip runs out (see AbilityData.possess_seconds).
+	##
+	## `home_data` is restored as well as the team: a higher-tier Usurper forces
+	## its host up to its own tier, and the owner does not get to keep that.
+	##
+	## The lent modifiers are removed one by one rather than by clearing
+	## battle_modifiers, because a host may also be carrying its own side's
+	## empowerment and full-roster bonuses and those are not the thief's to take.
+	if home_team >= 0:
+		team = home_team
+	if home_data != null:
+		data = home_data
+	for m in lent_modifiers:
+		battle_modifiers.erase(m)
+	lent_modifiers.clear()
+	# The maximum may have just fallen — a handed-back host loses both the forced
+	# tier and the thief's health buff — so the bar has to come down with it.
+	current_hp = minf(current_hp, stat(StatModifier.Stat.MAX_HP))
+	home_team = -1
+	home_data = null
+	puppeteer_uid = -1
+	host_uid = -1
+	possess_left = -1.0
+	hp_locked = false
+
+
 func reset_for_battle() -> void:
+	# FIRST, before anything reads `team` — _restore_roster() places every unit by
+	# its team, so a unit still flipped at this point is a unit permanently stolen
+	# from the other side's roster.
+	release_possession()
 	state = State.IDLE
 	state_timer = 0.0
 	target = null
@@ -542,6 +815,14 @@ func reset_for_battle() -> void:
 	empowered = false
 	isolated = false
 	dry_spell = 0.0
+	kite_hold = 0.0
+	gate_used = false
+	frenzy_left = 0.0
+	frenzy_spent = false
+	# A charge cannot outlive the round it was started in. Without this a Breaker that
+	# was still running when the bell went would resume mid-lane on the next board, from
+	# a tile it is no longer standing on.
+	stop_charging()
 	# Every status goes at the round boundary, cleansable or not — sudden death
 	# belongs to the round that ran out of clock, and a freeze does not carry over
 	# into a fight that has not started. Walked from the table rather than listed
@@ -551,6 +832,7 @@ func reset_for_battle() -> void:
 	ascended = false
 	executes_next = false
 	shield = 0.0
+	shield_left = 0.0
 	revives = 0
 	summons_made = 0
 	mana_clock = 0.0

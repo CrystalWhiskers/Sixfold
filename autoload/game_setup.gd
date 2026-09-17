@@ -1,13 +1,97 @@
 extends Node
 
-enum Mode { VS_COMPUTER, LOCAL_PVP }
+enum Mode { VS_COMPUTER, LOCAL_PVP, CUSTOM }
 
 const SLOTS := 5
 const BASE_LOADOUT := "res://data/loadouts/roster.tres"
 const FALLBACK_LOADOUT := "res://data/loadouts/starter.tres"
 const MAP_DIR := "res://data/maps"
 
-var mode: Mode = Mode.VS_COMPUTER
+var mode: Mode = Mode.VS_COMPUTER:
+	set(value):
+		mode = value
+		# Leaving CUSTOM leaves its rules behind with it, structurally rather than by
+		# every caller remembering to. The custom screen turns the rules on while it
+		# is open so its numbers are live; a player who looks at that screen, backs
+		# out and starts an ordinary match must not carry an eight-life match and a
+		# forty-second clock into it, and "the menu sets custom = false in two
+		# places" is a rule with two chances to be forgotten.
+		if value != Mode.CUSTOM:
+			custom = false
+
+## Custom match rules. These are read by the flow layer and handed DOWN to the
+## simulation as plain numbers — CombatSim never reads this autoload, because the
+## combat layer sits below the flow layer and a simulation that needed a global to
+## run could not be built in a test.
+##
+## `custom` is whether they apply at all. Off, every getter below returns the
+## conventional value, so there is exactly one code path and the defaults are not a
+## separate branch that can rot.
+var custom := false
+
+## Lives. Four is the conventional match; the number of buff picks follows from it,
+## because picks come round on a cadence and a longer match simply reaches more of
+## them. Asking for "more than the conventional three buffs" is asking for this.
+var custom_wins := 0
+
+## A buff pick every N rounds. Two is conventional. One is a pick every round.
+var custom_buff_every := 2
+
+## When everything doubles and nothing recovers, in seconds, and when the round is
+## called a draw. Sudden death has to land before the timeout or it never happens.
+var custom_sudden_death := CombatSim.SUDDEN_DEATH
+var custom_timeout := CombatSim.DEFAULT_TIMEOUT
+
+## Buff ids the player has switched OFF. Stored as the exclusions rather than the
+## allowances so that a buff added to the game later is in the pool by default —
+## an allow list would silently leave every new buff out.
+var custom_banned: Dictionary = {}
+
+
+func wins_needed() -> int:
+	if not custom or custom_wins <= 0:
+		return MatchState.WINS_NEEDED
+	return custom_wins
+
+
+func buff_every() -> int:
+	return maxi(custom_buff_every, 1) if custom else 2
+
+
+func sudden_death_at() -> float:
+	if not custom:
+		return CombatSim.SUDDEN_DEATH
+	# Clamped below the timeout, because a sudden death that lands after the round
+	# has already been called a draw is a rule that never fires.
+	return clampf(custom_sudden_death, 5.0, round_timeout() - 5.0)
+
+
+func round_timeout() -> float:
+	return maxf(custom_timeout, 15.0) if custom else CombatSim.DEFAULT_TIMEOUT
+
+
+func banned_buffs() -> Array:
+	## The ids to keep out of the offer. Empty outside a custom match.
+	return custom_banned.keys() if custom else []
+
+
+func is_banned(id: StringName) -> bool:
+	return custom and custom_banned.has(id)
+
+
+func set_banned(id: StringName, banned: bool) -> void:
+	if banned:
+		custom_banned[id] = true
+	else:
+		custom_banned.erase(id)
+
+
+func reset_custom() -> void:
+	custom_wins = 0
+	custom_buff_every = 2
+	custom_sudden_death = CombatSim.SUDDEN_DEATH
+	custom_timeout = CombatSim.DEFAULT_TIMEOUT
+	custom_banned = {}
 var catalogue: Array[UnitData] = []
 var slots: Dictionary = {}
 var maps: Array[MapData] = []
@@ -286,7 +370,12 @@ func is_human(team: int) -> bool:
 
 
 func mode_name() -> String:
-	return "Local PvP" if mode == Mode.LOCAL_PVP else "Vs Computer"
+	match mode:
+		Mode.LOCAL_PVP:
+			return "Local PvP"
+		Mode.CUSTOM:
+			return "Custom"
+	return "Vs Computer"
 
 
 func default_units_check() -> Array[UnitData]:

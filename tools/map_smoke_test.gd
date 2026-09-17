@@ -29,7 +29,7 @@ func _check(label: String, condition: bool, detail := "") -> void:
 
 
 func _ready() -> void:
-	print("\n=== Six by Eleven — undivided map test ===\n")
+	print("\n=== Sixfold — undivided map test ===\n")
 	GameSetup.reload_catalogue()
 	GameSetup.mode = GameSetup.Mode.VS_COMPUTER
 

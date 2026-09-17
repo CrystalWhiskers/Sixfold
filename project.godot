@@ -10,7 +10,7 @@ config_version=5
 
 [application]
 
-config/name="Six by Eleven"
+config/name="Sixfold"
 config/description="Merge autobattler on a 6x11 board with a neutral centre row."
 run/main_scene="res://scenes/menu.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")

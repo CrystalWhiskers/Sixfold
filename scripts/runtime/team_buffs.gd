@@ -108,6 +108,21 @@ func empowered_cap() -> int:
 	return cap
 
 
+func frenzy_seconds_for(u: UnitInstance) -> float:
+	# MAXed rather than summed, unlike the other riders, because this one replaces a
+	# duration instead of adding to one — see BuffData.frenzy_seconds_at_gold. Zero
+	# means no pick has anything to say and the ability's own figure stands.
+	var secs := 0.0
+	for p in picks:
+		var buff: BuffData = p.buff
+		if buff.frenzy_seconds_at_gold <= 0.0 or p.rarity != BuffData.Rarity.GOLD:
+			continue
+		if buff.kind != BuffData.Kind.STAT or not buff.applies_to(u):
+			continue
+		secs = maxf(secs, buff.frenzy_seconds_at_gold)
+	return secs
+
+
 func extra_raises_for(u: UnitInstance) -> int:
 	# Summed, not maxed, unlike the empowered cap: two picks that both feed the
 	# Vigil should both count. Nothing currently offers two, but the picker is
@@ -141,6 +156,35 @@ func stun_bonus_for(u: UnitInstance) -> float:
 		if buff.kind != BuffData.Kind.STAT or not buff.applies_to(u):
 			continue
 		extra += buff.stun_bonus_at(p.rarity)
+	return extra
+
+
+func host_move_bonus() -> float:
+	## Deliberately NOT filtered by applies_to(), and this is the one rider where
+	## that is correct.
+	##
+	## Every other rider describes what the buff does to the unit it names. These
+	## two describe what it does to a THIRD unit — whatever the Usurper happens to
+	## be wearing — which is an arbitrary body the buff row has no way to name and
+	## which fails applies_to() by definition. Filtering here would make the rider
+	## unreachable, which is exactly the failure Avalanche had in _is_live: a number
+	## sitting in the data that nothing ever reads.
+	var extra := 0.0
+	for p in picks:
+		var buff: BuffData = p.buff
+		if buff.kind != BuffData.Kind.STAT:
+			continue
+		extra += buff.host_move_at(p.rarity)
+	return extra
+
+
+func host_power_bonus() -> float:
+	var extra := 0.0
+	for p in picks:
+		var buff: BuffData = p.buff
+		if buff.kind != BuffData.Kind.STAT:
+			continue
+		extra += buff.host_power_at(p.rarity)
 	return extra
 
 

@@ -6,5 +6,7 @@
 script = ExtResource("1_ijh2w")
 id = &"standard"
 display_name = "Standard"
+height = 10
+has_neutral = false
 rows = PackedStringArray()
 note = "The default. Five rows each with a no-man's row between them."

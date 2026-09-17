@@ -11,7 +11,7 @@ extends SceneTree
 ## So the count itself is asserted. If it drops, something died quietly and the
 ## run says so. Raise this when you add tests — it is a ratchet, and the number
 ## only ever goes up.
-const MIN_CHECKS := 2050
+const MIN_CHECKS := 2455
 
 var _passed := 0
 var _failed := 0
@@ -25,7 +25,7 @@ func _initialize() -> void:
 		quit(1)
 		return
 
-	print("\n=== Six by Eleven — headless tests ===\n")
+	print("\n=== Sixfold — headless tests ===\n")
 	_test_board_geometry()
 	_test_deploy_zones()
 	_test_mirror()
@@ -45,6 +45,7 @@ func _initialize() -> void:
 	_test_aegis()
 	_test_retribution()
 	_test_shadowstep_bait()
+	_test_the_assassin_vanishes_before_it_moves()
 	_test_pathing_weighs_the_detour()
 	_test_targets_are_not_all_the_same()
 	_test_levy_is_capped()
@@ -92,7 +93,29 @@ func _initialize() -> void:
 	_test_blight_shuts_the_target_down()
 	_test_stasis_freezes()
 	_test_the_breaker_charges()
+	_test_the_charge_takes_time_to_arrive()
 	_test_avalanche()
+	_test_the_usurper_takes_a_host()
+	_test_the_usurper_and_the_tier_ladder()
+	_test_the_husk()
+	_test_the_grip_can_be_timed()
+	_test_a_stunned_unit_does_nothing()
+	_test_the_clock_is_a_setting()
+	_test_gates()
+	_test_only_big_maps_have_gates()
+	_test_shields_fizzle()
+	_test_tier_scaling_on_abilities()
+	_test_the_vexer_body()
+	_test_the_global_pace()
+	_test_reins()
+	_test_ranged_units_hold_their_distance()
+	_test_the_martyr_grows_as_it_dies()
+	_test_the_martyrs_window()
+	_test_the_martyr_only_gets_one_window()
+	_test_rapture()
+	_test_the_martyrs_last_swing_cuts_through()
+	_test_the_martyrs_numbers_are_the_measured_ones()
+	_test_a_stale_buff_on_disk_is_not_in_the_game()
 	_test_status_registry()
 	_test_seraph_cleanses()
 	_test_a_frozen_death_leaves_nothing()
@@ -197,14 +220,24 @@ func _stock_board(counts: Array) -> BoardModel:
 
 func _test_board_geometry() -> void:
 	_section("Board geometry")
-	_check("6 wide, 11 tall", BoardModel.WIDTH == 6 and BoardModel.HEIGHT == 11)
-	_check("neutral row is 5", BoardModel.NEUTRAL_ROW == 5)
-	_check("neutral row is equidistant",
-		BoardModel.NEUTRAL_ROW == BoardModel.HEIGHT - 1 - BoardModel.NEUTRAL_ROW)
+	_check("6 wide, 10 tall", BoardModel.WIDTH == 6 and BoardModel.HEIGHT == 10)
+	# No divider. An even board splits evenly on its own and the two halves simply
+	# meet, which is what removing the no-man's row means: every row belongs to
+	# somebody, and the front ranks start two tiles apart instead of three.
+	_check("there is no divider", not BoardModel.HAS_NEUTRAL)
+	_check("the halves meet at row 5", BoardModel.NEUTRAL_ROW == 5)
+	_check("and they are the same size",
+		BoardModel.NEUTRAL_ROW * 2 == BoardModel.HEIGHT)
+	_check("every row belongs to one side or the other",
+		BoardModel.last_row(BoardModel.TEAM_A)
+			== BoardModel.first_row(BoardModel.TEAM_B),
+		"A ends at %d, B starts at %d" % [
+			BoardModel.last_row(BoardModel.TEAM_A),
+			BoardModel.first_row(BoardModel.TEAM_B)])
 	var b := BoardModel.new()
-	_check("corners in bounds", b.in_bounds(Vector2i(0, 0)) and b.in_bounds(Vector2i(5, 10)))
+	_check("corners in bounds", b.in_bounds(Vector2i(0, 0)) and b.in_bounds(Vector2i(5, 9)))
 	_check("off-board rejected",
-		not b.in_bounds(Vector2i(6, 0)) and not b.in_bounds(Vector2i(0, 11))
+		not b.in_bounds(Vector2i(6, 0)) and not b.in_bounds(Vector2i(0, 10))
 		and not b.in_bounds(Vector2i(-1, 0)))
 
 
@@ -212,32 +245,53 @@ func _test_deploy_zones() -> void:
 	_section("Deploy zones")
 	var b := BoardModel.new()
 	_check("A owns rows 0-4", b.can_deploy(BoardModel.TEAM_A, Vector2i(3, 4)))
-	_check("B owns rows 6-10", b.can_deploy(BoardModel.TEAM_B, Vector2i(3, 6)))
-	_check("A cannot deploy in B's half", not b.can_deploy(BoardModel.TEAM_A, Vector2i(3, 6)))
-	_check("neutral row refused for A", not b.can_deploy(BoardModel.TEAM_A, Vector2i(3, 5)))
-	_check("neutral row refused for B", not b.can_deploy(BoardModel.TEAM_B, Vector2i(3, 5)))
+	_check("B owns rows 5-9", b.can_deploy(BoardModel.TEAM_B, Vector2i(3, 5)))
+	_check("A cannot deploy in B's half", not b.can_deploy(BoardModel.TEAM_A, Vector2i(3, 5)))
+	# The row that used to be no-man's land is now the front rank of B's half, and
+	# row 4 is the front rank of A's. They touch.
+	_check("the old divider row now belongs to B",
+		b.can_deploy(BoardModel.TEAM_B, Vector2i(3, BoardModel.NEUTRAL_ROW))
+		and not b.can_deploy(BoardModel.TEAM_A, Vector2i(3, BoardModel.NEUTRAL_ROW)))
+	_check("no tile is refused to both sides",
+		_every_tile_is_owned(b), "some tile belongs to neither side")
 	_check("30 tiles per side",
 		b.deploy_cells(BoardModel.TEAM_A).size() == 30
 		and b.deploy_cells(BoardModel.TEAM_B).size() == 30,
 		"got %d/%d" % [b.deploy_cells(0).size(), b.deploy_cells(1).size()])
-	_check("60 deployable + 6 neutral = 66", 30 + 30 + BoardModel.WIDTH == 66)
+	_check("and that is the whole board: 30 + 30 = 60",
+		30 + 30 == BoardModel.WIDTH * BoardModel.HEIGHT)
+
+
+func _every_tile_is_owned(b: BoardModel) -> bool:
+	for y in BoardModel.HEIGHT:
+		for x in BoardModel.WIDTH:
+			var c := Vector2i(x, y)
+			if BoardModel.is_blocked(c):
+				continue
+			if not b.can_deploy(BoardModel.TEAM_A, c) \
+					and not b.can_deploy(BoardModel.TEAM_B, c):
+				return false
+	return true
 
 
 func _test_mirror() -> void:
 	_section("Mirror symmetry")
 	var ok := true
-	var centre_fixed := true
+	var swaps_halves := true
 	for y in BoardModel.HEIGHT:
 		for x in BoardModel.WIDTH:
 			var c := Vector2i(x, y)
 			if BoardModel.mirror(BoardModel.mirror(c)) != c:
 				ok = false
-			if y == BoardModel.NEUTRAL_ROW and BoardModel.mirror(c) != c:
-				centre_fixed = false
+			# With no divider there is no self-mirroring row: every tile belongs to a
+			# side, so every tile's mirror belongs to the other one.
+			if (c.y < BoardModel.NEUTRAL_ROW) \
+					== (BoardModel.mirror(c).y < BoardModel.NEUTRAL_ROW):
+				swaps_halves = false
 	_check("mirror round-trips every cell", ok)
-	_check("neutral row maps to itself", centre_fixed)
+	_check("and every cell mirrors into the other half", swaps_halves)
 	_check("mirror swaps the deploy zones",
-		BoardModel.mirror(Vector2i(2, 1)) == Vector2i(2, 9))
+		BoardModel.mirror(Vector2i(2, 1)) == Vector2i(2, 8))
 
 
 func _test_placement_and_movement() -> void:
@@ -591,7 +645,7 @@ func _test_movement_rules() -> void:
 	var b := BoardModel.new()
 	var walker := _unit(1, BoardModel.TEAM_B)
 	var foe := _unit(0, BoardModel.TEAM_A)
-	b.place(walker, Vector2i(5, 10))
+	b.place(walker, Vector2i(5, 9))
 	b.place(foe, Vector2i(0, 0))
 	var sim := CombatSim.new()
 	sim.setup(b, 4)
@@ -685,23 +739,23 @@ func _test_corridor_traffic() -> void:
 func _test_displacement() -> void:
 	var b := BoardModel.new()
 	var u := _unit(0, BoardModel.TEAM_B)
-	b.place(u, Vector2i(3, 8))
+	b.place(u, Vector2i(3, 7))
 
 	_check("a push moves the requested distance",
-		b.push(u, Vector2i(0, 1), 2) == 2 and u.cell == Vector2i(3, 10),
+		b.push(u, Vector2i(0, 1), 2) == 2 and u.cell == Vector2i(3, 9),
 		"ended at %s" % u.cell)
 	_check("a push stops at the board edge",
-		b.push(u, Vector2i(0, 1), 3) == 0 and u.cell == Vector2i(3, 10))
+		b.push(u, Vector2i(0, 1), 3) == 0 and u.cell == Vector2i(3, 9))
 
 	var blocker := _unit(0, BoardModel.TEAM_B)
-	b.place(blocker, Vector2i(3, 9))
+	b.place(blocker, Vector2i(3, 8))
 	_check("a push stops at an occupied tile",
-		b.push(u, Vector2i(0, -1), 3) == 0 and u.cell == Vector2i(3, 10),
+		b.push(u, Vector2i(0, -1), 3) == 0 and u.cell == Vector2i(3, 9),
 		"ended at %s" % u.cell)
 
 	_check("a push ignores deploy zones",
-		b.push(u, Vector2i(-1, 0), 3) == 3 and u.cell == Vector2i(0, 10))
-	_check("teleport refuses an occupied tile", not b.teleport(u, Vector2i(3, 9)))
+		b.push(u, Vector2i(-1, 0), 3) == 3 and u.cell == Vector2i(0, 9))
+	_check("teleport refuses an occupied tile", not b.teleport(u, Vector2i(3, 8)))
 	_check("teleport crosses the board freely", b.teleport(u, Vector2i(1, 2)))
 
 	var b2 := BoardModel.new()
@@ -817,7 +871,7 @@ func _test_dot(by_id: Dictionary) -> void:
 	_check("a dot is recorded", victim.dots.size() == 1)
 
 	var b := BoardModel.new()
-	b.force_place(victim, Vector2i(2, 10))
+	b.force_place(victim, Vector2i(2, 9))
 	b.force_place(_make(by_id["warden"], BoardModel.TEAM_A), Vector2i(5, 0))
 	var sim := CombatSim.new()
 	sim.setup(b, 3)
@@ -915,8 +969,8 @@ func _test_buff_data() -> void:
 	_section("Buff data")
 
 	var pool := _pool()
-	_check("every buff on disk loaded", pool.buffs.size() == 47,
-		"loaded %d, expected 47" % pool.buffs.size())
+	_check("every buff on disk loaded", pool.buffs.size() == 49,
+		"loaded %d, expected 49" % pool.buffs.size())
 
 	var ids := {}
 	var missing: PackedStringArray = []
@@ -1642,7 +1696,7 @@ func _test_new_units() -> void:
 		roster != null and roster.is_valid())
 	if roster == null:
 		return
-	_check("twenty-nine unit types are pickable", roster.units.size() == 29,
+	_check("thirty-one unit types are pickable", roster.units.size() == 31,
 		"%d in the roster" % roster.units.size())
 	# Ids are file names, so a duplicate means one row quietly overwrites another
 	# and the roster is short without anything reporting it.
@@ -2450,10 +2504,28 @@ func _test_aegis() -> void:
 	tb.add(buff, BuffData.Rarity.GOLD)
 	var strong := UnitInstance.create(aegis, BoardModel.TEAM_B)
 	tb.apply_to(strong)
-	var want := aegis.damage_resist + buff.magnitude(BuffData.Rarity.GOLD).y
+	var raw := aegis.damage_resist + buff.magnitude(BuffData.Rarity.GOLD).y
+	var want := minf(raw, UnitInstance.MAX_RESIST)
 	_check("gold Retaliation adds its resist on top of the innate share",
 		is_equal_approx(strong.resist(), want),
-		"%.2f, expected %.2f" % [strong.resist(), want])
+		"%.2f, expected %.2f (raw %.2f)" % [strong.resist(), want, raw])
+	# Named rather than merely tolerated. The innate share is now high enough that
+	# the buff's own 45 resist points fall off the end of the cap entirely.
+	#
+	# That does NOT make Retaliation a bad pick, and an earlier note here said it
+	# did. Retaliation is a two-stat buff and its MAX_HP half is untouched by any of
+	# this: measured through the simulation it is still worth about twelve points of
+	# win rate. What is dead is the half the card spends its words on. If the innate
+	# number comes back down, this check goes green on its own and can be deleted.
+	_check("at this innate share the cap is eating the buff's resist half",
+		raw > UnitInstance.MAX_RESIST,
+		"%.2f raw is still under the %.2f cap" % [raw, UnitInstance.MAX_RESIST])
+	# The flat modifier is genuinely present even when the cap hides it, which is
+	# what stops a future "the buff does nothing" conclusion from being drawn off
+	# resist() alone.
+	_check("and the points really are on the unit, cap or no cap",
+		is_equal_approx(strong.stat(StatModifier.Stat.RESIST), raw),
+		"%.2f, expected %.2f" % [strong.stat(StatModifier.Stat.RESIST), raw])
 	_check("and raises health as a percentage",
 		is_equal_approx(strong.stat(StatModifier.Stat.MAX_HP),
 			aegis.max_hp * (1.0 + buff.magnitude(BuffData.Rarity.GOLD).x)))
@@ -2558,7 +2630,7 @@ func _test_shadowstep_bait() -> void:
 		BoardModel.at_tier(_find("aegis"), 4), BoardModel.TEAM_B)
 	b.force_place(killer, Vector2i(2, 1))
 	b.force_place(engineer, Vector2i(2, 8))
-	b.force_place(decoy, Vector2i(2, 10))
+	b.force_place(decoy, Vector2i(2, 9))
 	# Asked of the targeting directly, without running setup(): the Assassin's
 	# opener fires during setup and, at tier 4, kills a mid-build Engineer
 	# outright — so by the time the board settles the unit this is about is gone,
@@ -2578,7 +2650,7 @@ func _test_shadowstep_bait() -> void:
 	var eng2 := UnitInstance.create(_find("engineer"), BoardModel.TEAM_B)
 	var friend := UnitInstance.create(_find("archer"), BoardModel.TEAM_B)
 	b2.force_place(killer2, Vector2i(2, 1))
-	b2.force_place(eng2, Vector2i(2, 10))
+	b2.force_place(eng2, Vector2i(2, 9))
 	b2.force_place(friend, Vector2i(2, 8))
 	var sim2 := CombatSim.new()
 	sim2.board = b2
@@ -2588,6 +2660,49 @@ func _test_shadowstep_bait() -> void:
 		"picked %s at %s; engineer at %s, friend at %s" % [
 			"nothing" if found == null else found.data.display_name,
 			"-" if found == null else str(found.cell), eng2.cell, friend.cell])
+
+
+func _test_the_assassin_vanishes_before_it_moves() -> void:
+	_section("Shadowstep: the cloak comes first")
+	# The order the two halves are emitted in, which is the whole of this check.
+	# Mechanically the difference is almost nothing — nothing retargets inside one
+	# instant — but it is what the ability describes, and the view's cloak beat hangs
+	# off it: hold the log on the vanish and, with the events the other way round,
+	# you get a unit that reappears somewhere else and THEN turns invisible.
+	BoardModel.reset_map()
+	var b := BoardModel.new()
+	var killer := UnitInstance.create(
+		BoardModel.at_tier(_must_find("assassin"), 3), BoardModel.TEAM_A)
+	b.force_place(killer, Vector2i(2, 1))
+	# Tier 6 so it survives the opener and the log is not cut short by a death.
+	var victim := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 6), BoardModel.TEAM_B)
+	b.force_place(victim, Vector2i(2, 9))
+	var sim := CombatSim.new()
+	sim.crit_chance = 0.0
+	sim.setup(b, 171)
+
+	var cloak := -1
+	var jump := -1
+	for i in sim.events.size():
+		var e: Dictionary = sim.events[i]
+		if int(e.get("uid", -1)) != killer.uid:
+			continue
+		if e.kind == "stealth" and bool(e.get("on", false)) and cloak < 0:
+			cloak = i
+		elif e.kind == "blink" and jump < 0:
+			jump = i
+	_check("the Assassin cloaked", cloak >= 0)
+	_check("and jumped", jump >= 0)
+	if cloak < 0 or jump < 0:
+		return
+	_check("the cloak is emitted before the jump, not after it",
+		cloak < jump, "stealth at %d, blink at %d" % [cloak, jump])
+	# The label the view draws needs a tile to draw at, and this event used to be
+	# emitted without one — which threw at runtime and silently swallowed the
+	# "VANISH" label every time an Assassin opened.
+	_check("and the cloak event carries a cell for the view to anchor to",
+		sim.events[cloak].has("cell"), str(sim.events[cloak]))
 
 
 func _test_pathing_weighs_the_detour() -> void:
@@ -3081,7 +3196,7 @@ func _test_tyrant() -> void:
 	var foe := UnitInstance.create(_find("archer"), BoardModel.TEAM_A)
 	b.place(ty, Vector2i(2, 8))
 	b.place(near, Vector2i(3, 8))
-	b.place(away, Vector2i(0, 10))
+	b.place(away, Vector2i(0, 9))
 	b.place(foe, Vector2i(2, 1))
 	var sim := CombatSim.new()
 	sim.setup(b, 2)
@@ -3654,18 +3769,20 @@ func _test_transcendence() -> void:
 	_check("the Transcendence is on the roster", transcendence != null)
 	if transcendence == null:
 		return
-	_check("it is an unlimited-range stat stick with no ability",
-		transcendence.range_name() == "Unlimited" and transcendence.ability == null
-		and transcendence.max_hp > 150.0)
-	# The ceiling is the ceiling. Far Sight is a flat +1 band, and a unit already
-	# at Unlimited has nowhere to go — worth pinning, because it means this unit
-	# is the one thing in the game that gold Far Sight does nothing for.
+	_check("it is a stat stick with no ability",
+		transcendence.ability == null and transcendence.max_hp > 150.0)
+	# Unlimited range is the APEX now, not the unit. A tier 1 holding the strongest
+	# range band in the game made every tier below six a formality.
+	_check("below the apex it is an ordinary medium-range beam",
+		transcendence.range_name() == "Medium", transcendence.range_name())
+	# And because it is no longer at the ceiling, a range buff works on it again —
+	# which is the other half of the change: gold Far Sight used to be the one buff
+	# in the game this unit could not use.
 	var capped := UnitInstance.create(transcendence, BoardModel.TEAM_A)
 	capped.apply_modifiers([StatModifier.make(StatModifier.Stat.ATTACK_RANGE,
 		StatModifier.Mode.FLAT, 1.0)] as Array[StatModifier])
-	_check("and a range buff cannot push it any further",
-		capped.range_band() == UnitData.RangeBand.UNLIMITED,
-		capped.range_name())
+	_check("and a range buff now pushes it a band further",
+		capped.range_band() > UnitData.RangeBand.MEDIUM, capped.range_name())
 	_check("it is flagged as a merge magnet", transcendence.merge_magnet)
 	_check("nothing else is", not _find("warden").merge_magnet
 		and not _find("archer").merge_magnet)
@@ -3710,13 +3827,21 @@ func _test_transcendence() -> void:
 
 	var apex := BoardModel.at_tier(transcendence, 6)
 	var five := BoardModel.at_tier(transcendence, 5)
-	# Range is no longer what tier 6 buys — every tier has it now. What the apex
-	# still buys is the PIERCE: a shot that takes the rank behind the target.
-	_check("every tier reaches the whole board",
-		five.range_name() == "Unlimited" and five.pierce_targets == 1)
-	_check("and tier 6 is what turns the shot into a beam",
+	# Range is what tier 6 buys, and it is the only tier that buys it. A tier 5 is a
+	# medium-range beam; the apex reaches the whole board and shoots through stone.
+	_check("no tier below the apex reaches the whole board",
+		five.range_name() == "Medium" and five.pierce_targets == 1,
+		"%s range, pierce %d" % [five.range_name(), five.pierce_targets])
+	_check("and tier 6 is what buys both the range and the beam",
 		apex.range_name() == "Unlimited" and apex.pierce_targets > 20,
 		"%s range, pierce %d" % [apex.range_name(), apex.pierce_targets])
+	# Shooting through walls rides on the range band, so this is the same change
+	# seen from the other side: only the apex ignores stone.
+	var probe := CombatSim.new()
+	_check("only the apex shoots through walls",
+		probe.shoots_through_walls(UnitInstance.create(apex, BoardModel.TEAM_A))
+		and not probe.shoots_through_walls(
+			UnitInstance.create(five, BoardModel.TEAM_A)))
 	_check("the apex jumps well past the usual doubling",
 		apex.max_hp > five.max_hp * 4.0 and apex.attack_damage > five.attack_damage * 4.0,
 		"%.0f hp and %.0f damage against a tier 5's %.0f and %.0f" % [
@@ -3815,7 +3940,7 @@ func _test_spire() -> void:
 	var board := BoardModel.new()
 	board.configure_merges(_loadout.units, 7)
 	var caster := UnitInstance.create(BoardModel.at_tier(spire, 6), BoardModel.TEAM_B)
-	board.place(caster, Vector2i(2, 10))
+	board.place(caster, Vector2i(2, 9))
 	board.place(UnitInstance.create(_find("warden"), BoardModel.TEAM_A), Vector2i(5, 0))
 	var sim := CombatSim.new()
 	sim.setup(board, 31)
@@ -3882,7 +4007,7 @@ func _test_wellspring() -> void:
 	var corner := UnitInstance.create(_find("archer"), BoardModel.TEAM_B)
 	board.place(corner, Vector2i(3, 9))
 	var far := UnitInstance.create(_find("archer"), BoardModel.TEAM_B)
-	board.place(far, Vector2i(5, 10))
+	board.place(far, Vector2i(5, 9))
 	board.place(UnitInstance.create(
 		BoardModel.at_tier(_find("warden"), 6), BoardModel.TEAM_A), Vector2i(0, 0))
 
@@ -4244,7 +4369,7 @@ func _test_all_or_nothing() -> void:
 	var board := BoardModel.new()
 	board.configure_merges(_loadout.units, 11)
 	var caster := UnitInstance.create(BoardModel.at_tier(spire, 6), BoardModel.TEAM_B)
-	board.place(caster, Vector2i(0, 10))
+	board.place(caster, Vector2i(0, 9))
 	_crowd_board(board, _find("archer"), BoardModel.TEAM_A, 1)
 	_check("the board really is down to one free tile",
 		board.free_cells().size() == 1, "%d free" % board.free_cells().size())
@@ -4305,7 +4430,7 @@ func _test_all_or_nothing() -> void:
 	var packed := BoardModel.new()
 	packed.configure_merges(_loadout.units, 14)
 	var summoner := UnitInstance.create(BoardModel.at_tier(conjurer, 5), BoardModel.TEAM_B)
-	packed.place(summoner, Vector2i(0, 10))
+	packed.place(summoner, Vector2i(0, 9))
 	_crowd_half(packed, BoardModel.TEAM_B, _find("archer"), 0)
 	packed.place(UnitInstance.create(warden, BoardModel.TEAM_A), Vector2i(0, 0))
 	_check("our half is genuinely full", packed.free_deploy_cells(
@@ -4333,7 +4458,7 @@ func _test_persistent_host() -> void:
 	var board := BoardModel.new()
 	board.configure_merges(_loadout.units, 21)
 	var caster := UnitInstance.create(BoardModel.at_tier(spire, 6), BoardModel.TEAM_B)
-	board.place(caster, Vector2i(2, 10))
+	board.place(caster, Vector2i(2, 9))
 	board.place(UnitInstance.create(_find("archer"), BoardModel.TEAM_A), Vector2i(5, 0))
 
 	var sim := CombatSim.new()
@@ -4371,7 +4496,7 @@ func _test_persistent_host() -> void:
 	var full := BoardModel.new()
 	full.configure_merges(_loadout.units, 25)
 	var blocked := UnitInstance.create(BoardModel.at_tier(spire, 4), BoardModel.TEAM_B)
-	full.place(blocked, Vector2i(0, 10))
+	full.place(blocked, Vector2i(0, 9))
 	_crowd_half(full, BoardModel.TEAM_B, _find("archer"), 0)
 	full.place(UnitInstance.create(
 		BoardModel.at_tier(_find("warden"), 6), BoardModel.TEAM_A), Vector2i(5, 0))
@@ -4407,7 +4532,7 @@ func _test_revive_always_lands() -> void:
 	var board := BoardModel.new()
 	board.configure_merges(_loadout.units, 31)
 	var hero := UnitInstance.create(revenant, BoardModel.TEAM_B)
-	board.place(hero, Vector2i(2, 10))
+	board.place(hero, Vector2i(2, 9))
 	_crowd_half(board, BoardModel.TEAM_B, _find("warden"), 0)
 	board.place(UnitInstance.create(
 		BoardModel.at_tier(_find("pyre"), 6), BoardModel.TEAM_A), Vector2i(2, 0))
@@ -4445,7 +4570,7 @@ func _test_charge_cadence() -> void:
 	var board := BoardModel.new()
 	board.configure_merges(_loadout.units, 51)
 	var caster := UnitInstance.create(BoardModel.at_tier(spire, 6), BoardModel.TEAM_B)
-	board.place(caster, Vector2i(2, 10))
+	board.place(caster, Vector2i(2, 9))
 	board.place(UnitInstance.create(_find("archer"), BoardModel.TEAM_A), Vector2i(0, 0))
 
 	var sim := CombatSim.new()
@@ -4589,7 +4714,7 @@ func _test_banked_bar() -> void:
 	board.configure_merges(_loadout.units, 73)
 	var loaded := UnitInstance.create(BoardModel.at_tier(spire, 6), BoardModel.TEAM_B)
 	loaded.gain_mana(80.0)
-	board.place(loaded, Vector2i(2, 10))
+	board.place(loaded, Vector2i(2, 9))
 	board.place(UnitInstance.create(_find("archer"), BoardModel.TEAM_A), Vector2i(0, 0))
 	var sim := CombatSim.new()
 	sim.setup(board, 75)
@@ -4616,7 +4741,7 @@ func _test_caster_is_spent() -> void:
 	board.configure_merges(_loadout.units, 81)
 	var caster := UnitInstance.create(BoardModel.at_tier(spire, 6), BoardModel.TEAM_B)
 	caster.gain_mana(95.0)
-	board.place(caster, Vector2i(2, 10))
+	board.place(caster, Vector2i(2, 9))
 	board.place(UnitInstance.create(_find("archer"), BoardModel.TEAM_A), Vector2i(0, 0))
 
 	var sim := CombatSim.new()
@@ -4643,7 +4768,7 @@ func _test_caster_is_spent() -> void:
 	_check("the host arrives before the Spire goes",
 		first_raise >= 0.0 and spent_at >= first_raise,
 		"raised at %.1f, spent at %.1f" % [first_raise, spent_at])
-	_check("it is off the board", board.unit_at(Vector2i(2, 10)) != caster
+	_check("it is off the board", board.unit_at(Vector2i(2, 9)) != caster
 		and not caster.is_alive())
 	_check("it is marked consumed so the roster drops it", caster.consumed)
 	caster.reset_for_battle()
@@ -4660,7 +4785,7 @@ func _test_caster_is_spent() -> void:
 	var jammed := BoardModel.new()
 	jammed.configure_merges(_loadout.units, 85)
 	var survivor := UnitInstance.create(BoardModel.at_tier(spire, 6), BoardModel.TEAM_B)
-	jammed.place(survivor, Vector2i(0, 10))
+	jammed.place(survivor, Vector2i(0, 9))
 	_crowd_board(jammed, _find("archer"), BoardModel.TEAM_A, 1)
 	var stuck := CombatSim.new()
 	stuck.setup(jammed, 87)
@@ -4783,7 +4908,7 @@ func _test_beam_wash() -> void:
 	var board := BoardModel.new()
 	board.configure_merges(_loadout.units, 101)
 	var gun := UnitInstance.create(apex, BoardModel.TEAM_B)
-	board.place(gun, Vector2i(2, 10))
+	board.place(gun, Vector2i(2, 9))
 
 	# Spires for targets: they never move, so the geometry holds still, and they
 	# raise no shield, so the damage shows up in current_hp instead of soaking.
@@ -4810,10 +4935,10 @@ func _test_beam_wash() -> void:
 
 	var sim := CombatSim.new()
 	sim.setup(board, 103)
-	var line := sim.beam_cells(Vector2i(2, 10), Vector2i(2, 6))
+	var line := sim.beam_cells(Vector2i(2, 9), Vector2i(2, 6))
 	_check("the beam runs from the shooter to the far edge",
 		line.has(Vector2i(2, 3)) and line.has(Vector2i(2, 0))
-			and not line.has(Vector2i(2, 10)),
+			and not line.has(Vector2i(2, 9)),
 		"%d cells" % line.size())
 
 	var hp := {
@@ -4897,9 +5022,10 @@ func _test_maps() -> void:
 		_check_map_geometry(m)
 	BoardModel.reset_map()
 	_check("the default board comes back after all that",
-		BoardModel.WIDTH == 6 and BoardModel.HEIGHT == 11
-			and BoardModel.HAS_NEUTRAL,
-		"%dx%d" % [BoardModel.WIDTH, BoardModel.HEIGHT])
+		BoardModel.WIDTH == 6 and BoardModel.HEIGHT == 10
+			and not BoardModel.HAS_NEUTRAL,
+		"%dx%d%s" % [BoardModel.WIDTH, BoardModel.HEIGHT,
+			", divided" if BoardModel.HAS_NEUTRAL else ", undivided"])
 
 	_test_play_on_every_map(maps)
 
@@ -5174,7 +5300,7 @@ func _test_barriers() -> void:
 
 	# A walker on the far side of the line must route through the gap.
 	var mover := UnitInstance.create(_find("lancer"), BoardModel.TEAM_B)
-	board.place(mover, Vector2i(0, 10))
+	board.place(mover, Vector2i(0, 9))
 	board.place(UnitInstance.create(
 		BoardModel.at_tier(_find("warden"), 6), BoardModel.TEAM_A), Vector2i(0, 0))
 	var sim := CombatSim.new()
@@ -5233,17 +5359,43 @@ func _test_high_ground() -> void:
 	_check("a spellcaster counts as ranged for this",
 		pyre.reach_on(true) == pyre.reach_on(false) + 1)
 
-	# It really changes who can be shot at.
+	# It really changes who can be shot at — asked on a board that actually HAS a
+	# ridge, and with the ridge tile read off that board.
+	#
+	# This used to place its archer on the default board and rely on whatever map a
+	# previous test had left loaded to supply the high ground. That is why it broke
+	# when the maps changed shape: nothing in it said "stand on a ridge", it only
+	# happened to be standing on one.
+	BoardModel.reset_map()
+	var terrace: MapData = load("res://data/maps/the_terrace.tres")
+	BoardModel.use_map(terrace)
 	var board := BoardModel.new()
+	var ridge := Vector2i(-1, -1)
+	for y in range(BoardModel.HEIGHT - 1, -1, -1):
+		if BoardModel.is_high(Vector2i(4, y)):
+			ridge = Vector2i(4, y)
+			break
+	_check("the map has a ridge to stand on", ridge.y >= 0)
+	if ridge.y < 0:
+		BoardModel.reset_map()
+		return
 	var shooter := UnitInstance.create(_find("archer"), BoardModel.TEAM_B)
-	board.place(shooter, Vector2i(2, 10))
+	board.force_place(shooter, ridge)
+	# Four tiles out, downhill, on open ground. A Spire so it neither moves nor
+	# shoots back and the only thing that can change its health is the archer.
+	var spot := ridge + Vector2i(0, -4)
+	while spot.y >= 0 and (BoardModel.is_blocked(spot) or BoardModel.is_high(spot)):
+		spot.y -= 1
 	var mark := UnitInstance.create(
 		BoardModel.at_tier(_find("spire"), 6), BoardModel.TEAM_A)
-	board.force_place(mark, Vector2i(2, 6))
-	_check("the target is exactly four tiles away",
-		BoardModel.tile_distance(Vector2i(2, 10), Vector2i(2, 6)) == 4)
-	_check("which is out of reach from the flat", shooter.reach_on(false) < 4)
-	_check("and in reach from the ridge", shooter.reach_on(true) >= 4)
+	_check("and open ground four tiles below it",
+		spot.y >= 0 and board.force_place(mark, spot), "no clear tile below %s" % ridge)
+	var gap := BoardModel.tile_distance(ridge, spot)
+	_check("the target is out of reach from the flat",
+		shooter.reach_on(false) < gap,
+		"reach %d against %d tiles" % [shooter.reach_on(false), gap])
+	_check("and in reach from the ridge", shooter.reach_on(true) >= gap,
+		"reach %d against %d tiles" % [shooter.reach_on(true), gap])
 
 	var sim := CombatSim.new()
 	sim.setup(board, 13)
@@ -5251,8 +5403,10 @@ func _test_high_ground() -> void:
 	for i in 12:
 		sim.step()
 	_check("standing on the ridge, it opens fire without closing in",
-		mark.current_hp < hp and shooter.cell == Vector2i(2, 10),
-		"target on %.0f hp, shooter at %s" % [mark.current_hp, shooter.cell])
+		mark.current_hp < hp and shooter.cell == ridge,
+		"target on %.0f hp, shooter at %s (ridge is %s)" % [
+			mark.current_hp, shooter.cell, ridge])
+	BoardModel.reset_map()
 
 
 func _test_line_of_fire() -> void:
@@ -5392,7 +5546,7 @@ func _test_raised_units_instacast() -> void:
 	board.configure_merges(_loadout.units, 131)
 	var caster := UnitInstance.create(BoardModel.at_tier(spire, 6), BoardModel.TEAM_B)
 	caster.gain_mana(95.0)
-	board.place(caster, Vector2i(2, 10))
+	board.place(caster, Vector2i(2, 9))
 	board.place(UnitInstance.create(
 		BoardModel.at_tier(_find("warden"), 4), BoardModel.TEAM_A), Vector2i(2, 0))
 
@@ -5438,7 +5592,7 @@ func _test_raised_units_instacast() -> void:
 	chain.set_team_pool(BoardModel.TEAM_B, only_spires)
 	var parent := UnitInstance.create(BoardModel.at_tier(spire, 6), BoardModel.TEAM_B)
 	parent.gain_mana(95.0)
-	chain.place(parent, Vector2i(2, 10))
+	chain.place(parent, Vector2i(2, 9))
 	chain.place(UnitInstance.create(_find("archer"), BoardModel.TEAM_A), Vector2i(0, 0))
 	var runaway := CombatSim.new()
 	runaway.setup(chain, 139)
@@ -5514,7 +5668,7 @@ func _test_the_compound() -> void:
 		return
 	_check("and it is a legal board", m.is_valid(), m.invalid_reason())
 	_check("it is by far the biggest thing in the game",
-		m.tiles() >= 250 and m.half_tiles() >= 70,
+		m.tiles() >= 220 and m.half_tiles() >= 65,
 		"%s, %d tiles a side" % [m.shape(), m.half_tiles()])
 
 	BoardModel.use_map(m)
@@ -5600,7 +5754,7 @@ func _test_sudden_death() -> void:
 	board.place(UnitInstance.create(_find("revenant"), BoardModel.TEAM_A),
 		Vector2i(2, 1))
 	board.place(UnitInstance.create(_find("warden"), BoardModel.TEAM_B),
-		Vector2i(2, 10))
+		Vector2i(2, 9))
 	var slog := CombatSim.new()
 	slog.setup(board, 7)
 	var result := slog.run()
@@ -6407,7 +6561,7 @@ func _test_live_counts() -> void:
 func _revive_stays_counted() -> bool:
 	var board := BoardModel.new()
 	board.place(UnitInstance.create(_find("revenant"), BoardModel.TEAM_B),
-		Vector2i(2, 10))
+		Vector2i(2, 9))
 	board.place(UnitInstance.create(
 		BoardModel.at_tier(_find("pyre"), 6), BoardModel.TEAM_A), Vector2i(2, 0))
 	var sim := CombatSim.new()
@@ -6558,7 +6712,7 @@ func _test_grief_mana() -> void:
 	b.force_place(friend, Vector2i(1, 0))
 	var foe := UnitInstance.create(
 		BoardModel.at_tier(_must_find("archer"), 1), BoardModel.TEAM_B)
-	b.force_place(foe, Vector2i(5, 10))
+	b.force_place(foe, Vector2i(5, 9))
 	var sim := CombatSim.new()
 	sim.setup(b, 11)
 	var before := v.mana
@@ -7074,7 +7228,18 @@ func _test_high_ground_rules() -> void:
 
 	# Standing on the terrace is worth a band, which cancels the penalty when
 	# both are up: a duel across two terraces is fought at flat-ground range.
-	shooter.cell = Vector2i(4, 13)
+	# The far terrace. Read off the board rather than written as a literal: The
+	# Terrace lost a row when the divider went, and the hardcoded (4, 13) landed on
+	# flat ground, so the check failed for a reason that had nothing to do with
+	# elevation.
+	var far_top := Vector2i(-1, -1)
+	for y in range(BoardModel.HEIGHT - 1, -1, -1):
+		if BoardModel.is_high(Vector2i(4, y)):
+			far_top = Vector2i(4, y)
+			break
+	_check("there is a terrace on the far side to stand on", far_top.y >= 0,
+		"no high tile in column 4")
+	shooter.cell = far_top
 	_check("shooting from the terrace is worth a band",
 		sim.reach_against(shooter, flat) == UnitData.band_tiles(band + 1),
 		"reach %d" % sim.reach_against(shooter, flat))
@@ -7913,7 +8078,7 @@ func _test_siphon_answers_the_biggest_thing() -> void:
 	# shape being tested without the shooting back.
 	var whale := UnitInstance.create(
 		BoardModel.at_tier(_must_find("spire"), 6), BoardModel.TEAM_B)
-	b.force_place(whale, Vector2i(5, 10))
+	b.force_place(whale, Vector2i(5, 9))
 	# And a small one much closer. Siphon must ignore it.
 	var minnow := UnitInstance.create(
 		BoardModel.at_tier(_must_find("spire"), 1), BoardModel.TEAM_B)
@@ -7962,7 +8127,7 @@ func _test_siphon_answers_the_biggest_thing() -> void:
 	b2.force_place(p2, Vector2i(0, 0))
 	var hurt := UnitInstance.create(
 		BoardModel.at_tier(_must_find("spire"), 6), BoardModel.TEAM_B)
-	b2.force_place(hurt, Vector2i(5, 10))
+	b2.force_place(hurt, Vector2i(5, 9))
 	var sim2 := CombatSim.new()
 	sim2.setup(b2, 81)
 	var cap := hurt.stat(StatModifier.Stat.MAX_HP)
@@ -8744,6 +8909,22 @@ func _test_blight_shuts_the_target_down() -> void:
 		"%d" % archer.haste_stacks)
 
 
+
+func _finish_charge(sim: CombatSim, runner: UnitInstance, cap := 200) -> float:
+	## Steps until the charge is over, and reports how long it took.
+	##
+	## Every check below used to read its result straight after setup(), because the
+	## charge resolved inside the cast. It takes real seconds now, so a test that does not
+	## step the clock is asking what happened before anything had happened — which is
+	## exactly what a charge with travel time is FOR, and worth a helper rather than a
+	## loop copied into eight fixtures.
+	var ticks := 0
+	while runner.is_charging() and runner.is_alive() and ticks < cap:
+		sim.step()
+		ticks += 1
+	return float(ticks) * CombatSim.TICK
+
+
 func _breaker_lane(tier: int, blocker_team: int, gap: int) -> Dictionary:
 	## A Breaker on TEAM_A at the top of a column with something `gap` tiles down
 	## the same column. TEAM_A charges toward higher y, so "down the column" is
@@ -8763,6 +8944,1359 @@ func _breaker_lane(tier: int, blocker_team: int, gap: int) -> Dictionary:
 	var sim := CombatSim.new()
 	sim.crit_chance = 0.0
 	return {sim = sim, board = b, runner = runner, mark = mark}
+
+
+
+func _breaker_lane_ally_post(tier: int) -> Dictionary:
+	## The ally fixture: a Breaker with one of its OWN side four tiles down the lane, and
+	## that ally rooted so it is still there when the charge arrives.
+	BoardModel.reset_map()
+	var b := BoardModel.new()
+	var runner := UnitInstance.create(
+		BoardModel.at_tier(_must_find("breaker"), tier), BoardModel.TEAM_A)
+	b.force_place(runner, Vector2i(2, 1))
+	var mark := UnitInstance.create(
+		BoardModel.at_tier(_must_find("spire"), 6), BoardModel.TEAM_A)
+	b.force_place(mark, Vector2i(2, 5))
+	b.force_place(UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 1), BoardModel.TEAM_B),
+		Vector2i(5, 9))
+	var sim := CombatSim.new()
+	sim.crit_chance = 0.0
+	return {sim = sim, board = b, runner = runner, mark = mark}
+
+
+func _usurp_board(own_tier: int, prey_tier: int,
+		extra_prey := 0) -> Dictionary:
+	## An Usurper on TEAM_A with one enemy of `prey_tier` to go for, plus an ally so
+	## the round does not end underneath the test the moment the prey changes sides.
+	BoardModel.reset_map()
+	var b := BoardModel.new()
+	var thief := UnitInstance.create(
+		BoardModel.at_tier(_must_find("usurper"), own_tier), BoardModel.TEAM_A)
+	b.force_place(thief, Vector2i(2, 1))
+	var prey := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), prey_tier), BoardModel.TEAM_B)
+	b.force_place(prey, Vector2i(2, 8))
+	b.force_place(UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 1), BoardModel.TEAM_A),
+		Vector2i(5, 1))
+	var spares: Array[UnitInstance] = []
+	for i in extra_prey:
+		var s := UnitInstance.create(
+			BoardModel.at_tier(_must_find("warden"), prey_tier), BoardModel.TEAM_B)
+		b.force_place(s, Vector2i(5 + i, 9))
+		spares.append(s)
+	var sim := CombatSim.new()
+	sim.crit_chance = 0.0
+	return {sim = sim, board = b, thief = thief, prey = prey, spares = spares}
+
+
+func _test_the_usurper_takes_a_host() -> void:
+	_section("The Usurper gets inside something")
+	var usurper := _must_find("usurper")
+	var ab: AbilityData = usurper.ability
+	_check("Usurpation is a POSSESS", ab != null
+		and ab.kind == AbilityData.Kind.POSSESS)
+	if ab == null:
+		return
+	_check("and it fires at the opening bell", usurper.casts_at_battle_start)
+	_check("it costs no mana, so it cannot be cast twice in a round",
+		is_zero_approx(usurper.mana_per_attack))
+
+	# A spare enemy, so the round does NOT end the instant the only opposing unit
+	# changes sides. Without it the sim finishes at setup and step() becomes a
+	# no-op, which silently defeated the passenger check further down: it reported
+	# zero actions because nothing was simulated at all.
+	var t := _usurp_board(3, 3, 1)
+	var thief: UnitInstance = t.thief
+	var prey: UnitInstance = t.prey
+	var owner := prey.team
+	t.sim.setup(t.board, 101)
+
+	_check("at the bell it is inside its host", thief.is_riding()
+		and thief.host_uid == prey.uid, "host_uid %d" % thief.host_uid)
+	_check("and the host knows who is driving it",
+		prey.is_possessed() and prey.puppeteer_uid == thief.uid)
+	_check("the host has changed sides", prey.team == thief.team,
+		"host on team %d, thief on %d" % [prey.team, thief.team])
+	# The one that matters most. Every count, every targeting sweep and the win
+	# condition read `team` off the unit with no cache in between, so this is the
+	# whole of "you control that unit even if it is not in your roster".
+	_check("so the board counts it for the thief's side",
+		t.board.living_units_of(thief.team).has(prey)
+		and not t.board.living_units_of(owner).has(prey))
+	_check("the Usurper itself is off the board entirely",
+		t.board.unit_at(thief.cell) != thief
+		and not t.board.units_view().has(thief))
+	_check("and nothing can target what is not on the board",
+		_no_one_can_see(t.board, thief))
+	# It is off the board but still alive, so its own side is not wiped while it
+	# is holding the reins.
+	_check("it still counts as a living unit for its own side",
+		t.sim.living_count(thief.team) >= 2,
+		"%d living" % t.sim.living_count(thief.team))
+
+	# And it takes no turns of its own while it is in there. This is the check for
+	# whether step() actually SKIPS a riding unit, which is a different question
+	# from whether is_riding() reports correctly — a passenger that still walked
+	# and swung from an off-board tile is the failure being ruled out.
+	var before_events: int = t.sim.events.size()
+	for i in 60:
+		t.sim.step()
+	var acted := 0
+	for i in range(before_events, t.sim.events.size()):
+		var e: Dictionary = t.sim.events[i]
+		if e.kind != "move" and e.kind != "attack" and e.kind != "cast_start":
+			continue
+		if int(e.uid) == thief.uid:
+			acted += 1
+	_check("and it takes no turns of its own while it is in there",
+		acted == 0, "%d actions from a passenger" % acted)
+
+	# What it remembers, which is the only thing standing between a possession and
+	# a unit permanently stolen out of a roster.
+	_check("the host remembers whose it was",
+		prey.home_team == owner, "home_team %d, was %d" % [prey.home_team, owner])
+	prey.reset_for_battle()
+	_check("and the round boundary hands it straight back",
+		prey.team == owner and not prey.is_possessed(),
+		"team %d, possessed %s" % [prey.team, prey.is_possessed()])
+	thief.reset_for_battle()
+	_check("the Usurper stops riding at the boundary too",
+		not thief.is_riding() and not thief.is_husk())
+
+	# Two Usurpers must not share.
+	var pair := _usurp_board(3, 3)
+	var second := UnitInstance.create(
+		BoardModel.at_tier(usurper, 3), BoardModel.TEAM_A)
+	pair.board.force_place(second, Vector2i(3, 1))
+	pair.sim.setup(pair.board, 103)
+	var both_in: Array[int] = []
+	for who in [pair.thief, second]:
+		if (who as UnitInstance).is_riding():
+			both_in.append((who as UnitInstance).host_uid)
+	_check("two Usurpers with one candidate do not share it",
+		both_in.size() <= 1 or both_in[0] != both_in[1],
+		"hosts %s" % str(both_in))
+	# The one that missed out still had to do SOMETHING. With the only same-tier
+	# candidate taken, its next choice is the tier 1 ally-side... no: the board
+	# holds one tier 1 on its OWN side, which is not a candidate, so it has nothing
+	# left and must waste the cast rather than sharing the host.
+	_check("the one that missed out did not take the same host",
+		not second.is_riding() or second.host_uid != pair.thief.host_uid,
+		"both claim host %d" % second.host_uid)
+
+	# Nothing to take at all.
+	BoardModel.reset_map()
+	var bare := BoardModel.new()
+	var lone := UnitInstance.create(BoardModel.at_tier(usurper, 2),
+		BoardModel.TEAM_A)
+	bare.force_place(lone, Vector2i(2, 1))
+	bare.force_place(UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 1), BoardModel.TEAM_A),
+		Vector2i(4, 1))
+	var bare_sim := CombatSim.new()
+	bare_sim.setup(bare, 105)
+	_check("with no enemy at all it stays put and wastes the cast",
+		not lone.is_riding() and lone.is_alive()
+		and bare.unit_at(Vector2i(2, 1)) == lone)
+	var wasted := false
+	for e in bare_sim.events:
+		if e.kind == "ability" and int(e.uid) == lone.uid and bool(e.get("wasted", false)):
+			wasted = true
+	_check("and says so in the log", wasted)
+
+
+func _no_one_can_see(board: BoardModel, hidden: UnitInstance) -> bool:
+	## Nothing on the board picks the hidden unit as its nearest enemy, and the tile
+	## it used to stand on is free for anybody to walk into.
+	for other in board.units_view():
+		if other.team == hidden.team:
+			continue
+		if board.nearest_enemy(other) == hidden:
+			return false
+	return board.is_empty(hidden.cell)
+
+
+func _test_the_usurper_and_the_tier_ladder() -> void:
+	_section("Which way the Usurper can reach")
+	var usurper := _must_find("usurper")
+	var ab: AbilityData = usurper.ability
+	if ab == null:
+		return
+	_check("Usurpation forces a lower host up by default", ab.possess_forces_tier)
+
+	# Downwards: the host is dragged up to the thief's tier and arrives whole.
+	var down := _usurp_board(4, 2)
+	var host: UnitInstance = down.prey
+	var was := host.data
+	down.sim.setup(down.board, 111)
+	_check("a higher Usurper drags a lower host up to its own tier",
+		host.is_possessed() and host.data.tier == 4,
+		"host at T%d" % host.data.tier)
+	_check("and the bigger body arrives at full health",
+		is_equal_approx(host.current_hp, host.stat(StatModifier.Stat.MAX_HP)),
+		"%.0f of %.0f" % [host.current_hp, host.stat(StatModifier.Stat.MAX_HP)])
+	_check("it is a real row off the unit's own merge chain, not a fabrication",
+		host.data.id == was.id and host.data != was)
+	# The promotion is BORROWED. This is the half the user called out explicitly.
+	_check("the host remembers the tier it was drawn at",
+		host.home_data == was)
+	host.reset_for_battle()
+	_check("and the owner does not keep the promotion",
+		host.data == was and host.data.tier == 2,
+		"handed back at T%d" % host.data.tier)
+
+	# Upwards: it cannot get in and bursts instead.
+	var up := _usurp_board(2, 5)
+	var thief: UnitInstance = up.thief
+	var big: UnitInstance = up.prey
+	var full := big.current_hp
+	var gap := 5 - 2
+	var want := ab.backlash_per_tier * thief.data.max_hp * float(gap)
+	up.sim.setup(up.board, 113)
+	_check("a lower Usurper cannot get into a higher host",
+		not thief.is_riding() and not big.is_possessed())
+	_check("it dies on the spot instead", not thief.is_alive())
+	_check("and the host stays on its own side", big.team == BoardModel.TEAM_B)
+	var dealt := full - big.current_hp
+	_check("the backlash is proportional to the tier gap",
+		is_equal_approx(dealt, want),
+		"%.0f dealt, wanted %.0f (T%d own max %.0f x gap %d)" % [
+			dealt, want, thief.data.tier, thief.data.max_hp, gap])
+
+	# Preference order. With both a safe lower host and a lethal higher one on the
+	# board it must take the lower one — suiciding with an option available would
+	# just look broken.
+	BoardModel.reset_map()
+	var choice := BoardModel.new()
+	var picky := UnitInstance.create(BoardModel.at_tier(usurper, 3),
+		BoardModel.TEAM_A)
+	choice.force_place(picky, Vector2i(2, 1))
+	var small := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 1), BoardModel.TEAM_B)
+	var huge := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 6), BoardModel.TEAM_B)
+	# The big one CLOSER, so distance alone would pick the wrong answer.
+	choice.force_place(huge, Vector2i(2, 2))
+	choice.force_place(small, Vector2i(5, 9))
+	var choice_sim := CombatSim.new()
+	choice_sim.setup(choice, 115)
+	_check("offered a safe lower host and a lethal higher one it takes the lower",
+		picky.is_riding() and picky.host_uid == small.uid,
+		"took %d, small is %d, huge is %d" % [
+			picky.host_uid, small.uid, huge.uid])
+	_check("and dragging it up did not touch the one it could not take",
+		not huge.is_possessed() and huge.team == BoardModel.TEAM_B)
+
+	# Same tier beats a lower tier, even when the lower one is closer.
+	BoardModel.reset_map()
+	var even := BoardModel.new()
+	var fussy := UnitInstance.create(BoardModel.at_tier(usurper, 3),
+		BoardModel.TEAM_A)
+	even.force_place(fussy, Vector2i(2, 1))
+	var near_low := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 1), BoardModel.TEAM_B)
+	var far_same := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 3), BoardModel.TEAM_B)
+	even.force_place(near_low, Vector2i(2, 2))
+	even.force_place(far_same, Vector2i(5, 9))
+	var even_sim := CombatSim.new()
+	even_sim.setup(even, 117)
+	_check("its own tier wins over a nearer lower one",
+		fussy.host_uid == far_same.uid,
+		"took %d, wanted %d" % [fussy.host_uid, far_same.uid])
+
+
+func _test_the_husk() -> void:
+	_section("What is left when the puppet dies")
+	var usurper := _must_find("usurper")
+	var ab: AbilityData = usurper.ability
+	if ab == null:
+		return
+	_check("the husk is slower than the unit was", ab.husk_move_mult > 1.0,
+		"x%.2f" % ab.husk_move_mult)
+
+	var t := _usurp_board(3, 3, 1)
+	var thief: UnitInstance = t.thief
+	var prey: UnitInstance = t.prey
+	t.sim.setup(t.board, 121)
+	if not thief.is_riding():
+		_check("the husk test needs a possession to start from", false)
+		return
+	var where := prey.cell
+	var base := thief.data.move_time
+	t.sim._fell(prey, thief.uid, false)
+
+	_check("the puppeteer falls out of it", not thief.is_riding()
+		and thief.is_husk())
+	_check("standing where its puppet fell", thief.cell == where
+		and t.board.unit_at(where) == thief,
+		"at %s, puppet fell at %s" % [thief.cell, where])
+	_check("with one health", is_equal_approx(thief.current_hp, 1.0),
+		"%.2f hp" % thief.current_hp)
+	_check("and a maximum of one, so nothing can raise it",
+		is_equal_approx(thief.stat(StatModifier.Stat.MAX_HP), 1.0),
+		"%.2f max" % thief.stat(StatModifier.Stat.MAX_HP))
+	_check("the dead host stops claiming to be ridden",
+		not prey.is_possessed())
+
+	# "1 hp that cannot be changed" has to survive everything that raises health.
+	thief.heal(9999.0)
+	_check("healing it does nothing", is_equal_approx(thief.current_hp, 1.0),
+		"%.2f hp" % thief.current_hp)
+	thief.add_shield(9999.0, 9999.0)
+	_check("and it cannot be shielded either", is_zero_approx(thief.shield),
+		"%.2f shield" % thief.shield)
+	thief.add_battle_modifier(StatModifier.make(StatModifier.Stat.MAX_HP,
+		StatModifier.Mode.PERCENT, 4.0))
+	thief.add_battle_modifier(StatModifier.make(StatModifier.Stat.MAX_HP,
+		StatModifier.Mode.FLAT, 900.0))
+	_check("a max-health buff cannot lift it either",
+		is_equal_approx(thief.stat(StatModifier.Stat.MAX_HP), 1.0),
+		"%.2f max" % thief.stat(StatModifier.Stat.MAX_HP))
+	_check("it is slow", thief.stat(StatModifier.Stat.MOVE_TIME) > base * 2.0,
+		"%.2fs a tile against %.2fs" % [
+			thief.stat(StatModifier.Stat.MOVE_TIME), base])
+
+	# Re-infection.
+	var spares: Array = t.spares
+	if spares.is_empty():
+		_check("the re-infection test needs a second enemy", false)
+		return
+	var next_host: UnitInstance = spares[0]
+	thief.target = next_host
+	thief.state = UnitInstance.State.IDLE
+	t.sim._begin_attack(thief)
+	_check("a husk that lands a blow is inside whatever it hit",
+		thief.is_riding() and thief.host_uid == next_host.uid,
+		"host_uid %d, wanted %d" % [thief.host_uid, next_host.uid])
+	_check("and the new host changes sides as well",
+		next_host.team == thief.team and next_host.is_possessed())
+	_check("it is still a husk, so killing the new puppet does not restore it",
+		thief.is_husk())
+	thief.reset_for_battle()
+	_check("only the round boundary lifts the lock", not thief.is_husk()
+		and thief.stat(StatModifier.Stat.MAX_HP) > 1.0,
+		"%.0f max" % thief.stat(StatModifier.Stat.MAX_HP))
+
+
+func _test_the_grip_can_be_timed() -> void:
+	_section("How long the Usurper holds on")
+	var usurper := _must_find("usurper")
+	var ab: AbilityData = usurper.ability
+	if ab == null:
+		return
+	# What ships: a grip measured per tier of the Usurper.
+	_check("the grip is timed, and scales with tier",
+		ab.possess_seconds_per_tier > 0.0,
+		"%.2fs a tier" % ab.possess_seconds_per_tier)
+
+	# The ladder. Read off grip_seconds rather than off the table, so this fails if
+	# the tier the seconds are multiplied by ever stops being the Usurper's own.
+	var probe := CombatSim.new()
+	var ladder: PackedFloat32Array = []
+	for t in range(1, 7):
+		var who := UnitInstance.create(BoardModel.at_tier(usurper, t),
+			BoardModel.TEAM_A)
+		ladder.append(probe.grip_seconds(who, ab))
+	_check("every tier holds on longer than the one below it",
+		ladder[0] < ladder[1] and ladder[1] < ladder[2] and ladder[2] < ladder[3]
+		and ladder[3] < ladder[4] and ladder[4] < ladder[5],
+		str(ladder))
+	_check("and a tier 1 grip is a fraction of a tier 6 one",
+		is_equal_approx(ladder[5], ladder[0] * 6.0),
+		"%.2fs against %.2fs" % [ladder[5], ladder[0] * 6.0])
+	# Measured off the USURPER, not the host. A tier 5 Usurper forced onto a tier 1
+	# body should keep it for what its own tier is worth.
+	var big := UnitInstance.create(BoardModel.at_tier(usurper, 5), BoardModel.TEAM_A)
+	_check("the clock reads the Usurper's tier and not its host's",
+		is_equal_approx(probe.grip_seconds(big, ab),
+			ab.possess_seconds_per_tier * 5.0),
+		"%.2fs" % probe.grip_seconds(big, ab))
+
+	# Zero still means the whole round: it is the lever, and it has to keep working
+	# or the measured curve behind the shipped number is unreproducible.
+	var was: float = ab.possess_seconds_per_tier
+	ab.possess_seconds_per_tier = 0.0
+	var forever := _usurp_board(3, 3, 1)
+	forever.sim.setup(forever.board, 151)
+	var kept: UnitInstance = forever.prey
+	_check("zero seconds a tier carries no clock at all",
+		kept.possess_left < 0.0, "%.2fs left" % kept.possess_left)
+	for i in 400:
+		forever.sim.step()
+	_check("and forty seconds later the host is still held",
+		not kept.is_alive() or kept.is_possessed(),
+		"possessed %s, alive %s" % [kept.is_possessed(), kept.is_alive()])
+
+	# A short clock, so the release can be watched inside a few ticks. A tier 3
+	# Usurper at 0.667 a tier lets go after two seconds.
+	ab.possess_seconds_per_tier = 2.0 / 3.0
+	var timed := _usurp_board(3, 3, 1)
+	var thief: UnitInstance = timed.thief
+	var host: UnitInstance = timed.prey
+	var owner := host.team
+	timed.sim.setup(timed.board, 153)
+	_check("a timed grip starts its clock at the bell",
+		is_equal_approx(host.possess_left, 2.0),
+		"%.2fs left" % host.possess_left)
+	_check("and the host is held to begin with", host.is_possessed()
+		and host.team != owner)
+	for i in 30:
+		timed.sim.step()
+	_check("when it runs out the host goes home",
+		not host.is_possessed() and host.team == owner,
+		"team %d, possessed %s" % [host.team, host.is_possessed()])
+	_check("and the puppeteer drops out as a husk rather than vanishing",
+		not thief.is_riding()
+		and (thief.is_husk() or not thief.is_alive()),
+		"riding %s husk %s alive %s" % [
+			thief.is_riding(), thief.is_husk(), thief.is_alive()])
+	if thief.is_alive():
+		_check("standing on a tile of its own, not on top of its former host",
+			thief.cell != host.cell
+			and timed.board.unit_at(thief.cell) == thief,
+			"husk at %s, host at %s" % [thief.cell, host.cell])
+	var freed := false
+	for e in timed.sim.events:
+		if e.kind == "possess_end" and int(e.uid) == host.uid:
+			freed = true
+	_check("and the view is told", freed)
+
+	# The lent buff goes back with the body. This is the leak worth naming: the
+	# host may also be carrying its OWN side's empowerment and roster bonuses, so a
+	# release that cleared battle_modifiers wholesale would quietly delete those.
+	var pool := _pool()
+	var reins := pool.by_id(&"reins")
+	if reins != null:
+		var rich := _usurp_board(3, 3, 1)
+		var tb := TeamBuffs.new()
+		tb.add(reins, BuffData.Rarity.GOLD)
+		rich.sim.team_buffs[BoardModel.TEAM_A] = tb
+		var held: UnitInstance = rich.prey
+		var bare_hp := held.data.max_hp
+		rich.sim.setup(rich.board, 155)
+		# AFTER setup, not before: setup() calls reset_for_battle() on every unit,
+		# which clears battle_modifiers — so a modifier planted first is wiped and
+		# the check fails for a reason that has nothing to do with the release.
+		var own := StatModifier.make(StatModifier.Stat.ATTACK_SPEED,
+			StatModifier.Mode.PERCENT, 0.5)
+		held.add_battle_modifier(own)
+		_check("a buffed host is stronger while it is held",
+			held.stat(StatModifier.Stat.MAX_HP) > bare_hp,
+			"%.0f against %.0f" % [held.stat(StatModifier.Stat.MAX_HP), bare_hp])
+		for i in 30:
+			rich.sim.step()
+		_check("and the thief's buff leaves with the thief",
+			is_equal_approx(held.stat(StatModifier.Stat.MAX_HP), bare_hp),
+			"%.0f, wanted %.0f" % [held.stat(StatModifier.Stat.MAX_HP), bare_hp])
+		_check("its own side's modifiers are untouched",
+			held.battle_modifiers.has(own),
+			"the host lost a modifier that was never the thief's")
+		_check("and the health bar came down with the maximum",
+			held.current_hp <= held.stat(StatModifier.Stat.MAX_HP) + 0.01,
+			"%.0f hp of %.0f max" % [
+				held.current_hp, held.stat(StatModifier.Stat.MAX_HP)])
+
+	ab.possess_seconds_per_tier = was
+
+
+func _test_a_stunned_unit_does_nothing() -> void:
+	_section("A stunned unit neither swings nor walks")
+	# Asserted from the outside rather than by reading the gates: what matters is
+	# that no attack and no move event comes out of a stunned unit for as long as the
+	# stun lasts, whichever of the three gates is doing the refusing.
+	BoardModel.reset_map()
+	var board := BoardModel.new()
+	var held := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 3), BoardModel.TEAM_A)
+	board.force_place(held, Vector2i(2, 4))
+	# Adjacent, so a unit that is free to act swings on its very first tick. A tier 6
+	# SPIRE: harmless and rooted, with an enormous body. Written first as a tier 6
+	# Warden, which killed the stunned unit halfway through the test — "it never went
+	# back to fighting" was true and had nothing to do with the stun.
+	var foe := UnitInstance.create(
+		BoardModel.at_tier(_must_find("spire"), 6), BoardModel.TEAM_B)
+	board.force_place(foe, Vector2i(2, 5))
+	var sim := CombatSim.new()
+	sim.crit_chance = 0.0
+	sim.setup(board, 201)
+
+	var mark := sim.events.size()
+	held.stun_left = 3.0
+	held.state = UnitInstance.State.IDLE
+	held.state_timer = 0.0
+	var acted := 0
+	for i in 25:
+		sim.step()
+		for j in range(mark, sim.events.size()):
+			var e: Dictionary = sim.events[j]
+			if e.kind != "attack" and e.kind != "move" and e.kind != "cast_start":
+				continue
+			if int(e.uid) == held.uid:
+				acted += 1
+		mark = sim.events.size()
+	_check("it does nothing at all for the two and a half seconds measured",
+		acted == 0, "%d actions while stunned" % acted)
+	_check("and it is still stunned at the end of them", held.is_stunned(),
+		"%.2fs left" % held.stun_left)
+	_check("the gates all agree it is held",
+		held.is_held() and not held.can_move_now() and not held.can_attack_now())
+
+	# And it picks back up. A stun that never ended would pass the check above for
+	# the wrong reason.
+	for i in 10:
+		sim.step()
+	_check("when it wears off it is free again",
+		not held.is_stunned() and held.can_attack_now(),
+		"%.2fs left" % held.stun_left)
+	var after := 0
+	var from := sim.events.size()
+	for i in 40:
+		sim.step()
+	for j in range(from, sim.events.size()):
+		var e: Dictionary = sim.events[j]
+		if (e.kind == "attack" or e.kind == "move") and int(e.uid) == held.uid:
+			after += 1
+	_check("and it goes back to fighting", after > 0,
+		"still doing nothing %d ticks later" % 40)
+
+	# The charge has to actually hand one out, measured through the opener rather
+	# than by setting stun_left by hand.
+	var lane := _breaker_lane(3, BoardModel.TEAM_B, 4)
+	lane.sim.setup(lane.board, 203)
+	_finish_charge(lane.sim, lane.runner)
+	var victim: UnitInstance = lane.mark
+	_check("the Breaker's charge leaves its victim stunned",
+		victim.is_stunned(), "%.2fs" % victim.stun_left)
+	# And the view is told, with a duration — a "stun" event carrying no seconds
+	# cannot be drawn for the right length of time.
+	var seconds := -1.0
+	for e in lane.sim.events:
+		if e.kind == "stun" and int(e.uid) == victim.uid:
+			seconds = float(e.get("seconds", -1.0))
+			break
+	_check("and the view is told how long for", seconds > 0.0,
+		"%.2fs on the event" % seconds)
+
+
+func _test_the_clock_is_a_setting() -> void:
+	_section("The round clock as a setting")
+	# The simulation must not read GameSetup for this. The combat layer sits below the
+	# flow layer, and a sim that needed an autoload to run could not be built in a
+	# test — which is this test.
+	var sim := CombatSim.new()
+	_check("a fresh sim has the conventional clock",
+		is_equal_approx(sim.sudden_death_at(), CombatSim.SUDDEN_DEATH)
+		and is_equal_approx(sim.timeout_at(), CombatSim.DEFAULT_TIMEOUT),
+		"%.0f / %.0f" % [sim.sudden_death_at(), sim.timeout_at()])
+
+	sim.sudden_death = 20.0
+	sim.timeout = 40.0
+	_check("and it can be told otherwise",
+		is_equal_approx(sim.sudden_death_at(), 20.0)
+		and is_equal_approx(sim.timeout_at(), 40.0))
+	# Sudden death after the timeout is a rule that never fires, so it is clamped
+	# rather than trusted.
+	sim.sudden_death = 500.0
+	_check("a sudden death past the timeout is pulled back before it",
+		sim.sudden_death_at() < sim.timeout_at(),
+		"%.1f against %.1f" % [sim.sudden_death_at(), sim.timeout_at()])
+
+	# And it really changes the battle. A short clock has to make sudden death
+	# actually land inside a round that would otherwise never reach it.
+	BoardModel.reset_map()
+	var board := BoardModel.new()
+	# Two Spires: rooted, harmless, enormous. Nothing can end this round except the
+	# clock, which is what makes the clock measurable.
+	board.force_place(UnitInstance.create(
+		BoardModel.at_tier(_must_find("spire"), 6), BoardModel.TEAM_A), Vector2i(2, 1))
+	board.force_place(UnitInstance.create(
+		BoardModel.at_tier(_must_find("spire"), 6), BoardModel.TEAM_B), Vector2i(2, 8))
+	var quick := CombatSim.new()
+	quick.sudden_death = 6.0
+	quick.timeout = 20.0
+	quick.setup(board, 221)
+	quick.run()
+	var death_at := -1.0
+	for e in quick.events:
+		if e.kind == "sudden_death":
+			death_at = float(e.at)
+	_check("a short clock reaches sudden death", death_at > 0.0,
+		"never fired in %.1fs" % quick.duration())
+	_check("at about where it was set", absf(death_at - 6.0) < 1.0,
+		"fired at %.1fs, set to 6.0" % death_at)
+	_check("and the round is called at the timeout",
+		quick.duration() <= 20.1, "ran %.1fs" % quick.duration())
+
+	# The conventional clock on the same board does not reach either.
+	var slow := CombatSim.new()
+	slow.setup(board, 221)
+	slow.run()
+	var slow_death := false
+	for e in slow.events:
+		if e.kind == "sudden_death":
+			slow_death = true
+	_check("where the conventional clock runs far longer",
+		slow.duration() > quick.duration() * 2.0,
+		"%.1fs against %.1fs" % [slow.duration(), quick.duration()])
+	_check("and reaches its own sudden death, not the short one",
+		slow_death and slow.duration() > 100.0, "%.1fs" % slow.duration())
+
+
+func _test_gates() -> void:
+	_section("Gates, and the Spire they answer")
+	# The Steppes: one pair, on the left flank a row in from each back rank. Written
+	# against Three Roads first, which lost its gate when the boards were measured —
+	# see _test_only_big_maps_have_gates for which kept one and why.
+	var m: MapData = load("res://data/maps/the_steppes.tres")
+	_check("The Steppes loads and is legal", m != null and m.is_valid(),
+		"" if m == null else m.invalid_reason())
+	if m == null:
+		return
+	var pairs := m.gate_pairs()
+	_check("it has a gate pair on it", pairs.size() == 2, "%d pads" % pairs.size())
+	if pairs.size() != 2:
+		return
+	# Paired by MIRROR, which is the only rule that can be fair given that every map
+	# has to be mirror-symmetric anyway — and it means a pair can never be authored
+	# with one end in a better place than the other.
+	var mirrored := true
+	var symmetric := true
+	for pad: Vector2i in pairs:
+		if pairs[pad] != m.mirror(pad):
+			mirrored = false
+		if pairs.get(pairs[pad], Vector2i(-1, -1)) != pad:
+			symmetric = false
+	_check("each pad leads to its own mirror image", mirrored, str(pairs))
+	_check("and the link works both ways", symmetric, str(pairs))
+	var halves := {}
+	for pad: Vector2i in pairs:
+		halves[pad.y < m.height / 2] = true
+	_check("so there is one on each side", halves.size() == 2, str(pairs))
+
+	BoardModel.use_map(m)
+	var pad_a := Vector2i(0, 1)
+	var pad_b := BoardModel.gate_from(pad_a)
+	_check("the board knows where a pad leads",
+		BoardModel.is_gate(pad_a) and pad_b != pad_a, "%s" % pad_b)
+	_check("and a tile with no gate leads to itself",
+		BoardModel.gate_from(Vector2i(0, 0)) == Vector2i(0, 0))
+	_check("a pad is ordinary ground you can stand on",
+		not BoardModel.is_blocked(pad_a) and BoardModel.is_playable(pad_a))
+
+	# The field has to be SHORTER through it, or the gate is decoration: a unit that
+	# prices the long way round as the only way round walks straight over the pad.
+	var board := BoardModel.new()
+	var walker := UnitInstance.create(
+		load("res://data/units/warden_t1.tres") as UnitData, BoardModel.TEAM_A)
+	board.force_place(walker, pad_a)
+	var prey := UnitInstance.create(
+		load("res://data/units/spire_t1.tres") as UnitData, BoardModel.TEAM_B)
+	var deep := Vector2i(pad_b.x, BoardModel.HEIGHT - 1)
+	board.force_place(prey, deep)
+	var sim := CombatSim.new()
+	sim.board = board
+	sim._field_team = BoardModel.TEAM_A
+	sim._field_wall_cost = CombatSim.WALL_COST
+	var field := sim._distance_field(deep, pad_a)
+	var through: int = field.get(pad_a, -1)
+	var walk := BoardModel.tile_distance(pad_a, deep)
+	_check("the field prices the gate far below the walk",
+		through > 0 and through < walk,
+		"%d through the gate against %d tiles on foot" % [through, walk])
+
+	# And the round loop actually takes it. Through the whole sim, not by calling
+	# the step function: a gate nothing walks into is the same as no gate.
+	sim.setup(board, 211)
+	var used := Vector2i(-1, -1)
+	var took := -1.0
+	var walked := 0
+	for i in 400:
+		sim.step()
+	for e in sim.events:
+		if int(e.get("uid", -1)) != walker.uid:
+			continue
+		if e.kind == "gate":
+			used = e.to
+			took = float(e.get("duration", -1.0))
+		elif e.kind == "move":
+			walked += 1
+	_check("a unit walking at something far away goes through it",
+		used == pad_b, "came out at %s, the far pad is %s" % [used, pad_b])
+	# A handful of steps, not a march. The Steppes has stairs and terraces between the
+	# pad and the far corner, so a couple of tiles either side of the transit is
+	# expected — what is being ruled out is the unit walking the whole board.
+	_check("and it barely walks at all to get there", walked <= 8,
+		"%d tiles walked, the board is %d tall" % [walked, BoardModel.HEIGHT])
+	# Its own event kind. A "move" would make the view interpolate the unit across
+	# every tile in between, which is a unit sliding through a wall of stone.
+	var as_move := false
+	for e in sim.events:
+		if e.kind == "move" and int(e.uid) == walker.uid \
+				and BoardModel.tile_distance(e.from, e.to) > 1:
+			as_move = true
+	_check("and it is not reported as an enormous walk", not as_move)
+	# Read off the event's own duration, not off its timestamp. The walker in this
+	# test starts standing ON the pad, so it goes through on the very first tick and
+	# a timestamp of zero is correct — what has to be true is that the trip occupies
+	# the unit for a normal step, because a free board-crossing would make the far
+	# side's back rank indefensible.
+	_check("the trip costs a step of movement time, not nothing",
+		is_equal_approx(took, walker.stat(StatModifier.Stat.MOVE_TIME)),
+		"%.2fs against a stride of %.2fs" % [
+			took, walker.stat(StatModifier.Stat.MOVE_TIME)])
+
+	# One flanker per side per round, measured through the sim rather than off the
+	# constant. This is the check the constant alone does not make: with the cap
+	# removed, every unit that agrees the shortcut is worth taking walks through the
+	# same one-tile hole in single file, which is the failure the cap exists for and
+	# was worth seventy points of win rate on one board.
+	BoardModel.use_map(m)
+	var crowd := BoardModel.new()
+	var movers: Array[UnitInstance] = []
+	# Three of them, all within a step or two of the pad, all wanting the same thing
+	# on the far side — so all three would take it if they were allowed to.
+	for spot in [pad_a, pad_a + Vector2i(1, 0), pad_a + Vector2i(0, 1)]:
+		if not crowd.in_bounds(spot) or BoardModel.is_blocked(spot):
+			continue
+		var mover := UnitInstance.create(
+			load("res://data/units/warden_t1.tres") as UnitData, BoardModel.TEAM_A)
+		if crowd.force_place(mover, spot):
+			movers.append(mover)
+	crowd.force_place(UnitInstance.create(
+		load("res://data/units/spire_t6.tres") as UnitData, BoardModel.TEAM_B),
+		Vector2i(pad_b.x, BoardModel.HEIGHT - 1))
+	_check("three of them are standing at the pad", movers.size() >= 3,
+		"%d placed" % movers.size())
+	var crowd_sim := CombatSim.new()
+	crowd_sim.setup(crowd, 213)
+	for i in 400:
+		crowd_sim.step()
+	var transits := 0
+	for e in crowd_sim.events:
+		if e.kind == "gate":
+			transits += 1
+	_check("only one of them goes through",
+		transits == CombatSim.GATE_TRANSITS_PER_TEAM,
+		"%d transits for a cap of %d" % [
+			transits, CombatSim.GATE_TRANSITS_PER_TEAM])
+	_check("and the simulation says so itself",
+		crowd_sim.gate_transits(BoardModel.TEAM_A)
+			== CombatSim.GATE_TRANSITS_PER_TEAM,
+		"%d" % crowd_sim.gate_transits(BoardModel.TEAM_A))
+	# The others must not be left standing on the pad waiting for a turn that will
+	# never come: the field has to stop routing them there once the side is spent.
+	var loitering := 0
+	for mover in movers:
+		if mover.is_alive() and mover.cell == pad_a:
+			loitering += 1
+	_check("the rest get on with the walk instead of queueing at it",
+		loitering == 0, "%d still standing on the pad" % loitering)
+
+	# An occupied far pad is not a destination.
+	BoardModel.use_map(m)
+	var blocked_board := BoardModel.new()
+	var goer := UnitInstance.create(
+		load("res://data/units/warden_t1.tres") as UnitData, BoardModel.TEAM_A)
+	blocked_board.force_place(goer, pad_a)
+	blocked_board.force_place(UnitInstance.create(
+		load("res://data/units/spire_t6.tres") as UnitData, BoardModel.TEAM_B), pad_b)
+	var blocked_sim := CombatSim.new()
+	blocked_sim.board = blocked_board
+	_check("stepping onto an occupied pad is refused",
+		not blocked_sim._step_through_gate(goer, pad_b) and goer.cell == pad_a)
+
+	BoardModel.reset_map()
+	_check("and the default board has no gates at all",
+		BoardModel.gate_count() == 0, "%d pads" % BoardModel.gate_count())
+
+
+func _test_only_big_maps_have_gates() -> void:
+	_section("Which boards get a gate")
+	# A gate is the answer to "this board is too big to reach their back rank on",
+	# so it belongs on the boards that are. On a small map the walk is short enough
+	# that a shortcut would just be a free flank.
+	# The gated set is HAND PICKED off measurements, not derived from board size, and
+	# it is pinned here because "which boards" turned out to be the whole design.
+	#
+	# A gate helps on a board whose halves are already joined by open ground, where
+	# the flanker is an extra and the line still fights. It is ruinous on a board
+	# whose middle is obstructed, because then the gate is the FASTEST route and the
+	# army walks through a one-tile hole in single file. Attacker win rate with the
+	# gate against the same board with its gates rubbed out:
+	#
+	#   the Steppes   82.5% v 67.5%   keep — and it beats bringing an Assassin (53.8%)
+	#   the Compound  86.2% v 86.2%   keep — level, but reaches the back rank in 37s
+	#                                 rather than 61s, and beats an Assassin (67.5%)
+	#   Three Roads   57.5% v 65.0%   drop — three walled lanes; a body in the gate
+	#                                 is a body missing from a lane
+	#   the Breach    32.5% v 85.0%   drop — a rubble wall across the middle makes the
+	#                                 gate the only fast way through
+	#   the Labyrinth 17.5% v 80.7%   drop — a maze punishes a split line hardest
+	const GATED: Array[String] = ["the_steppes", "the_compound"]
+	var gated: PackedStringArray = []
+	var small_with: PackedStringArray = []
+	for m in _load_maps():
+		var pads := m.gate_pairs().size()
+		if pads > 0:
+			gated.append(String(m.id))
+		if m.tiles() < 130 and pads > 0:
+			small_with.append(String(m.id))
+	gated.sort()
+	var want := PackedStringArray(GATED)
+	want.sort()
+	_check("exactly the measured boards have a gate", gated == want,
+		"gated: %s, wanted: %s" % [", ".join(gated), ", ".join(want)])
+	_check("and no small board does", small_with.is_empty(),
+		"found on %s" % ", ".join(small_with))
+
+	# The transit cap is the other half of the design, and it is what turned the
+	# Steppes from 75.0% into 82.5% and the Breach from 15.0% into 32.5%.
+	_check("a side may send one unit through per round",
+		CombatSim.GATE_TRANSITS_PER_TEAM == 1,
+		"%d" % CombatSim.GATE_TRANSITS_PER_TEAM)
+	# Pads come in pairs everywhere, always an even count, never self-linked.
+	var odd: PackedStringArray = []
+	for m in _load_maps():
+		var pads := m.gate_pairs()
+		if pads.size() % 2 != 0:
+			odd.append(String(m.id))
+		for pad: Vector2i in pads:
+			if pads[pad] == pad:
+				odd.append("%s links %s to itself" % [m.id, pad])
+	_check("no map has an odd or self-linked gate", odd.is_empty(),
+		", ".join(odd))
+
+	# A gate whose mirror is not a gate must be refused outright, because
+	# gate_pairs() would otherwise have to invent a destination for it.
+	var rigged := MapData.new()
+	rigged.id = &"rigged"
+	rigged.display_name = "Rigged"
+	rigged.width = 6
+	rigged.height = 10
+	rigged.has_neutral = false
+	rigged.rows = PackedStringArray([
+		"..O...", "......", "......", "......", "......",
+		"......", "......", "......", "......", "......",
+	])
+	_check("a lone gate makes the map illegal", not rigged.is_valid(),
+		rigged.invalid_reason())
+	_check("and it is refused for not mirroring, which is the real fault",
+		rigged.invalid_reason().contains("mirror"), rigged.invalid_reason())
+
+
+func _test_shields_fizzle() -> void:
+	_section("Shields do not last forever")
+	_check("a shield has a duration at all", CombatSim.SHIELD_SECONDS > 0.0,
+		"%.1fs" % CombatSim.SHIELD_SECONDS)
+
+	var warden := _must_find("warden")
+	var u := UnitInstance.create(BoardModel.at_tier(warden, 3), BoardModel.TEAM_A)
+	var pool := u.stat(StatModifier.Stat.MAX_HP)
+	u.add_shield(pool * 0.5, pool, CombatSim.SHIELD_SECONDS)
+	_check("gaining one starts its clock",
+		u.shield > 0.0 and is_equal_approx(u.shield_left, CombatSim.SHIELD_SECONDS),
+		"%.0f shield, %.2fs left" % [u.shield, u.shield_left])
+
+	# The rule the user asked for, and the one worth a test of its own: a second
+	# shield inside the window is ADDED and the clock is NOT renewed. Written the
+	# other way round, a unit with any repeatable shield keeps one up permanently and
+	# the duration is decorative.
+	var first := u.shield
+	u.shield_left = 3.0
+	u.add_shield(pool * 0.25, pool * 10.0, CombatSim.SHIELD_SECONDS)
+	_check("a second shield inside the window adds to the pool",
+		u.shield > first, "%.0f against %.0f" % [u.shield, first])
+	_check("and does not reset the clock",
+		is_equal_approx(u.shield_left, 3.0), "%.2fs left" % u.shield_left)
+
+	# Running it out.
+	var ticks := 0
+	while u.shield_left > 0.0 and ticks < 200:
+		u.tick_shield(CombatSim.TICK)
+		ticks += 1
+	_check("when the clock runs out the whole pool goes, not just the last layer",
+		is_zero_approx(u.shield), "%.2f left" % u.shield)
+	_check("and it went at the three seconds that were left, not at seven",
+		absf(float(ticks) * CombatSim.TICK - 3.0) < 0.15,
+		"%.1fs" % (float(ticks) * CombatSim.TICK))
+
+	# A pool absorbed to nothing lets go of its clock, so the NEXT shield gets a
+	# fresh one. Without this a unit that is shielded, chewed through, and shielded
+	# again inherits the remains of the first clock.
+	var v := UnitInstance.create(BoardModel.at_tier(warden, 3), BoardModel.TEAM_A)
+	v.add_shield(50.0, 1000.0, CombatSim.SHIELD_SECONDS)
+	v.tick_shield(2.0)
+	v.take_damage(50.0)
+	v.tick_shield(CombatSim.TICK)
+	_check("a shield chewed through drops its clock",
+		is_zero_approx(v.shield_left), "%.2fs left" % v.shield_left)
+	v.add_shield(50.0, 1000.0, CombatSim.SHIELD_SECONDS)
+	_check("so the next one gets the full window",
+		is_equal_approx(v.shield_left, CombatSim.SHIELD_SECONDS),
+		"%.2fs" % v.shield_left)
+
+	# Through the simulation, on the unit built around a shield, because the thing
+	# that keeps going wrong in this codebase is a rule nothing calls.
+	BoardModel.reset_map()
+	var board := BoardModel.new()
+	var tank := UnitInstance.create(BoardModel.at_tier(warden, 3), BoardModel.TEAM_A)
+	board.force_place(tank, Vector2i(2, 1))
+	# Far away and harmless, so the shield is never chewed and the only thing that
+	# can take it is the clock.
+	var far := UnitInstance.create(
+		BoardModel.at_tier(_must_find("spire"), 1), BoardModel.TEAM_B)
+	board.force_place(far, Vector2i(5, 9))
+	var sim := CombatSim.new()
+	sim.setup(board, 191)
+	_check("the Warden opens the round behind its bulwark", tank.shield > 0.0,
+		"%.0f shield" % tank.shield)
+	var held := tank.shield
+	for i in int(CombatSim.SHIELD_SECONDS / CombatSim.TICK) - 4:
+		sim.step()
+	_check("and it is still there a moment before the window closes",
+		tank.shield > 0.0, "%.0f shield" % tank.shield)
+	for i in 8:
+		sim.step()
+	_check("then the round loop takes it away", is_zero_approx(tank.shield),
+		"%.0f of %.0f still standing" % [tank.shield, held])
+	var told := false
+	for e in sim.events:
+		if e.kind == "shield_gone" and int(e.uid) == tank.uid:
+			told = true
+	_check("and the view is told, because a bar that vanishes needs a reason",
+		told)
+
+	# The Aegis Wall buff used to write the shield pool directly to bypass the
+	# unit's own cap, which is exactly how a gift-from-outside ends up with no clock
+	# on it. It has to pass through the same door.
+	var pool_buffs := _pool()
+	var wall := pool_buffs.by_id(&"aegis_wall")
+	if wall != null:
+		BoardModel.reset_map()
+		var walled := BoardModel.new()
+		var guard := UnitInstance.create(
+			BoardModel.at_tier(_must_find("archer"), 1), BoardModel.TEAM_A)
+		walled.force_place(guard, Vector2i(2, 1))
+		walled.force_place(UnitInstance.create(
+			BoardModel.at_tier(_must_find("spire"), 1), BoardModel.TEAM_B),
+			Vector2i(5, 9))
+		var wall_sim := CombatSim.new()
+		var tb := TeamBuffs.new()
+		tb.add(wall, BuffData.Rarity.GOLD)
+		wall_sim.team_buffs[BoardModel.TEAM_A] = tb
+		wall_sim.setup(walled, 193)
+		_check("the round-shield buff hands out a shield", guard.shield > 0.0,
+			"%.0f" % guard.shield)
+		_check("and it comes with a clock like every other shield",
+			guard.shield_left > 0.0, "%.2fs" % guard.shield_left)
+		# The whole reason it bypassed add_shield: an archer's shield_cap is zero, and
+		# a gift from outside the unit must not be clipped by it.
+		_check("while still ignoring the unit's own shield ceiling",
+			guard.shield > guard.stat(StatModifier.Stat.MAX_HP)
+				* maxf(guard.data.shield_cap, 0.0),
+			"%.0f shield, cap fraction %.2f" % [guard.shield, guard.data.shield_cap])
+
+	# Sudden death still refuses the gain outright, which is a different rule from
+	# the clock and must not have been folded into it.
+	var late := UnitInstance.create(BoardModel.at_tier(warden, 3), BoardModel.TEAM_A)
+	late.recovery_denied = true
+	late.add_shield(500.0, 1000.0, CombatSim.SHIELD_SECONDS)
+	_check("sudden death still refuses a shield outright",
+		is_zero_approx(late.shield) and is_zero_approx(late.shield_left))
+
+
+func _test_tier_scaling_on_abilities() -> void:
+	_section("Abilities that used to stop scaling")
+
+	# The Pyre. Flat burst damage was the documented trap and the Pyre was the unit
+	# standing in it: its tier 6 lance hit for exactly what its tier 1 did, into
+	# health bars thirty-two times bigger.
+	var pyre := _must_find("pyre")
+	var lance: AbilityData = pyre.ability
+	_check("Cinder Lance is a flat-damage burst, not a multiple of its attack",
+		lance != null and lance.burst_damage > 0.0
+		and is_zero_approx(lance.burst_attack_multiple))
+	if lance == null:
+		return
+	var sim := CombatSim.new()
+	var low := UnitInstance.create(BoardModel.at_tier(pyre, 1), BoardModel.TEAM_A)
+	var high := UnitInstance.create(BoardModel.at_tier(pyre, 6), BoardModel.TEAM_A)
+	var one := sim.burst_damage_of(low, lance)
+	var six := sim.burst_damage_of(high, lance)
+	_check("its tier 1 burst is the number on the card",
+		is_equal_approx(one, lance.burst_damage),
+		"%.0f against %.0f" % [one, lance.burst_damage])
+	_check("and a tier 6 burst is thirty-two times it, like every other stat",
+		is_equal_approx(six, one * 32.0), "%.0f against %.0f" % [six, one * 32.0])
+	# The splash has to ride the same curve. A lance that grows thirty-twofold while
+	# the scorch beside it stays at 16 is a lance with no splash at tier 6.
+	_check("the splash beside it scales too",
+		is_equal_approx(sim.burst_splash_of(high, lance),
+			sim.burst_splash_of(low, lance) * 32.0),
+		"%.0f against %.0f" % [sim.burst_splash_of(high, lance),
+			sim.burst_splash_of(low, lance) * 32.0])
+	# Against the curve it has to keep up with: the thing it is shooting at.
+	var body_growth := BoardModel.at_tier(_must_find("warden"), 6).max_hp \
+		/ BoardModel.at_tier(_must_find("warden"), 1).max_hp
+	_check("so the burst now keeps pace with the health bars it is aimed at",
+		is_equal_approx(six / one, body_growth),
+		"burst grew %.0fx, bodies grew %.0fx" % [six / one, body_growth])
+
+	# The Leech. The drain already grew in absolute terms — it is a share of a
+	# maximum that doubles — but it never got BETTER at its job, so merging one up
+	# bought nothing but a bigger body.
+	var leech := _must_find("leech")
+	var siphon: AbilityData = leech.ability
+	_check("Siphon takes a share of the victim's maximum",
+		siphon != null and siphon.drain_percent > 0.0)
+	if siphon == null:
+		return
+	_check("and that share now grows with the Leech's tier",
+		siphon.drain_percent_per_tier > 0.0,
+		"%.4f a tier" % siphon.drain_percent_per_tier)
+	var l1 := UnitInstance.create(BoardModel.at_tier(leech, 1), BoardModel.TEAM_A)
+	var l6 := UnitInstance.create(BoardModel.at_tier(leech, 6), BoardModel.TEAM_A)
+	var s1 := sim.drain_percent_of(l1, siphon)
+	var s6 := sim.drain_percent_of(l6, siphon)
+	_check("a tier 1 slice is the number on the card",
+		is_equal_approx(s1, siphon.drain_percent), "%.4f" % s1)
+	_check("and the ladder ends at double it, not thirty-two times it",
+		is_equal_approx(s6, s1 * 2.0), "%.4f against %.4f" % [s6, s1 * 2.0])
+	# Linear on purpose. The slice is already a fraction of a maximum that doubles;
+	# compound both and a tier 6 Siphon deletes a tier 6 Warden in under two seconds.
+	_check("the growth is linear, so it does not compound with the victim's health",
+		is_equal_approx(sim.drain_percent_of(
+			UnitInstance.create(BoardModel.at_tier(leech, 3), BoardModel.TEAM_A),
+			siphon), s1 + siphon.drain_percent_per_tier * 2.0))
+
+	# And through the sim, so this is not just arithmetic on a resource: the slice
+	# is baked in when the drain fastens on, and it has to be the scaled one.
+	BoardModel.reset_map()
+	var board := BoardModel.new()
+	var caster := UnitInstance.create(BoardModel.at_tier(leech, 6), BoardModel.TEAM_A)
+	board.force_place(caster, Vector2i(2, 1))
+	board.force_place(UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 6), BoardModel.TEAM_B),
+		Vector2i(2, 9))
+	var live := CombatSim.new()
+	live.setup(board, 181)
+	caster.mana = UnitInstance.MANA_MAX
+	for i in 20:
+		live.step()
+	var bite := -1.0
+	for e in live.events:
+		if e.kind == "drain_start":
+			bite = float(e.percent)
+			break
+	_check("a tier 6 Leech actually fastens on with the tier 6 slice",
+		is_equal_approx(bite, s6), "%.4f, wanted %.4f" % [bite, s6])
+
+
+func _test_the_vexer_body() -> void:
+	_section("The Vexer's body")
+	var vexer := _must_find("vexer")
+	_check("its base health is 100", is_equal_approx(vexer.max_hp, 100.0),
+		"%.0f" % vexer.max_hp)
+	# Recorded because the number did not do what it was meant to do. Against a
+	# same-tier Warden the Vexer measures 23.0% with this body and 21.7% with the
+	# old 85 — the fifteen points bought 1.3 points of win rate. Roughly 190 base is
+	# where it reaches the median. The ability is not the problem; the body is.
+	# The point of the number was to stop it dying instantly, not to turn it into a
+	# front-liner — so it still has to sit well under the roster's middle.
+	_check("and it is still well under the median body on the roster",
+		vexer.max_hp < _median_body() * 0.8,
+		"%.0f against a median of %.0f" % [vexer.max_hp, _median_body()])
+
+
+func _median_body() -> float:
+	var all: Array[float] = []
+	for d in _roster().units:
+		all.append(d.max_hp)
+	all.sort()
+	if all.is_empty():
+		return 0.0
+	return all[all.size() / 2]
+
+
+func _test_the_global_pace() -> void:
+	_section("The global walking pace")
+	# One number sets how fast the whole game walks, and nothing else pinned it —
+	# so deleting it would silently revert the pace and every movement buff with it.
+	_check("the pace multiplier is above one, so everything walks slower than written",
+		DataBuilder.MOVE_SCALE > 1.0, "x%.2f" % DataBuilder.MOVE_SCALE)
+	var warden := _must_find("warden")
+	# Checked against the table row rather than a literal, so changing the pace
+	# changes one number and this check follows it.
+	var written := 0.0
+	for row in DataBuilder.UNIT_TABLE:
+		if String(row.id) == "warden":
+			written = float(row.move)
+	_check("and the built unit carries the scaled stride, not the written one",
+		written > 0.0 and is_equal_approx(warden.move_time,
+			snappedf(written * DataBuilder.MOVE_SCALE, 0.01)),
+		"built %.2fs a tile, table says %.2f x %.2f" % [
+			warden.move_time, written, DataBuilder.MOVE_SCALE])
+	# Every unit, not just the one checked above — a scale applied in one branch of
+	# the builder and not another would be worse than not applying it at all.
+	var unscaled: PackedStringArray = []
+	for row in DataBuilder.UNIT_TABLE:
+		var built := _tier_one_of(String(row.id))
+		if built == null:
+			continue
+		if not is_equal_approx(built.move_time,
+				snappedf(float(row.move) * DataBuilder.MOVE_SCALE, 0.01)):
+			unscaled.append(String(row.id))
+	_check("and so does every other unit in the table", unscaled.is_empty(),
+		"unscaled: %s" % ", ".join(unscaled))
+
+
+func _tier_one_of(id: String) -> UnitData:
+	var path := "res://data/units/%s_t1.tres" % id
+	if not ResourceLoader.exists(path):
+		return null
+	return load(path) as UnitData
+
+
+func _test_reins() -> void:
+	_section("Reins")
+	var pool := _pool()
+	var buff := pool.by_id(&"reins")
+	_check("Reins is in the pool at all", buff != null)
+	if buff == null:
+		return
+	# This is the check that would have caught Avalanche: a buff made entirely of
+	# riders used to be binned by BuffPool._is_live before anyone could pick it.
+	_check("it belongs to the Usurper", String(buff.unit_id) == "usurper")
+	_check("it gives the host 75, 150 and 225% movement",
+		is_equal_approx(buff.host_move_at(BuffData.Rarity.BRONZE), 0.75)
+		and is_equal_approx(buff.host_move_at(BuffData.Rarity.SILVER), 1.50)
+		and is_equal_approx(buff.host_move_at(BuffData.Rarity.GOLD), 2.25),
+		"%.2f/%.2f/%.2f" % [buff.host_move_at(BuffData.Rarity.BRONZE),
+			buff.host_move_at(BuffData.Rarity.SILVER),
+			buff.host_move_at(BuffData.Rarity.GOLD)])
+	_check("and the host 50, 75 and 100% damage and health",
+		is_equal_approx(buff.host_power_at(BuffData.Rarity.BRONZE), 0.50)
+		and is_equal_approx(buff.host_power_at(BuffData.Rarity.SILVER), 0.75)
+		and is_equal_approx(buff.host_power_at(BuffData.Rarity.GOLD), 1.00),
+		"%.2f/%.2f/%.2f" % [buff.host_power_at(BuffData.Rarity.BRONZE),
+			buff.host_power_at(BuffData.Rarity.SILVER),
+			buff.host_power_at(BuffData.Rarity.GOLD)])
+
+	# The Usurper's own half of the movement is an ordinary unit-scoped stat buff,
+	# and MOVE_TIME is inverted — so the sign has to come out right or the buff
+	# makes the unit slower with nothing to show it went wrong.
+	var thief := UnitInstance.create(
+		BoardModel.at_tier(_must_find("usurper"), 3), BoardModel.TEAM_A)
+	var bare := thief.stat(StatModifier.Stat.MOVE_TIME)
+	thief.apply_modifiers(buff.modifiers_for(BuffData.Rarity.GOLD))
+	var quick := thief.stat(StatModifier.Stat.MOVE_TIME)
+	_check("a gold Reins makes the Usurper itself faster, not slower",
+		quick < bare, "%.3fs a tile against %.3fs" % [quick, bare])
+	_check("and by the amount the card promises",
+		is_equal_approx(quick, bare / 3.25),
+		"%.3fs, wanted %.3fs" % [quick, bare / 3.25])
+
+	# Through the sim: the host half has to reach a unit the buff cannot name.
+	var plain := _usurp_board(3, 3)
+	plain.sim.setup(plain.board, 131)
+	var plain_host: UnitInstance = plain.prey
+	var plain_hp := plain_host.stat(StatModifier.Stat.MAX_HP)
+	var plain_dmg := plain_host.stat(StatModifier.Stat.ATTACK_DAMAGE)
+	var plain_move := plain_host.stat(StatModifier.Stat.MOVE_TIME)
+
+	var rich := _usurp_board(3, 3)
+	var tb := TeamBuffs.new()
+	tb.add(buff, BuffData.Rarity.GOLD)
+	rich.sim.team_buffs[BoardModel.TEAM_A] = tb
+	rich.sim.setup(rich.board, 131)
+	var rich_host: UnitInstance = rich.prey
+	_check("a gold Reins doubles the host's health",
+		is_equal_approx(rich_host.stat(StatModifier.Stat.MAX_HP), plain_hp * 2.0),
+		"%.0f against %.0f" % [
+			rich_host.stat(StatModifier.Stat.MAX_HP), plain_hp * 2.0])
+	_check("and its attack",
+		is_equal_approx(rich_host.stat(StatModifier.Stat.ATTACK_DAMAGE),
+			plain_dmg * 2.0),
+		"%.1f against %.1f" % [
+			rich_host.stat(StatModifier.Stat.ATTACK_DAMAGE), plain_dmg * 2.0])
+	_check("and the bigger host is filled, not left on the old number",
+		is_equal_approx(rich_host.current_hp,
+			rich_host.stat(StatModifier.Stat.MAX_HP)),
+		"%.0f of %.0f" % [
+			rich_host.current_hp, rich_host.stat(StatModifier.Stat.MAX_HP)])
+	_check("the host moves faster too, not slower",
+		rich_host.stat(StatModifier.Stat.MOVE_TIME) < plain_move,
+		"%.3fs against %.3fs" % [
+			rich_host.stat(StatModifier.Stat.MOVE_TIME), plain_move])
+
+	# And it is all battle-scoped: a host handed back must not keep the thief's
+	# buff. This is the leak that would let a losing player farm stats.
+	rich_host.reset_for_battle()
+	_check("a host handed back keeps none of the thief's buff",
+		is_equal_approx(rich_host.stat(StatModifier.Stat.MAX_HP), plain_hp),
+		"%.0f, wanted %.0f" % [
+			rich_host.stat(StatModifier.Stat.MAX_HP), plain_hp])
+
+	var card := buff.describe(BuffData.Rarity.GOLD)
+	_check("the card mentions both halves",
+		card.to_lower().contains("riding") and card.to_lower().contains("host"),
+		card)
+
+
+func _test_ranged_units_hold_their_distance() -> void:
+	_section("Ranged units fight at their preferred range")
+
+	# An archer with something already in its face, and its swing on cooldown. It
+	# should give ground rather than stand there waiting.
+	BoardModel.reset_map()
+	var board := BoardModel.new()
+	var archer := UnitInstance.create(
+		BoardModel.at_tier(_must_find("archer"), 3), BoardModel.TEAM_A)
+	board.force_place(archer, Vector2i(4, 4))
+	var brute := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 3), BoardModel.TEAM_B)
+	board.force_place(brute, Vector2i(4, 5))
+	var sim := CombatSim.new()
+	sim.setup(board, 141)
+	var reach := sim.reach_against(archer, brute)
+	_check("the archer outranges what is standing on it", reach > 1,
+		"reach %d" % reach)
+	_check("and it is not a melee unit, which never gives ground",
+		sim.prefers_distance(archer))
+
+	# Through _decide, which is the only thing that proves the round loop actually
+	# ASKS. _give_ground could work perfectly and never be called, which is the
+	# exact shape of three separate bugs in this codebase already: a function that
+	# passes its own test while nothing in the game reaches it.
+	archer.state = UnitInstance.State.IDLE
+	archer.kite_hold = 0.0
+	var opened := archer.cell
+	sim._decide(archer)
+	_check("the round loop itself asks whether to give ground",
+		archer.state == UnitInstance.State.MOVING and archer.cell != opened
+		and BoardModel.tile_distance(archer.cell, brute.cell) > 1,
+		"went %s -> %s in state %d" % [opened, archer.cell, archer.state])
+	_check("and having paid a swing for it, it does not do it again at once",
+		archer.kite_hold > 0.0, "%.2fs hold" % archer.kite_hold)
+	# With the hold up it must shoot rather than keep walking backwards.
+	archer.state = UnitInstance.State.IDLE
+	var held := archer.cell
+	sim._decide(archer)
+	_check("the very next decision is a swing, not another step",
+		archer.state == UnitInstance.State.ATTACKING and archer.cell == held,
+		"state %d at %s" % [archer.state, archer.cell])
+
+	archer.kite_hold = 0.0
+	archer.target = brute
+	archer.state = UnitInstance.State.IDLE
+	var from := archer.cell
+	var moved := sim._give_ground(archer, reach)
+	_check("it steps away", moved and archer.cell != from,
+		"%s -> %s" % [from, archer.cell])
+	if moved:
+		_check("and the step actually increases the gap",
+			BoardModel.tile_distance(archer.cell, brute.cell)
+			> BoardModel.tile_distance(from, brute.cell),
+			"%d -> %d" % [BoardModel.tile_distance(from, brute.cell),
+				BoardModel.tile_distance(archer.cell, brute.cell)])
+		_check("without stepping out of its own range",
+			BoardModel.in_reach(archer.cell, brute.cell, reach))
+
+	# Already at range: it holds. Backing off forever is not "fighting at its
+	# preferred range", it is refusing to fight, and the cap is what stops it.
+	BoardModel.reset_map()
+	var far := BoardModel.new()
+	var holder := UnitInstance.create(
+		BoardModel.at_tier(_must_find("archer"), 3), BoardModel.TEAM_A)
+	far.force_place(holder, Vector2i(4, 2))
+	var mark := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 3), BoardModel.TEAM_B)
+	var gap_sim := CombatSim.new()
+	var edge := 0
+	# Put the enemy exactly at the edge of the archer's reach.
+	far.force_place(mark, Vector2i(4, 2))
+	far.remove(mark)
+	gap_sim.setup(far, 143)
+	edge = gap_sim.reach_against(holder, mark)
+	far.force_place(mark, Vector2i(4, 2 + edge))
+	holder.target = mark
+	_check("at the edge of its range it holds its ground",
+		not gap_sim._give_ground(holder, edge),
+		"stood at %d of %d" % [
+			BoardModel.tile_distance(holder.cell, mark.cell), edge])
+
+	# Melee must never do this.
+	BoardModel.reset_map()
+	var brawl := BoardModel.new()
+	var sword := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 3), BoardModel.TEAM_A)
+	brawl.force_place(sword, Vector2i(4, 4))
+	var foe := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 3), BoardModel.TEAM_B)
+	brawl.force_place(foe, Vector2i(4, 5))
+	var brawl_sim := CombatSim.new()
+	brawl_sim.setup(brawl, 145)
+	sword.target = foe
+	_check("a melee unit never backs off — contact IS its preferred range",
+		not brawl_sim.prefers_distance(sword)
+		and not brawl_sim._give_ground(sword, 1))
+
+	# A rooted shooter cannot give ground either, and must not lose its turn
+	# trying: the Sentry is the whole point of can_move being a separate fact.
+	BoardModel.reset_map()
+	var rooted := BoardModel.new()
+	var sentry_data := load("res://data/units/sentry_t3.tres") as UnitData
+	if sentry_data != null:
+		var sentry := UnitInstance.create(sentry_data, BoardModel.TEAM_A)
+		rooted.force_place(sentry, Vector2i(4, 4))
+		var rusher := UnitInstance.create(
+			BoardModel.at_tier(_must_find("warden"), 3), BoardModel.TEAM_B)
+		rooted.force_place(rusher, Vector2i(4, 5))
+		var rooted_sim := CombatSim.new()
+		rooted_sim.setup(rooted, 147)
+		sentry.target = rusher
+		_check("a rooted shooter stays where it was built",
+			not rooted_sim._give_ground(sentry,
+				rooted_sim.reach_against(sentry, rusher))
+			and sentry.cell == Vector2i(4, 4))
+
+	# And the ordering rule: shooting comes first. A unit off cooldown must swing
+	# rather than retreat, or a quick-footed bow never fires at all.
+	BoardModel.reset_map()
+	var duel := BoardModel.new()
+	# Tiers chosen so the archer SURVIVES long enough to be measured. Written
+	# first as a tier 3 archer against a tier 6 Warden, which one-shot it before it
+	# ever swung: the test then reported "0 shots, 0 steps" and looked like a bug in
+	# the retreat rather than a bug in the matchup.
+	var shooter := UnitInstance.create(
+		BoardModel.at_tier(_must_find("archer"), 5), BoardModel.TEAM_A)
+	duel.force_place(shooter, Vector2i(4, 2))
+	var target := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 3), BoardModel.TEAM_B)
+	duel.force_place(target, Vector2i(4, 8))
+	var duel_sim := CombatSim.new()
+	duel_sim.crit_chance = 0.0
+	duel_sim.setup(duel, 149)
+	for i in 200:
+		duel_sim.step()
+	var shots := 0
+	var steps := 0
+	for e in duel_sim.events:
+		if e.kind != "attack" and e.kind != "move":
+			continue
+		if int(e.uid) != shooter.uid:
+			continue
+		if e.kind == "attack":
+			shots += 1
+		else:
+			steps += 1
+	_check("over twenty seconds the archer is still shooting, not just walking",
+		shots > 0 and shots >= steps / 3,
+		"%d shots, %d steps" % [shots, steps])
 
 
 func _test_the_breaker_charges() -> void:
@@ -8790,13 +10324,32 @@ func _test_the_breaker_charges() -> void:
 	var stage := _breaker_lane(3, BoardModel.TEAM_B, 4)
 	var mark: UnitInstance = stage.mark
 	var runner: UnitInstance = stage.runner
-	var full: float = mark.current_hp
 	stage.sim.setup(stage.board, 71)
+	# Read AFTER the bell, not before. The Warden raises its bulwark as its opener, so a
+	# figure taken before setup is the bar without the shield and the charge is then
+	# measured against a number that never existed.
+	var full: float = mark.effective_hp()
+	# The charge is a journey now, not a result. It is also the one place the travel time
+	# is directly visible: 0.35s a tile across four tiles of lane.
+	_check("the charge does not resolve at the bell any more",
+		runner.is_charging() and is_equal_approx(mark.effective_hp(), full),
+		"charging %s, mark at %.0f" % [runner.is_charging(), mark.effective_hp()])
+	var run_took := _finish_charge(stage.sim, runner)
+	_check("it takes real seconds to cross the lane",
+		run_took > 0.5 and run_took < 3.0, "%.2fs" % run_took)
 	_check("it ends up next to what it hit",
 		BoardModel.tile_distance(runner.cell, mark.cell) == 1,
 		"runner at %s, mark at %s" % [runner.cell, mark.cell])
-	_check("the mark took the charge", mark.current_hp < full,
-		"%.0f hp of %.0f" % [mark.current_hp, full])
+	# Measured against the whole bar, shield included, and that is not a detail. The
+	# charge used to land in the same instant as the opening bell, BEFORE the Warden's
+	# bulwark went up, so it hit health directly. Arriving a second and a half later it
+	# meets the shield like everything else does — a real consequence of the travel time
+	# and the largest single part of what it cost the unit.
+	_check("the mark took the charge", mark.effective_hp() < full,
+		"%.0f effective of %.0f" % [mark.effective_hp(), full])
+	_check("and it went into the bulwark, because the charge no longer beats it",
+		mark.shield < mark.stat(StatModifier.Stat.MAX_HP) * 1.25,
+		"%.0f shield" % mark.shield)
 	_check("and it is stunned", mark.is_stunned(),
 		"%.2fs left" % mark.stun_left)
 	# A stun is a stun, not a freeze. The freeze carries a damage amp and cancels
@@ -8810,12 +10363,14 @@ func _test_the_breaker_charges() -> void:
 	# Both numbers scale with tier.
 	var small := _breaker_lane(1, BoardModel.TEAM_B, 4)
 	var big := _breaker_lane(6, BoardModel.TEAM_B, 4)
-	var small_full: float = small.mark.current_hp
-	var big_full: float = big.mark.current_hp
+	var small_full: float = small.mark.effective_hp()
+	var big_full: float = big.mark.effective_hp()
 	small.sim.setup(small.board, 71)
 	big.sim.setup(big.board, 71)
-	var small_hit: float = small_full - small.mark.current_hp
-	var big_hit: float = big_full - big.mark.current_hp
+	_finish_charge(small.sim, small.runner)
+	_finish_charge(big.sim, big.runner)
+	var small_hit: float = small_full - small.mark.effective_hp()
+	var big_hit: float = big_full - big.mark.effective_hp()
 	_check("a tier 6 charge hits far harder than a tier 1",
 		big_hit > small_hit * 4.0,
 		"%.0f against %.0f" % [big_hit, small_hit])
@@ -8825,12 +10380,17 @@ func _test_the_breaker_charges() -> void:
 
 	# An ALLY in the lane stops it and takes nothing. No friendly fire anywhere
 	# else in this game, and inventing it here would make the unit a trap.
-	var friendly := _breaker_lane(3, BoardModel.TEAM_A, 4)
-	var ally_full: float = friendly.mark.current_hp
+	# A SPIRE as the ally, not a Warden, and the substitution is the point. A Warden ally
+	# walks: given the second and a half the charge now takes, it steps out of the lane
+	# and the charge sails past, which tests the ally's legs rather than the rule. A Spire
+	# is rooted, so it is still standing there when the runner arrives.
+	var friendly := _breaker_lane_ally_post(3)
 	friendly.sim.setup(friendly.board, 71)
+	var ally_full: float = friendly.mark.effective_hp()
+	_finish_charge(friendly.sim, friendly.runner)
 	_check("an ally in the lane is not hit",
-		is_equal_approx(friendly.mark.current_hp, ally_full),
-		"%.0f hp of %.0f" % [friendly.mark.current_hp, ally_full])
+		is_equal_approx(friendly.mark.effective_hp(), ally_full),
+		"%.0f hp of %.0f" % [friendly.mark.effective_hp(), ally_full])
 	_check("and is not stunned", not friendly.mark.is_stunned())
 	_check("but it did stop the charge short of it",
 		BoardModel.tile_distance(friendly.runner.cell, friendly.mark.cell) == 1,
@@ -8848,6 +10408,7 @@ func _test_the_breaker_charges() -> void:
 		Vector2i(4, 9))
 	var lone_sim := CombatSim.new()
 	lone_sim.setup(empty, 72)
+	_finish_charge(lone_sim, lonely)
 	_check("a charge into an empty lane runs to the far wall",
 		lonely.cell.y > 6, "ended at %s" % lonely.cell)
 	var wasted := false
@@ -8874,6 +10435,7 @@ func _test_the_breaker_charges() -> void:
 	var wall_sim := CombatSim.new()
 	wall_sim.crit_chance = 0.0
 	wall_sim.setup(walled, 73)
+	_finish_charge(wall_sim, blocked)
 	# Put it back where it started, then wall the lane and charge again.
 	walled.force_place(blocked, Vector2i(2, 1))
 	_check("the lane is clear before the wall goes up",
@@ -8885,6 +10447,7 @@ func _test_the_breaker_charges() -> void:
 	behind.current_hp = behind.stat(StatModifier.Stat.MAX_HP)
 	var behind_full: float = behind.current_hp
 	wall_sim._resolve_charge(blocked, ab)
+	_finish_charge(wall_sim, blocked)
 	_check("stone stops the charge", blocked.cell == Vector2i(2, 2),
 		"ended at %s" % blocked.cell)
 	_check("and what was behind the wall is untouched",
@@ -8895,6 +10458,7 @@ func _test_the_breaker_charges() -> void:
 	# The stun wears off on the clock.
 	var timed := _breaker_lane(1, BoardModel.TEAM_B, 4)
 	timed.sim.setup(timed.board, 74)
+	_finish_charge(timed.sim, timed.runner)
 	var was: float = timed.mark.stun_left
 	_check("the stun starts with time on it", was > 0.0)
 	for i in 40:
@@ -8936,18 +10500,22 @@ func _test_avalanche() -> void:
 
 	# Through the sim, not just off the card.
 	var plain := _breaker_lane(3, BoardModel.TEAM_B, 4)
-	var plain_full: float = plain.mark.current_hp
 	plain.sim.setup(plain.board, 81)
-	var plain_hit: float = plain_full - plain.mark.current_hp
+	# After the bell, like the fixture above: the mark raises a shield as its opener, so a
+	# bar read before setup is a bar the charge never meets.
+	var plain_full: float = plain.mark.effective_hp()
+	_finish_charge(plain.sim, plain.runner)
+	var plain_hit: float = plain_full - plain.mark.effective_hp()
 	var plain_stun: float = plain.mark.stun_left
 
 	var buffed := _breaker_lane(3, BoardModel.TEAM_B, 4)
-	var buffed_full: float = buffed.mark.current_hp
 	var tb := TeamBuffs.new()
 	tb.add(buff, BuffData.Rarity.GOLD)
 	buffed.sim.team_buffs[BoardModel.TEAM_A] = tb
 	buffed.sim.setup(buffed.board, 81)
-	var buffed_hit: float = buffed_full - buffed.mark.current_hp
+	var buffed_full: float = buffed.mark.effective_hp()
+	_finish_charge(buffed.sim, buffed.runner)
+	var buffed_hit: float = buffed_full - buffed.mark.effective_hp()
 
 	_check("a gold Avalanche doubles the charge damage",
 		is_equal_approx(buffed_hit, plain_hit * 2.0),
@@ -9764,3 +11332,702 @@ func _test_audio_files_are_present() -> void:
 			"round_start", "select", "pickup"]:
 		_check("the %s sound is on disk" % name,
 			ResourceLoader.exists("res://assets/sfx/%s.wav" % name))
+
+
+func _test_the_martyr_grows_as_it_dies() -> void:
+	_section("The Martyr: rage, bleed, and the window at the bottom")
+
+	var martyr := _must_find("martyr")
+	var ab: AbilityData = martyr.ability
+	_check("the Martyr's ability is a FRENZY", ab != null
+		and ab.kind == AbilityData.Kind.FRENZY)
+	if ab == null:
+		return
+	_check("it has nothing to spend, so the ability is a passive",
+		is_zero_approx(martyr.mana_per_attack)
+		and is_zero_approx(martyr.mana_per_charge)
+		and is_zero_approx(martyr.mana_per_ally_death),
+		"attack %.1f, charge %.1f, grief %.1f" % [
+			martyr.mana_per_attack, martyr.mana_per_charge,
+			martyr.mana_per_ally_death])
+
+	# --- Rage: linear in MISSING health, on damage and attack speed only. ---
+	var u := UnitInstance.create(BoardModel.at_tier(martyr, 3), BoardModel.TEAM_A)
+	var full_hp := u.stat(StatModifier.Stat.MAX_HP)
+	var dmg_full := u.stat(StatModifier.Stat.ATTACK_DAMAGE)
+	var spd_full := u.stat(StatModifier.Stat.ATTACK_SPEED)
+	var move_full := u.stat(StatModifier.Stat.MOVE_TIME)
+	_check("at full health it has no bonus at all",
+		is_equal_approx(u.rage(), 1.0), "%.3fx" % u.rage())
+
+	u.current_hp = full_hp * 0.5
+	_check("at half health the rage is halfway up the slope",
+		absf(u.rage() - (1.0 + ab.rage_per_missing * 0.5)) < 0.001,
+		"%.3fx" % u.rage())
+	_check("damage rides it",
+		absf(u.stat(StatModifier.Stat.ATTACK_DAMAGE) - dmg_full * u.rage()) < 0.01,
+		"%.1f against %.1f" % [u.stat(StatModifier.Stat.ATTACK_DAMAGE), dmg_full])
+	_check("attack speed rides it",
+		absf(u.stat(StatModifier.Stat.ATTACK_SPEED) - spd_full * u.rage()) < 0.01,
+		"%.3f against %.3f" % [u.stat(StatModifier.Stat.ATTACK_SPEED), spd_full])
+	# The two deliberate exclusions. Max health would recurse through the number the
+	# rage is computed FROM, and movement would let a wounded Martyr outrun the line
+	# it is supposed to be standing in.
+	_check("max health does NOT ride it, or the slope would feed itself",
+		is_equal_approx(u.stat(StatModifier.Stat.MAX_HP), full_hp),
+		"%.1f against %.1f" % [u.stat(StatModifier.Stat.MAX_HP), full_hp])
+	_check("and neither does movement, outside the window",
+		is_equal_approx(u.stat(StatModifier.Stat.MOVE_TIME), move_full),
+		"%.3f against %.3f" % [u.stat(StatModifier.Stat.MOVE_TIME), move_full])
+
+	# Sabotage: if rage() ignored the health bar, the check above would still pass at
+	# full health. Pin the shape by walking the slope.
+	var rose := true
+	var last := 0.0
+	for i in 11:
+		u.current_hp = full_hp * (1.0 - float(i) * 0.1)
+		var here := u.stat(StatModifier.Stat.ATTACK_DAMAGE)
+		if here < last - 0.001:
+			rose = false
+		last = here
+	_check("the slope is monotonic all the way down the bar", rose)
+	_check("and the bottom of it is worth the stated multiple",
+		absf(last / dmg_full - (1.0 + ab.rage_per_missing)) < 0.01,
+		"%.2fx at the brink" % (last / dmg_full))
+
+	# --- An ordinary unit is untouched by any of this. ---
+	var warden := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 3), BoardModel.TEAM_A)
+	var w_dmg := warden.stat(StatModifier.Stat.ATTACK_DAMAGE)
+	warden.current_hp = warden.stat(StatModifier.Stat.MAX_HP) * 0.05
+	_check("a unit without the ability gains nothing from being hurt",
+		is_equal_approx(warden.stat(StatModifier.Stat.ATTACK_DAMAGE), w_dmg),
+		"%.1f against %.1f" % [
+			warden.stat(StatModifier.Stat.ATTACK_DAMAGE), w_dmg])
+	_check("and it dies at zero health like anything else",
+		not _dies_standing(warden))
+
+
+
+func _pin_in_place(u: UnitInstance) -> void:
+	## Nails a unit to its tile for the rest of the fixture by making a single step
+	## cost longer than the test runs. MOVE_TIME is seconds per tile, so a large
+	## POSITIVE percentage is slower — see BuffData._signed for why that trap is worth
+	## naming every time.
+	##
+	## Why this exists: the obvious fixture — one unit against one harmless, rooted
+	## Spire — quietly ends early, because the unit walks over and kills the Spire and
+	## the ROUND is then over, which stops step() dead. The first version of these
+	## tests measured a bleed that had simply stopped being ticked. Planted AFTER
+	## setup() on purpose: setup() calls reset_for_battle() on every unit, which wipes
+	## battle modifiers.
+	u.add_battle_modifier(StatModifier.make(
+		StatModifier.Stat.MOVE_TIME, StatModifier.Mode.PERCENT, 400.0))
+
+
+func _dies_standing(u: UnitInstance) -> bool:
+	## Drops the unit to zero health through take_damage and reports whether it is
+	## still on its feet. The one thing is_alive() had to be taught.
+	u.take_damage(u.current_hp + u.shield + 1.0)
+	return u.is_alive()
+
+
+func _test_the_martyrs_window() -> void:
+	_section("The Martyr: the window is a death that has not happened yet")
+
+	var martyr := _must_find("martyr")
+	var ab: AbilityData = martyr.ability
+	if ab == null:
+		return
+
+	# The window is opened by the SIM, in _fell, not by the unit — so it has to be
+	# tested through a sim. A unit dropped to zero on its own stays dead, which is
+	# the correct half of the split: the unit owns the arithmetic, the sim owns the
+	# decision.
+	var lone := UnitInstance.create(BoardModel.at_tier(martyr, 3), BoardModel.TEAM_A)
+	lone.take_damage(lone.current_hp + 1.0)
+	_check("dropped to zero with nothing watching, it is simply dead",
+		not lone.is_alive())
+
+	BoardModel.reset_map()
+	var board := BoardModel.new()
+	var hero := UnitInstance.create(BoardModel.at_tier(martyr, 3), BoardModel.TEAM_A)
+	board.force_place(hero, Vector2i(2, 1))
+	# A rooted, harmless body so nothing interferes: the only thing that can kill the
+	# Martyr in this fixture is the Martyr.
+	var post := UnitInstance.create(
+		BoardModel.at_tier(_must_find("spire"), 1), BoardModel.TEAM_B)
+	board.force_place(post, Vector2i(5, 9))
+	var sim := CombatSim.new()
+	sim.setup(board, 404)
+	_pin_in_place(hero)
+	var full_hp := hero.stat(StatModifier.Stat.MAX_HP)
+
+	_check("the window is worth the ability's own figure with no buffs",
+		is_equal_approx(sim.frenzy_seconds_of(hero, ab), ab.frenzy_seconds),
+		"%.2fs" % sim.frenzy_seconds_of(hero, ab))
+
+	# --- The bleed. Above the threshold nothing happens at all. ---
+	for i in 20:
+		sim.step()
+	_check("above the threshold it does not bleed",
+		is_equal_approx(hero.current_hp, full_hp),
+		"%.1f of %.1f" % [hero.current_hp, full_hp])
+
+	# Drop it just under the line and time the descent. 5% of max per second from
+	# 49% is a shade under ten seconds, and that figure is the whole cost of the rage.
+	hero.current_hp = full_hp * (ab.frenzy_threshold - 0.01)
+	var before := hero.current_hp
+	for i in 10:
+		sim.step()
+	_check("under the threshold it opens its own veins",
+		hero.current_hp < before - 0.01,
+		"%.2f from %.2f after a second" % [hero.current_hp, before])
+	var per_second := (before - hero.current_hp)
+	_check("at the stated share of its MAXIMUM, so it does not tail off",
+		absf(per_second - full_hp * ab.frenzy_decay) < full_hp * 0.005,
+		"%.2f/s against %.2f/s" % [per_second, full_hp * ab.frenzy_decay])
+
+	# --- The window. Run until the bleed finishes the job. ---
+	var steps := 0
+	while hero.current_hp > 0.0 and steps < 400:
+		sim.step()
+		steps += 1
+	_check("the bleed reaches zero on its own", is_zero_approx(hero.current_hp),
+		"%.2f left after %.1fs" % [hero.current_hp, float(steps) * CombatSim.TICK])
+	_check("and at zero health the Martyr is still standing",
+		hero.is_alive() and hero.is_frenzied(),
+		"alive %s, %.2fs of window" % [hero.is_alive(), hero.frenzy_left])
+	_check("it is still ON the board, not a ghost the board has forgotten",
+		board.unit_at(hero.cell) == hero)
+	_check("and the view was told, because an empty bar on a live unit reads as a bug",
+		_has_event(sim, "frenzy", hero.uid))
+
+	# What the window is worth. Measured against a fresh tier 3 at FULL health,
+	# because rage is already at its maximum here — the window is the extra on top.
+	var fresh := UnitInstance.create(BoardModel.at_tier(martyr, 3), BoardModel.TEAM_A)
+	var want_dmg := fresh.stat(StatModifier.Stat.ATTACK_DAMAGE) \
+		* (1.0 + ab.rage_per_missing) * (1.0 + ab.frenzy_damage)
+	_check("inside it, rage and the window multiply rather than replace",
+		absf(hero.stat(StatModifier.Stat.ATTACK_DAMAGE) - want_dmg) < 0.5,
+		"%.1f against %.1f" % [hero.stat(StatModifier.Stat.ATTACK_DAMAGE), want_dmg])
+	# MOVE_TIME is seconds per tile, so faster is SMALLER. The one stat in the game
+	# where a bonus that reads as a multiplication has to be a division.
+	# Read off THIS unit with the window shut and open again rather than compared to a
+	# fresh one, because this fixture has pinned the hero in place with a movement
+	# modifier of its own and the two numbers would not be comparable.
+	var open_move := hero.stat(StatModifier.Stat.MOVE_TIME)
+	var window_left := hero.frenzy_left
+	hero.frenzy_left = 0.0
+	var shut_move := hero.stat(StatModifier.Stat.MOVE_TIME)
+	hero.frenzy_left = window_left
+	_check("and the window is the one thing that makes it faster on its feet",
+		open_move < shut_move - 0.001, "%.3f against %.3f" % [open_move, shut_move])
+	# MOVE_TIME is seconds per tile, so the bonus DIVIDES. Written the other way round
+	# the last charge would be a crawl, which is the trap BuffData._signed exists for.
+	_check("by exactly the stated share, divided and not multiplied",
+		absf(open_move - shut_move / (1.0 + ab.frenzy_move)) < 0.01,
+		"%.3f against %.3f" % [open_move, shut_move / (1.0 + ab.frenzy_move)])
+	_check("its swings cut through the rank in front of it",
+		hero.pierce_now() == ab.frenzy_pierce,
+		"%d against %d" % [hero.pierce_now(), ab.frenzy_pierce])
+	_check("where an ordinary Martyr's swing hits one",
+		fresh.pierce_now() == 1, "%d" % fresh.pierce_now())
+
+	# Hitting it again inside the window must NOT restart the clock, or it never dies.
+	var left := hero.frenzy_left
+	hero.take_damage(full_hp * 10.0)
+	_check("a blow landed inside the window does not reopen it",
+		hero.frenzy_left <= left + 0.001 and hero.is_alive(),
+		"%.2fs against %.2fs, alive %s" % [hero.frenzy_left, left, hero.is_alive()])
+	_check("and it does not knock the unit into the DEAD state either",
+		hero.state != UnitInstance.State.DEAD)
+
+	# --- The window closing is a real death. ---
+	var more := 0
+	while hero.is_alive() and more < 400:
+		sim.step()
+		more += 1
+	_check("when the clock runs out it dies for real", not hero.is_alive())
+	_check("the window was about as long as advertised",
+		absf(float(more) * CombatSim.TICK - ab.frenzy_seconds) < 0.3,
+		"%.2fs against %.2fs" % [float(more) * CombatSim.TICK, ab.frenzy_seconds])
+	_check("the end of the window was announced",
+		_has_event(sim, "frenzy_end", hero.uid))
+	_check("and the ordinary death followed it, so everything hung off dying fires",
+		_has_event(sim, "death", hero.uid))
+	_check("the board let go of it", board.unit_at(hero.cell) != hero)
+
+
+func _has_event(sim: CombatSim, kind: String, uid: int) -> bool:
+	for e in sim.events:
+		if e.kind == kind and int(e.get("uid", -1)) == uid:
+			return true
+	return false
+
+
+func _test_the_martyr_only_gets_one_window() -> void:
+	_section("The Martyr: once per round, and a freeze takes it away")
+
+	var martyr := _must_find("martyr")
+	var ab: AbilityData = martyr.ability
+	if ab == null:
+		return
+
+	# Once per round. Without frenzy_spent every blow that landed during the window
+	# would restart it and the unit would be immortal.
+	BoardModel.reset_map()
+	var board := BoardModel.new()
+	var hero := UnitInstance.create(BoardModel.at_tier(martyr, 2), BoardModel.TEAM_A)
+	board.force_place(hero, Vector2i(2, 1))
+	board.force_place(UnitInstance.create(
+		BoardModel.at_tier(_must_find("spire"), 1), BoardModel.TEAM_B),
+		Vector2i(5, 9))
+	var sim := CombatSim.new()
+	sim.setup(board, 77)
+	_pin_in_place(hero)
+	# Started near the bottom rather than at full: the descent's RATE is measured in
+	# the fixture above, and all this one needs is the window at the end of it.
+	hero.current_hp = 1.0
+	var spent := 0
+	for i in 900:
+		sim.step()
+		if hero.is_frenzied():
+			spent += 1
+		if not hero.is_alive():
+			break
+	_check("it bled out and burned its window without any help", hero.frenzy_spent)
+	_check("and it is dead at the end of it", not hero.is_alive())
+	var opened := 0
+	for e in sim.events:
+		if e.kind == "frenzy" and int(e.uid) == hero.uid:
+			opened += 1
+	_check("the window opened exactly once", opened == 1, "%d times" % opened)
+
+	# The round boundary gives it back — reset_for_battle is what makes the unit
+	# playable in a match rather than a one-round trick.
+	hero.reset_for_battle()
+	_check("the round boundary clears the spend",
+		not hero.frenzy_spent and is_zero_approx(hero.frenzy_left))
+
+	# A freeze cancels the window, the same way it cancels a revive. This is the
+	# unit's real counter and it is worth pinning: _fell gates the frenzy on the
+	# same `frozen` flag the revive roll is gated on, so if one ever drifts from
+	# the other this is what says so.
+	BoardModel.reset_map()
+	var cold_board := BoardModel.new()
+	var chilled := UnitInstance.create(
+		BoardModel.at_tier(martyr, 2), BoardModel.TEAM_A)
+	cold_board.force_place(chilled, Vector2i(2, 1))
+	cold_board.force_place(UnitInstance.create(
+		BoardModel.at_tier(_must_find("spire"), 1), BoardModel.TEAM_B),
+		Vector2i(5, 9))
+	var cold_sim := CombatSim.new()
+	cold_sim.setup(cold_board, 78)
+	_pin_in_place(chilled)
+	# Frozen for long enough to cover the bleed's last moments, then walked down.
+	chilled.current_hp = 1.0
+	# Planted straight onto the unit rather than cast, so the fixture needs no Stasis
+	# standing in it: the sim reads frozen_left and does not care who wrote it.
+	chilled.frozen_left = 30.0
+	chilled.frozen_amp = 1.0
+	for i in 200:
+		cold_sim.step()
+		if not chilled.is_alive():
+			break
+	_check("a Martyr killed while frozen gets no window at all",
+		not chilled.is_alive() and not chilled.is_frenzied(),
+		"alive %s, frenzied %s" % [chilled.is_alive(), chilled.is_frenzied()])
+	_check("and no window was ever announced for it",
+		not _has_event(cold_sim, "frenzy", chilled.uid))
+
+
+func _test_rapture() -> void:
+	_section("Rapture: the Martyr's buff")
+
+	var pool := _pool()
+	var buff := pool.by_id(&"rapture")
+	_check("Rapture is on disk", buff != null)
+	if buff == null:
+		return
+	_check("it belongs to the Martyr", buff.unit_id == &"martyr")
+	_check("it is attack damage and attack speed, the two the unit already scales",
+		buff.stat_a == StatModifier.Stat.ATTACK_DAMAGE
+		and buff.stat_b == StatModifier.Stat.ATTACK_SPEED
+		and buff.uses_second_stat)
+	# The figures the user asked for, verbatim: 50/20, 100/40, 200/60.
+	_check("bronze is 50% damage and 20% attack speed",
+		is_equal_approx(buff.bronze.x, 0.50) and is_equal_approx(buff.bronze.y, 0.20),
+		"%s" % buff.bronze)
+	_check("silver doubles the damage and the speed",
+		is_equal_approx(buff.silver.x, 1.00) and is_equal_approx(buff.silver.y, 0.40),
+		"%s" % buff.silver)
+	_check("gold is the big one: 200% damage, 60% attack speed",
+		is_equal_approx(buff.gold.x, 2.00) and is_equal_approx(buff.gold.y, 0.60),
+		"%s" % buff.gold)
+
+	# The gold-only rider. Same shape as the Paragon's empowered cap: a non-stat
+	# effect hanging off a stat buff, which is why the card has to name it at every
+	# rarity rather than springing it on the third pick.
+	_check("gold carries five seconds of death immunity",
+		is_equal_approx(buff.frenzy_seconds_at_gold, 5.0),
+		"%.1fs" % buff.frenzy_seconds_at_gold)
+	for r in [BuffData.Rarity.BRONZE, BuffData.Rarity.SILVER, BuffData.Rarity.GOLD]:
+		_check("the %s card mentions the window" % BuffData.rarity_name(r),
+			buff.describe(r).to_lower().contains("zero health"),
+			buff.describe(r))
+
+	var martyr := _must_find("martyr")
+	var ab: AbilityData = martyr.ability
+	var u := UnitInstance.create(BoardModel.at_tier(martyr, 3), BoardModel.TEAM_A)
+
+	for r in [BuffData.Rarity.BRONZE, BuffData.Rarity.SILVER]:
+		var tb := TeamBuffs.new()
+		tb.add(buff, r)
+		_check("%s does NOT lengthen the window" % BuffData.rarity_name(r),
+			is_zero_approx(tb.frenzy_seconds_for(u)),
+			"%.1fs" % tb.frenzy_seconds_for(u))
+	var gold := TeamBuffs.new()
+	gold.add(buff, BuffData.Rarity.GOLD)
+	_check("gold does",
+		is_equal_approx(gold.frenzy_seconds_for(u), 5.0),
+		"%.1fs" % gold.frenzy_seconds_for(u))
+	# And it does not leak onto anybody else's Martyr-shaped unit.
+	var other := UnitInstance.create(
+		BoardModel.at_tier(_must_find("reaver"), 3), BoardModel.TEAM_A)
+	_check("and only for the unit it names",
+		is_zero_approx(gold.frenzy_seconds_for(other)),
+		"%.1fs" % gold.frenzy_seconds_for(other))
+
+	# Through the sim, because the thing that keeps going wrong here is a rule
+	# nothing calls. A number in the data that the sim never reads is the failure
+	# mode this whole file exists to catch.
+	BoardModel.reset_map()
+	var board := BoardModel.new()
+	var hero := UnitInstance.create(BoardModel.at_tier(martyr, 3), BoardModel.TEAM_A)
+	board.force_place(hero, Vector2i(2, 1))
+	board.force_place(UnitInstance.create(
+		BoardModel.at_tier(_must_find("spire"), 1), BoardModel.TEAM_B),
+		Vector2i(5, 9))
+	var sim := CombatSim.new()
+	sim.team_buffs[BoardModel.TEAM_A] = gold
+	sim.setup(board, 909)
+	_pin_in_place(hero)
+	_check("the sim reads the rider and lengthens the window",
+		is_equal_approx(sim.frenzy_seconds_of(hero, ab), 5.0),
+		"%.2fs" % sim.frenzy_seconds_of(hero, ab))
+	hero.current_hp = 1.0
+	var opened_at := -1.0
+	var closed_at := -1.0
+	for i in 400:
+		sim.step()
+		if hero.is_frenzied() and opened_at < 0.0:
+			opened_at = float(i) * CombatSim.TICK
+		if opened_at >= 0.0 and not hero.is_alive():
+			closed_at = float(i) * CombatSim.TICK
+			break
+	_check("and it actually stood there for five seconds, not two and a half",
+		opened_at >= 0.0 and closed_at > opened_at
+			and absf(closed_at - opened_at - 5.0) < 0.4,
+		"%.2fs standing" % (closed_at - opened_at))
+
+
+func _test_the_martyrs_last_swing_cuts_through() -> void:
+	_section("The Martyr: the window's swing, through the simulation")
+
+	var martyr := _must_find("martyr")
+	var ab: AbilityData = martyr.ability
+	if ab == null:
+		return
+
+	# This exists because pierce_now() returning 3 proves nothing on its own: the
+	# recurring failure in this codebase is a function that works perfectly and that
+	# nothing calls. _begin_attack used to read u.data.pierce_targets directly, and a
+	# test on the unit would have passed the whole time.
+	var hits_while_frenzied := _martyr_swing_reach(true)
+	var hits_when_whole := _martyr_swing_reach(false)
+	_check("an ordinary Martyr's swing lands on one enemy",
+		hits_when_whole == 1, "%d hit" % hits_when_whole)
+	_check("inside the window one swing reaches three",
+		hits_while_frenzied == ab.frenzy_pierce,
+		"%d hit, wanted %d" % [hits_while_frenzied, ab.frenzy_pierce])
+
+
+func _martyr_swing_reach(frenzied: bool) -> int:
+	## Stands a Martyr at the head of a column of three harmless, rooted bodies and
+	## returns how many of them one swing touched. Spires because they cannot hit
+	## back and cannot step out of the line — the count has to be about the swing.
+	BoardModel.reset_map()
+	var board := BoardModel.new()
+	var hero := UnitInstance.create(
+		BoardModel.at_tier(_must_find("martyr"), 3), BoardModel.TEAM_A)
+	board.force_place(hero, Vector2i(2, 3))
+	var posts: Array[int] = []
+	for row in [4, 5, 6]:
+		var post := UnitInstance.create(
+			BoardModel.at_tier(_must_find("spire"), 6), BoardModel.TEAM_B)
+		board.force_place(post, Vector2i(2, row))
+		posts.append(post.uid)
+	var sim := CombatSim.new()
+	sim.setup(board, 515)
+	if frenzied:
+		# Planted rather than earned: the window's own opening is tested above, and
+		# doing it by hand keeps this fixture about the swing. frenzy_spent has to go
+		# with it or _tick_frenzy would run the clock out, kill the unit, and _fell
+		# would open a fresh window — forever.
+		hero.current_hp = 0.0
+		hero.frenzy_left = 6.0
+		hero.frenzy_spent = true
+	var struck := {}
+	var first_swing := -1
+	for i in 60:
+		sim.step()
+		for e in sim.events:
+			if e.kind != "damage" or int(e.get("source_uid", -1)) != hero.uid:
+				continue
+			if first_swing < 0:
+				first_swing = i
+			if int(e.uid) in posts:
+				struck[int(e.uid)] = true
+		if first_swing >= 0 and i > first_swing:
+			break
+	return struck.size()
+
+
+func _test_the_martyrs_numbers_are_the_measured_ones() -> void:
+	_section("The Martyr: the tuned figures, pinned")
+
+	# Every number here was measured, and two of them were measured twice because the
+	# first answer was wrong. They are pinned so a casual edit cannot quietly undo the
+	# tuning — if one of these fails, the right response is to re-run
+	# tools/measure_martyr.gd and put the new table in the data_builder comment, not to
+	# change the figure here to match.
+	var martyr := _must_find("martyr")
+	var one := BoardModel.at_tier(martyr, 1)
+	_check("the body is the feeble one: 130 health at tier 1",
+		is_equal_approx(one.max_hp, 130.0), "%.0f" % one.max_hp)
+	_check("and 6 damage, which is down among the casters",
+		is_equal_approx(one.attack_damage, 6.0), "%.1f" % one.attack_damage)
+	# The point of the feeble swing: a Martyr that wins fights at full health never gets
+	# ground down, so the strong first build reached its own window in only 72% of
+	# rounds against 94% for this one. It does not have to be THE softest — the Pyre,
+	# the Conjurer and the Pariah all swing softer, and all three are casters whose
+	# swing is beside the point — but it has to be down at that end, or the unit is a
+	# fighter with a comeback mechanic bolted on rather than the comeback itself.
+	var mine := one.attack_damage * one.attack_speed
+	var softer := 0
+	var fighters := 0
+	for other in _roster().units:
+		if not other.can_attack:
+			continue
+		fighters += 1
+		if other.id == martyr.id:
+			continue
+		var theirs := BoardModel.at_tier(other, 1)
+		if theirs.attack_damage * theirs.attack_speed < mine - 0.001:
+			softer += 1
+	_check("its swing is in the softest handful in the game",
+		fighters > 20 and softer <= 4,
+		"%d of %d fighters swing softer" % [softer, fighters])
+
+	var ab: AbilityData = martyr.ability
+	if ab == null:
+		return
+	_check("the bleed is a fortieth of the bar a second",
+		is_equal_approx(ab.frenzy_decay, 0.025), "%.4f" % ab.frenzy_decay)
+	_check("which is twenty seconds from the threshold to zero",
+		absf(ab.frenzy_threshold / ab.frenzy_decay - 20.0) < 0.01,
+		"%.1fs" % (ab.frenzy_threshold / ab.frenzy_decay))
+	_check("the threshold is half health, as asked",
+		is_equal_approx(ab.frenzy_threshold, 0.50), "%.2f" % ab.frenzy_threshold)
+	_check("the window is two and a half seconds, as asked",
+		is_equal_approx(ab.frenzy_seconds, 2.5), "%.2f" % ab.frenzy_seconds)
+	_check("and it cuts through three, as asked",
+		ab.frenzy_pierce == 3, "%d" % ab.frenzy_pierce)
+	# The card has to state the bleed rate it actually has. The description is written
+	# by hand in the data table, so it is the one field that can drift from the number
+	# beside it without anything noticing.
+	_check("the card quotes the bleed rate it actually uses",
+		ab.describe().contains("%.1f%%" % (ab.frenzy_decay * 100.0)),
+		ab.describe())
+
+
+func _test_a_stale_buff_on_disk_is_not_in_the_game() -> void:
+	_section("A deleted buff stays deleted")
+
+	# Found on a live copy of the game, not in a test. BuffPool built its pool by
+	# reading the folder, and the data builder only deletes orphans in the copy it is
+	# run against — so a machine that had ever held an older build still had seven cut
+	# buffs sitting in data/buffs, and its game was still offering them. Every test
+	# passed the whole time, because the machine the tests run on has a clean folder.
+	#
+	# Units never had this problem: a unit is in the game because roster.tres names it,
+	# so a stale unit file is inert. This is buffs being given the same contract, and
+	# this test is the folder being deliberately dirtied to prove it holds.
+	var index: BuffIndex = load("res://data/buffs/index.tres") as BuffIndex
+	_check("there is an index of the buffs that exist", index != null
+		and not index.ids.is_empty(),
+		"%d ids" % (0 if index == null else index.ids.size()))
+	if index == null:
+		return
+
+	var pool := _pool()
+	_check("the pool holds exactly what the index names",
+		pool.buffs.size() == index.ids.size(),
+		"%d loaded against %d named" % [pool.buffs.size(), index.ids.size()])
+	for id in index.ids:
+		_check("the index's %s loaded" % id, pool.by_id(id) != null)
+
+	# Dirty a scratch folder the way a real machine gets dirty: a live buff, an index
+	# that does not mention the second file, and a cut buff left behind.
+	var dir_path := "user://stale_buff_test"
+	DirAccess.make_dir_recursive_absolute(dir_path)
+	var live := load("res://data/buffs/%s.tres" % index.ids[0]) as BuffData
+	var ghost := live.duplicate() as BuffData
+	ghost.id = &"a_buff_that_was_cut"
+	ghost.display_name = "Cut Buff"
+	ResourceSaver.save(live, "%s/%s.tres" % [dir_path, index.ids[0]])
+	ResourceSaver.save(ghost, "%s/a_buff_that_was_cut.tres" % dir_path)
+	var only := BuffIndex.new()
+	only.ids = [index.ids[0]] as Array[StringName]
+	ResourceSaver.save(only, "%s/index.tres" % dir_path)
+
+	var dirty := BuffPool.new()
+	var found := dirty.load_all(dir_path)
+	_check("a cut buff left in the folder is not loaded", found == 1,
+		"%d loaded" % found)
+	_check("and cannot be found by id",
+		dirty.by_id(&"a_buff_that_was_cut") == null)
+	_check("while the one the index names still is",
+		dirty.by_id(index.ids[0]) != null)
+	# The pool is what the picker draws from, so the folder file must not reach it there
+	# either — by_id() being clean is not the same claim.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	var offered_ghost := false
+	for i in 40:
+		for b in dirty.offer(rng, 3, [], {}):
+			if b.id == &"a_buff_that_was_cut":
+				offered_ghost = true
+	_check("and it is never offered as a pick", not offered_ghost)
+
+	# The fallback matters as much as the rule. A folder with no index at all still has
+	# to work, or regenerating data out of order bricks the game rather than degrading.
+	var no_index := "user://stale_buff_no_index"
+	DirAccess.make_dir_recursive_absolute(no_index)
+	ResourceSaver.save(live, "%s/%s.tres" % [no_index, index.ids[0]])
+	var scanned := BuffPool.new()
+	_check("with no index at all it falls back to reading the folder",
+		scanned.load_all(no_index) == 1, "%d loaded" % scanned.buffs.size())
+
+
+func _test_the_charge_takes_time_to_arrive() -> void:
+	_section("The charge is a journey, and picks its victim at the end of it")
+
+	var breaker := _must_find("breaker")
+	var ab: AbilityData = breaker.ability
+	if ab == null:
+		return
+	_check("Onslaught has a travel time at all", ab.charge_tile_seconds > 0.0,
+		"%.2fs a tile" % ab.charge_tile_seconds)
+	# Faster than walking or it is not a charge; slower than instant or there is no
+	# interval to see it coming in. Compared against the Breaker's OWN legs, which is
+	# the honest comparison — it is the thing doing the running.
+	var walk := UnitInstance.create(BoardModel.at_tier(breaker, 3),
+		BoardModel.TEAM_A).stat(StatModifier.Stat.MOVE_TIME)
+	_check("and it is clearly faster than the same unit walking",
+		ab.charge_tile_seconds < walk * 0.6,
+		"%.2fs a tile against %.2fs on foot" % [ab.charge_tile_seconds, walk])
+
+	# The victim is chosen ON ARRIVAL. This is the whole change, and the fixture is built
+	# so that the answer differs between the two rules: the unit that is in the lane when
+	# the charge sets off is NOT the one standing there when it lands.
+	BoardModel.reset_map()
+	var board := BoardModel.new()
+	var runner := UnitInstance.create(
+		BoardModel.at_tier(breaker, 3), BoardModel.TEAM_A)
+	board.force_place(runner, Vector2i(2, 1))
+	# Rooted and harmless, four tiles down the lane: the one the old rule would have
+	# picked at the moment of the cast.
+	var decoy := UnitInstance.create(
+		BoardModel.at_tier(_must_find("spire"), 3), BoardModel.TEAM_B)
+	board.force_place(decoy, Vector2i(2, 5))
+	board.force_place(UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 1), BoardModel.TEAM_B),
+		Vector2i(5, 9))
+	var sim := CombatSim.new()
+	sim.crit_chance = 0.0
+	sim.setup(board, 91)
+	_check("at the bell it has done nothing yet", runner.is_charging()
+		and runner.cell == Vector2i(2, 1), "at %s" % runner.cell)
+
+	# Take the decoy off the board mid-run — the same thing that happens when a unit
+	# simply walks out of the column, done deliberately so the test does not depend on
+	# anybody's pathing.
+	sim.step()
+	sim.step()
+	var moved_out := board.move_unit(decoy, Vector2i(3, 5))
+	_check("the decoy left the lane while the charge was still running",
+		moved_out and runner.is_charging(),
+		"moved %s, charging %s" % [moved_out, runner.is_charging()])
+	var decoy_full := decoy.effective_hp()
+	_finish_charge(sim, runner)
+	_check("so the charge misses it entirely",
+		is_equal_approx(decoy.effective_hp(), decoy_full)
+		and not decoy.is_stunned(),
+		"%.0f of %.0f, stunned %s" % [decoy.effective_hp(), decoy_full,
+			decoy.is_stunned()])
+	_check("and runs on down the empty lane instead", runner.cell.y > 5,
+		"ended at %s" % runner.cell)
+
+	# A freeze knocks it out of the run. This is the counterplay the travel time buys and
+	# it is worth pinning, because it only exists while the charge has a duration.
+	BoardModel.reset_map()
+	var cold := BoardModel.new()
+	var chased := UnitInstance.create(
+		BoardModel.at_tier(breaker, 3), BoardModel.TEAM_A)
+	cold.force_place(chased, Vector2i(2, 1))
+	var prey := UnitInstance.create(
+		BoardModel.at_tier(_must_find("spire"), 6), BoardModel.TEAM_B)
+	cold.force_place(prey, Vector2i(2, 8))
+	var cold_sim := CombatSim.new()
+	cold_sim.setup(cold, 92)
+	cold_sim.step()
+	chased.frozen_left = 5.0
+	chased.frozen_amp = 1.0
+	var where := chased.cell
+	var prey_full := prey.effective_hp()
+	for i in 60:
+		cold_sim.step()
+	_check("a freeze stops the charge dead", not chased.is_charging())
+	_check("it does not carry on across the board while frozen",
+		BoardModel.tile_distance(chased.cell, where) <= 1,
+		"from %s to %s" % [where, chased.cell])
+	_check("and what it was running at is untouched",
+		is_equal_approx(prey.effective_hp(), prey_full),
+		"%.0f of %.0f" % [prey.effective_hp(), prey_full])
+
+	# The events the view needs, in the order it needs them. A charge that emitted its
+	# damage before its steps would put the slam on screen before the runner arrived,
+	# which is the exact bug the old view had to paper over with a cursor hold.
+	var start_t := -1.0
+	var steps := 0
+	var end_t := -1.0
+	var hit_t := -1.0
+	for e in sim.events:
+		if int(e.get("uid", -1)) != runner.uid:
+			continue
+		match e.kind:
+			"charge":
+				start_t = float(e.t)
+			"charge_step":
+				steps += 1
+			"charge_end":
+				end_t = float(e.t)
+			"ability":
+				hit_t = float(e.t)
+	_check("the view is told the run has started", start_t >= 0.0)
+	_check("and gets a step per tile rather than one jump to the far end",
+		steps > 1, "%d steps" % steps)
+	_check("and is told when it is over", end_t > start_t,
+		"start %.2f, end %.2f" % [start_t, end_t])

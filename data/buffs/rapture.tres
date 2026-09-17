@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_7ncdr"]
+
+[resource]
+script = ExtResource("1_7ncdr")
+id = &"rapture"
+display_name = "Rapture"
+unit_id = &"martyr"
+frenzy_seconds_at_gold = 5.0
+bronze = Vector2(0.5, 0.2)
+silver = Vector2(1, 0.4)
+gold = Vector2(2, 0.6)
+stat_b = 2
+uses_second_stat = true

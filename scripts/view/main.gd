@@ -174,6 +174,7 @@ func _ready() -> void:
 
 	_picker = BuffPicker.new()
 	_picker.picked.connect(_on_buff_picked)
+	_picker.rerolled.connect(_on_buff_rerolled)
 	$UI/Root.add_child(_picker)
 
 	_handover = HandoverScreen.new()
@@ -252,8 +253,23 @@ func _build_buff_bars() -> void:
 	_force.vertical = true
 	_force.mine_name = GameSetup.short_name(PLAYER_TEAM)
 	_force.theirs_name = GameSetup.short_name(AI_TEAM)
-	_force.position = Vector2(origin.x + board_w + FORCE_GAP, origin.y)
-	_force.size = Vector2(FORCE_WIDTH, board_h)
+	# Aligned to the VISIBLE board: the board's drawn rect clipped to the slot it is
+	# drawn in. Two failures, one from each direction, and it has to avoid both.
+	#
+	# Sized to the SLOT, a short map leaves the bar floating past both ends of the
+	# board, and it stops reading as "this half is yours". Sized to the BOARD, a map
+	# taller than the window — the Labyrinth is twenty-four rows — makes the bar
+	# taller than the screen. The intersection is what the player can actually see,
+	# which is what BoardMask windows the board down to anyway.
+	#
+	# The buff bars above and below stay on the slot, so the horizontal HUD never
+	# moves between maps. Only this one has to line up row for row.
+	var shown := Rect2(_board_view.position,
+		_board_view.board_size()).intersection(BOARD_AREA)
+	if shown.size.y <= 0.0:
+		shown = BOARD_AREA
+	_force.position = Vector2(origin.x + board_w + FORCE_GAP, shown.position.y)
+	_force.size = Vector2(FORCE_WIDTH, shown.size.y)
 	_force.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_force.visible = false
 	$UI/Root.add_child(_force)
@@ -403,22 +419,21 @@ func _begin_prep() -> void:
 	if not _pvp():
 		_ai_merge_pass()
 
-	_refresh_music()
 	_prep_queue = _human_teams()
 	_open_prep_turn(_prep_queue[0], int(placed[_prep_queue[0]]))
 
 
 func _refresh_music() -> void:
 	music_checks += 1
-	# Checked at the top of every prep phase, once the round's units are on the
-	# board — which is the earliest the answer is knowable and the latest it is
-	# still useful, since the player is about to look at the board and see the
-	# thing the music is announcing.
+	# Checked at ROUND START, not during prep, and the difference is the whole of
+	# why this rule used to look broken.
 	#
-	# Merging up to a tier 6 mid-prep does not switch the track. That is
-	# deliberate: the music changing under a drag would be a jolt in the middle of
-	# the one part of the game that wants a steady head, and the next round will
-	# pick it up.
+	# It was asked at the top of the prep phase, which is before the player has
+	# touched anything — and a tier 6 only ever comes from a MERGE, which happens
+	# during prep. So the round you finally built your tier 6 was the one round
+	# guaranteed to play an ordinary battle theme, and the announcement arrived a
+	# round late, attached to nothing. Asked here, the answer is about the board
+	# the fight is actually being fought on.
 	if not GameSetup.is_boss_round(board):
 		Audio.play_music(_match_track)
 		return
@@ -651,7 +666,18 @@ func _open_buff_pick() -> void:
 	_show_picker_for(_pick_queue[0])
 
 
-func _show_picker_for(team: int) -> void:
+## Rerolls a player gets per buff pick. One: enough to rescue a hand of three
+## buffs that suit none of your units, not enough to shop for the best in the pool.
+const REROLLS_PER_PICK := 1
+
+
+func _on_buff_rerolled() -> void:
+	# Same team, same rarity, three new cards. The rng is the match's own, so a
+	# replay of the same match with the same clicks still comes out identical.
+	_show_picker_for(_active_team, false)
+
+
+func _show_picker_for(team: int, fresh := true) -> void:
 	var options := _buffs.offer(_buff_rng, BuffPool.OPTIONS, _taken_ids(team),
 		_fielded_ids(team), _pick_rarity)
 	if options.is_empty():
@@ -665,7 +691,8 @@ func _show_picker_for(team: int) -> void:
 	_refresh_hud()
 	_refresh_buff_bars()
 	_picker.open(options, _pick_rarity, MatchState.round_index,
-		_odds_note(_pick_rarity), GameSetup.team_name(team) if _pvp() else "")
+		_odds_note(_pick_rarity), GameSetup.team_name(team) if _pvp() else "",
+		REROLLS_PER_PICK if fresh else -1)
 
 
 func _finish_buff_pick() -> void:
@@ -700,6 +727,10 @@ func _taken_ids(team: int) -> Array:
 	for p in _buffs_for(team).picks:
 		if int(p.rarity) == int(_pick_rarity):
 			out.append(p.buff.id)
+	# And whatever a custom match has switched off. Folded in here rather than
+	# filtered out of the pool, because BuffPool.offer() already takes exclusions and
+	# a second filtering mechanism would be a second thing to keep in step.
+	out.append_array(GameSetup.banned_buffs())
 	return out
 
 
@@ -847,6 +878,9 @@ func _start_battle() -> void:
 	_board_view.player_team = PLAYER_TEAM
 	battle_running = false
 	_resync_buffs()
+	# Before the phase flips, so the boss theme is already playing under the
+	# "Steady..." banner rather than arriving after the first blow.
+	_refresh_music()
 	MatchState.set_phase(MatchState.Phase.BATTLE)
 	_fight_btn.disabled = true
 
@@ -856,6 +890,11 @@ func _start_battle() -> void:
 
 	_last_sim = CombatSim.new()
 	_last_sim.team_buffs = _team_buffs
+	# The clock, handed down as plain numbers. The simulation never reads GameSetup —
+	# the combat layer sits below this one — so a custom round length arrives here or
+	# not at all.
+	_last_sim.sudden_death = GameSetup.sudden_death_at()
+	_last_sim.timeout = GameSetup.round_timeout()
 	_last_sim.setup(board, MatchState.round_seed())
 	EventBus.battle_started.emit(MatchState.round_seed())
 

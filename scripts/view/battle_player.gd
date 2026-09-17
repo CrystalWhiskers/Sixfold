@@ -13,6 +13,11 @@ const MELEE_REACH := 1.5
 const MIN_CAST_SHOW := 0.32
 const BEAM_COLOR := Color(0.72, 0.90, 1.0)
 
+## How long the Assassin is visibly wrapped in its cloak before it jumps. The
+## simulation resolves the vanish and the strike in the same instant; this is the
+## beat that lets a viewer read the order they happened in.
+const CLOAK_BEAT := 0.22
+
 @export var speed := 1.0
 
 var _view: BoardView = null
@@ -39,6 +44,26 @@ var _flight: Dictionary = {}
 var _deferred: Array[Dictionary] = []
 var _counts: Array[int] = [0, 0]
 
+## Seconds the event cursor is pinned for while something that takes TIME on
+## screen but no time in the simulation finishes happening.
+##
+## The simulation resolves a cloak-then-blink in a single instant: the Assassin is
+## already behind its target and the damage is already dealt before the first frame is
+## drawn, so playing it back honestly would show it reappear before it had vanished.
+## Holding the cursor postpones EVERYTHING that follows, which is the only version of
+## this that cannot desync — a per-event delay has to be plumbed into every kind of
+## event the held moment might be followed by (damage, stun, death, the next cast) and
+## silently gets it wrong for whichever one nobody remembered.
+##
+## The cost is that other units freeze for the length of the hold, which is acceptable
+## because it is short and happens at the opening bell where nothing else has started.
+##
+## The Breaker's charge used to need this too and no longer does: the simulation now
+## takes real seconds to cross the lane, so the damage genuinely arrives later in the
+## log than the run did and there is nothing to paper over. If a hold is ever added
+## back for a charge, it is a sign the travel time has been removed.
+var _hold := 0.0
+
 
 func play(view: BoardView, events: Array[Dictionary], units := {}) -> void:
 	_view = view
@@ -54,6 +79,7 @@ func play(view: BoardView, events: Array[Dictionary], units := {}) -> void:
 	_lunges.clear()
 	_flight.clear()
 	_deferred.clear()
+	_hold = 0.0
 	_counts = [0, 0]
 	# Last round's zones are not this round's. Cleared here rather than at the end
 	# of playback, so the board still shows them during the round-end hold.
@@ -88,16 +114,24 @@ func _process(delta: float) -> void:
 		return
 	_clock += delta * speed
 
-	while _cursor < _events.size() and _events[_cursor].t <= _clock:
-		_apply(_events[_cursor])
-		_cursor += 1
+	if _hold > 0.0:
+		# The clock keeps running so an in-flight charge or a cloak animates, but
+		# nothing new is read off the log until the held moment is over.
+		_hold -= delta * speed
+	else:
+		while _cursor < _events.size() and _events[_cursor].t <= _clock:
+			_apply(_events[_cursor])
+			_cursor += 1
+			if _hold > 0.0:
+				break
 
 	_advance_moves()
 	_advance_lunges(delta)
 	_advance_deferred()
 	_place_views()
 
-	if _cursor >= _events.size() and _moves.is_empty() and _deferred.is_empty():
+	if (_cursor >= _events.size() and _moves.is_empty() and _deferred.is_empty()
+			and _hold <= 0.0):
 		_playing = false
 		_view.playback = false
 		set_process(false)
@@ -114,7 +148,8 @@ func _apply(e: Dictionary) -> void:
 				sv.set_hp(float(e.hp), float(e.max_hp))
 				sv.has_ability = bool(e.get("has_ability", false))
 				sv.set_mana(0.0)
-				sv.set_shield(0.0)
+				# From the event, not zero: a unit can already be shielded at the bell.
+				sv.set_shield(float(e.get("shield", 0.0)))
 		"move":
 			_moves[e.uid] = {
 				from = _board(e.from),
@@ -140,7 +175,7 @@ func _apply(e: Dictionary) -> void:
 			# the tile is readable the whole time the unit is missing its turns.
 			var fv := _view.view_for(e.uid)
 			if fv != null:
-				fv.queue_redraw()
+				fv.hold(UnitView.HELD_FROZEN, float(e.seconds) / maxf(speed, 0.01))
 			_view.flash_cells([e.cell], Color(0.60, 0.82, 0.95, 0.50),
 				maxf(float(e.seconds), 0.4))
 			_view.spawn_label(_view.cell_to_pos(e.cell), "FROZEN",
@@ -153,7 +188,7 @@ func _apply(e: Dictionary) -> void:
 		"thaw":
 			var tv := _view.view_for(e.uid)
 			if tv != null:
-				tv.queue_redraw()
+				tv.release(UnitView.HELD_FROZEN)
 		"isolated":
 			# Fired at the bell, before anything has moved, so the player finds out
 			# whether their placement worked at the one moment they can still learn
@@ -201,29 +236,76 @@ func _apply(e: Dictionary) -> void:
 		"field_down":
 			pass
 		"charge":
-			# The lane it ran down, lit for a beat. Drawn before the unit is moved so
-			# the streak reads as "it came from there", and the unit's own view is
-			# snapped to the far end rather than walked — a charge is not a walk and
-			# animating it as one would make it look like an ordinary advance.
+			# The lane the charge is ABOUT to run, lit as a warning rather than as a
+			# record of where it went. The simulation now takes real seconds to cross it
+			# and chooses its victim on arrival, so this is the one moment where showing
+			# the player the lane actually matters: anything standing in it has until the
+			# runner arrives to be somewhere else.
+			#
+			# Held for the length of the whole run, worked out from the event, so the
+			# warning is up for exactly as long as the threat is real.
 			var lane: Array[Vector2i] = []
 			for c in e.get("cells", []):
 				lane.append(c)
-			_view.flash_cells(lane, Color(0.98, 0.62, 0.28, 0.42), 0.45)
-			_pos[e.uid] = _board(e.to)
-			_moves.erase(e.uid)
-			var cv := _view.view_for(e.uid)
-			if cv != null:
-				cv.position = (_pos[e.uid] as Vector2) * _view.tile_size
+			var warn := float(e.get("per_tile", 0.0)) * float(lane.size())
+			_view.flash_cells(lane, Color(0.98, 0.62, 0.28, 0.42),
+				maxf(warn / maxf(speed, 0.01), 0.45))
+		"charge_step":
+			# One tile of the run. Linear on purpose: a charge has no wind-up and no
+			# settle, and easing each tile would make it look like it kept changing its
+			# mind. No _hold anywhere here — the simulation's own timing is what keeps
+			# the impact honest now, because the damage really does arrive later in the
+			# log than the first step did.
+			_moves[int(e.uid)] = {
+				from = _board(e.from),
+				to = _board(e.to),
+				start = _clock,
+				duration = maxf(float(e.get("duration", 0.0)) / maxf(speed, 0.01), 0.01),
+				linear = true,
+			}
+		"charge_end":
+			var cev := _view.view_for(int(e.uid))
+			if cev != null:
+				cev.queue_redraw()
 			if bool(e.get("hit", false)):
 				# The lunge sells the impact, pointed the way it was running.
-				_lunges[e.uid] = {
-					dir = Vector2(charge_step(e)),
-					left = LUNGE_TIME,
-				}
+				_lunges[int(e.uid)] = {
+					dir = Vector2(e.get("dir", Vector2i.ZERO)), left = LUNGE_TIME}
+		"possess":
+			_possess(e)
+		"husk":
+			_husk(e)
+		"shield_gone":
+			# The bar has already been zeroed by the "shield" event that came with
+			# this one; this is the feedback that says WHY it went, which matters
+			# because a shield fizzling and a shield being chewed through look
+			# identical on the bar.
+			_view.spawn_label(_at(int(e.uid), e.cell), "SHIELD GONE",
+				Color(0.70, 0.76, 0.86))
+		"possess_end":
+			# The grip ran out and the host is its owner's again. The bar and the
+			# team ring both have to come back, and the health may have dropped: a
+			# handed-back host loses the forced tier and the thief's buff with it.
+			_hp[int(e.uid)] = {cur = float(e.hp), max = float(e.max_hp)}
+			var rv := _view.view_for(int(e.uid))
+			if rv != null:
+				rv.set_hp(float(e.hp), float(e.max_hp))
+				rv.queue_redraw()
+			_view.spawn_label(_at(int(e.uid), e.cell), "FREED",
+				Color(0.72, 0.88, 0.72))
+		"backlash":
+			_view.flash_cells([e.cell, e.target_cell],
+				Color(0.58, 0.34, 0.72, 0.55), 0.5)
+			_view.spawn_label(_at(int(e.uid), e.cell), "REJECTED",
+				Color(0.72, 0.52, 0.88))
 		"stun":
 			var stv := _view.view_for(e.uid)
 			if stv != null:
-				stv.queue_redraw()
+				# The mark on the UNIT, driven off the event and its duration. The
+				# redraw that used to be here on its own did nothing: UnitView had
+				# nothing to draw, and anything it read off the unit would have been
+				# the unit's state at the END of the round.
+				stv.hold(UnitView.HELD_STUNNED, float(e.seconds) / maxf(speed, 0.01))
 			# Held for as long as the stun lasts, the same as the freeze tile, so the
 			# whole time the unit is missing its turns is readable.
 			_view.flash_cells([e.cell], Color(0.98, 0.82, 0.42, 0.42),
@@ -233,7 +315,23 @@ func _apply(e: Dictionary) -> void:
 		"stun_end":
 			var ev2 := _view.view_for(e.uid)
 			if ev2 != null:
-				ev2.queue_redraw()
+				ev2.release(UnitView.HELD_STUNNED)
+		"frenzy":
+			# The Martyr hit zero and did not fall. Nothing else in the game leaves a
+			# unit standing on an empty bar, so this needs to be unmistakable — and it
+			# has to come off the event, because the unit's own frenzy_left is the
+			# end-of-round value during playback.
+			var fzv := _view.view_for(int(e.uid))
+			if fzv != null:
+				fzv.begin_frenzy(float(e.seconds) / maxf(speed, 0.01))
+			_view.flash_cells([e.cell], Color(1.00, 0.28, 0.24, 0.50),
+				maxf(float(e.seconds), 0.4))
+			_view.spawn_label(_at(int(e.uid), e.cell), "NOTHING TO LOSE",
+				Color(1.00, 0.44, 0.34))
+		"frenzy_end":
+			var fev := _view.view_for(int(e.uid))
+			if fev != null:
+				fev.end_frenzy()
 		"cleanse":
 			# Names what came off rather than saying "CLEANSE": a Seraph lifting a
 			# freeze and a Seraph lifting a poison are different moments and the
@@ -294,6 +392,15 @@ func _apply(e: Dictionary) -> void:
 				bv.hit()
 		"heal":
 			_heal(e)
+		"gate":
+			# Put down at the far pad, not walked there. Both pads are lit so the link
+			# is legible: a unit vanishing from one tile and appearing ten rows away
+			# reads as a bug unless the board says where it went.
+			_pos[e.uid] = _board(e.to)
+			_moves.erase(e.uid)
+			_view.flash_cells([e.from, e.to], Color(0.52, 0.82, 0.88, 0.55), 0.45)
+			_view.spawn_label(_view.cell_to_pos(e.to), "THROUGH",
+				Color(0.62, 0.90, 0.94))
 		"blink":
 			_pos[e.uid] = _board(e.to)
 			_moves.erase(e.uid)
@@ -330,15 +437,6 @@ func _apply(e: Dictionary) -> void:
 			_schedule_death(e)
 		"end":
 			_winner = e.winner
-
-
-func charge_step(e: Dictionary) -> Vector2i:
-	## Which way the charge was running, worked out from the event rather than from
-	## the unit's team — the event already knows, and the view should not have to
-	## re-derive a rule the simulation owns.
-	var from: Vector2i = e.get("from", Vector2i.ZERO)
-	var to: Vector2i = e.get("to", from)
-	return Vector2i(signi(to.x - from.x), signi(to.y - from.y))
 
 
 func _board(cell: Vector2i) -> Vector2:
@@ -544,9 +642,14 @@ func _set_stealth(e: Dictionary) -> void:
 		return
 	v.hidden_unit = bool(e.on)
 	v.queue_redraw()
-	if bool(e.on):
-		_view.spawn_label(_at(int(e.uid), e.cell), "VANISH",
-			Color(0.68, 0.56, 0.88))
+	if not bool(e.on):
+		return
+	_view.spawn_label(_at(int(e.uid), e.get("cell", Vector2i.ZERO)), "VANISH",
+		Color(0.68, 0.56, 0.88))
+	# A beat on the vanish before the log moves on, which for an Assassin is the
+	# blink that follows in the same instant. Without it the unit is already
+	# behind its victim by the time the cloak is drawn.
+	_hold = maxf(_hold, CLOAK_BEAT)
 
 
 func _summon(e: Dictionary) -> void:
@@ -642,6 +745,51 @@ func _kill(e: Dictionary) -> void:
 	_flight.erase(uid)
 
 
+func _possess(e: Dictionary) -> void:
+	## The Usurper vanishes into its host and the host changes colour.
+	##
+	## drop_view rather than kill_view: it is not dead, and giving it the death
+	## animation would tell the player it had been killed at the opening bell, which
+	## is the opposite of what has happened.
+	var uid := int(e.uid)
+	_view.drop_view(uid)
+	_pos.erase(uid)
+	_moves.erase(uid)
+	_lunges.erase(uid)
+	_hp.erase(uid)
+
+	var host_uid := int(e.host_uid)
+	_hp[host_uid] = {cur = float(e.hp), max = float(e.max_hp)}
+	var hv := _view.view_for(host_uid)
+	if hv != null:
+		# UnitView reads unit.team live when it draws, and the simulation has
+		# already flipped it, so a repaint is the whole of the colour change.
+		hv.set_hp(float(e.hp), float(e.max_hp))
+		hv.queue_redraw()
+	var forced := int(e.get("forced_tier", 0))
+	_view.spawn_label(_at(host_uid, e.host_cell),
+		"TAKEN" if forced <= 0 else "TAKEN · T%d" % forced,
+		Color(0.72, 0.52, 0.88))
+	_view.flash_cells([e.cell, e.host_cell], Color(0.58, 0.34, 0.72, 0.45), 0.5)
+
+
+func _husk(e: Dictionary) -> void:
+	## Its puppet died under it and it is back on the board with one health.
+	var uid := int(e.uid)
+	var unit: UnitInstance = _units.get(uid, null)
+	if unit == null:
+		return
+	_pos[uid] = _board(e.cell)
+	_hp[uid] = {cur = 1.0, max = 1.0}
+	var v := _view.ensure_view(unit)
+	if v != null:
+		v.set_hp(1.0, 1.0)
+		v.set_shield(0.0)
+		v.position = (_pos[uid] as Vector2) * _view.tile_size
+		v.queue_redraw()
+	_view.spawn_label(_view.cell_to_pos(e.cell), "HUSK", Color(0.66, 0.46, 0.80))
+
+
 func living(team: int) -> int:
 	return _counts[BoardModel.TEAM_B if team == BoardModel.TEAM_B else BoardModel.TEAM_A]
 
@@ -659,11 +807,14 @@ func _advance_deferred() -> void:
 		if d.due > _clock:
 			i += 1
 			continue
-		if d.kind == "damage":
-			_hit(d.event)
-		else:
-			_kill(d.event)
-			_flight.erase(d.event.uid)
+		match d.kind:
+			"damage":
+				_hit(d.event)
+			"lunge":
+				_lunges[d.uid] = {dir = d.dir, left = LUNGE_TIME}
+			_:
+				_kill(d.event)
+				_flight.erase(d.event.uid)
 		_deferred.remove_at(i)
 
 
@@ -672,8 +823,10 @@ func _advance_moves() -> void:
 	for uid in _moves:
 		var m: Dictionary = _moves[uid]
 		var t: float = clampf((_clock - m.start) / m.duration, 0.0, 1.0)
-		var eased: float = t * t * (3.0 - 2.0 * t)
-		_pos[uid] = m.from.lerp(m.to, eased)
+		# A walk eases in and out of each tile; a charge does not — see the "charge_step"
+		# arm of _apply, which sets linear.
+		var shaped: float = t if bool(m.get("linear", false)) else t * t * (3.0 - 2.0 * t)
+		_pos[uid] = m.from.lerp(m.to, shaped)
 		if t >= 1.0:
 			done.append(uid)
 	for uid in done:

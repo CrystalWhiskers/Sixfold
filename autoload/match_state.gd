@@ -2,6 +2,9 @@ extends Node
 
 enum Phase { BUFF_PICK, PREP, BATTLE, ROUND_END, MATCH_END }
 
+## The conventional match. A custom match overrides it — see GameSetup.wins_needed()
+## — so everything below asks for the number rather than reading this const, and this
+## stays the one place the conventional value is written down.
 const WINS_NEEDED := 4
 const UNITS_PER_DRAW := 6
 
@@ -24,12 +27,23 @@ func start_match(p_seed: int, p_loadouts: Array[LoadoutData]) -> void:
 	EventBus.round_started.emit(round_index)
 
 
+func wins_to_win() -> int:
+	## How many rounds a side has to lose before the match is over. The conventional
+	## four unless a custom match says otherwise.
+	return GameSetup.wins_needed()
+
+
 func buff_pick_due() -> bool:
-	return round_index > 1 and round_index % 2 == 0
+	# Every `buff_every` rounds, and never on the first — the opening round is played
+	# with the units you drew and nothing else.
+	var every := GameSetup.buff_every()
+	return round_index > 1 and round_index % every == 0
 
 
 func buff_pick_number() -> int:
-	return round_index / 2
+	# Which pick this is, counted from one. Drives the rarity odds, so it has to
+	# advance with the cadence rather than with the round.
+	return round_index / GameSetup.buff_every()
 
 
 func rarity_odds(pick: int = -1) -> Array:
@@ -84,15 +98,17 @@ func advance_round() -> void:
 
 
 func is_match_over() -> bool:
-	return wins[0] >= WINS_NEEDED or wins[1] >= WINS_NEEDED
+	var need := wins_to_win()
+	return wins[0] >= need or wins[1] >= need
 
 
 func match_winner() -> int:
 	# Both can cross the line at once now, because a drawn round advances both
 	# scores. Whoever is ahead takes it; dead level is a drawn match, and -1 is
 	# what the rest of the game already reads as "nobody".
-	var over_a := wins[0] >= WINS_NEEDED
-	var over_b := wins[1] >= WINS_NEEDED
+	var need := wins_to_win()
+	var over_a := wins[0] >= need
+	var over_b := wins[1] >= need
 	if over_a and over_b:
 		return -1 if wins[0] == wins[1] else (0 if wins[0] > wins[1] else 1)
 	if over_a:
@@ -103,4 +119,4 @@ func match_winner() -> int:
 
 
 func lives_left(team: int) -> int:
-	return WINS_NEEDED - wins[1 - team]
+	return wins_to_win() - wins[1 - team]

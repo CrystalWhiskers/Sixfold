@@ -9,9 +9,9 @@
 script = ExtResource("3_sn713")
 id = &"vexer"
 display_name = "Vexer"
-max_hp = 85.0
 attack_damage = 6.0
 attack_speed = 2.4
+move_time = 0.72
 attack_range = 2
 attack_type = 1
 ability = ExtResource("1_lld7w")

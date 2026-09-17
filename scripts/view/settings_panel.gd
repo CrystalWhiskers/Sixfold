@@ -19,6 +19,15 @@ const TRACKS_PER_ROW := 6
 const PANEL_WIDTH := 560.0
 
 var _track_buttons: Array[Button] = []
+
+## The track currently being auditioned, or "" for none. Kept so the button can be
+## lit while it plays and so a second right click on the same one stops it.
+var _previewing := ""
+
+## What was playing before the first preview interrupted it. The settings screen can
+## be opened from the menu or from the middle of a match, so "put it back" cannot
+## mean a fixed track name — it has to mean whatever this actually was.
+var _interrupted := ""
 var _portrait_button: Button = null
 var _volume_slider: HSlider = null
 var _volume_label: Label = null
@@ -215,12 +224,13 @@ func _build_playlist() -> Control:
 	var box := VBoxContainer.new()
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.add_theme_constant_override("separation", 6)
-	box.add_child(_heading("Battle music — a round rolls one of the tracks left on"))
+	box.add_child(_heading(
+		"Battle music — left click to switch a track off, right click to hear it"))
 
-	# A grid, not a row: twenty-two tracks at 46 pixels each is over a thousand
-	# wide and the panel is not. The grid wraps however many there turn out to be.
+	# A grid, not a row: forty tracks at 46 pixels each is nearly two thousand wide
+	# and the panel is not. The grid wraps however many there turn out to be.
 	var grid := GridContainer.new()
-	grid.columns = mini(maxi(Audio.battle_track_count, 1), TRACKS_PER_ROW)
+	grid.columns = mini(maxi(_all_tracks(), 1), TRACKS_PER_ROW)
 	grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	grid.add_theme_constant_override("h_separation", 6)
 	grid.add_theme_constant_override("v_separation", 6)
@@ -228,25 +238,82 @@ func _build_playlist() -> Control:
 
 	_track_buttons.clear()
 	for i in Audio.battle_track_count:
-		var b := Button.new()
-		b.custom_minimum_size = TRACK_BUTTON_SIZE
-		b.add_theme_font_size_override("font_size", 15)
-		# Toggle mode purely for the look — the state of record is
-		# GameSetup.playlist(), and _refresh_tracks writes the button from it. A
-		# programmatic button_pressed emits `toggled`, not `pressed`, so writing it
-		# back here cannot loop.
-		b.toggle_mode = true
-		b.pressed.connect(Audio.play_confirm)
-		b.pressed.connect(_on_toggle_track.bind(i + 1))
-		grid.add_child(b)
-		_track_buttons.append(b)
-	if Audio.battle_track_count == 0:
+		grid.add_child(_track_button(i + 1, false))
+	# The boss tracks are in the grid too, marked "B1", "B2" and so on. They are
+	# previewable exactly like the rest — auditioning the music is the point of the
+	# right click, and a track you cannot hear is the one you most want to.
+	#
+	# Their TOGGLE means something narrower: whether they may come up in an ordinary
+	# round. That is the Boss rounds switch above, so these are preview-only and say
+	# so by being drawn in their own colour.
+	for i in Audio.boss_track_count:
+		grid.add_child(_track_button(i + 1, true))
+	if _all_tracks() == 0:
 		var none := Label.new()
 		none.text = "no tracks found"
 		none.add_theme_font_size_override("font_size", 13)
 		grid.add_child(none)
 	_refresh_tracks()
 	return box
+
+
+func _all_tracks() -> int:
+	return Audio.battle_track_count + Audio.boss_track_count
+
+
+func _track_button(index: int, boss: bool) -> Button:
+	var b := Button.new()
+	b.custom_minimum_size = TRACK_BUTTON_SIZE
+	b.add_theme_font_size_override("font_size", 15)
+	# Toggle mode purely for the look — the state of record is
+	# GameSetup.playlist(), and _refresh_tracks writes the button from it. A
+	# programmatic button_pressed emits `toggled`, not `pressed`, so writing it
+	# back here cannot loop.
+	b.toggle_mode = not boss
+	b.set_meta(&"track", index)
+	b.set_meta(&"boss", boss)
+	if not boss:
+		b.pressed.connect(Audio.play_confirm)
+		b.pressed.connect(_on_toggle_track.bind(index))
+	# Right click auditions it. gui_input rather than a second pressed handler,
+	# because a Button only reports the left one.
+	b.gui_input.connect(_on_track_input.bind(b))
+	_track_buttons.append(b)
+	return b
+
+
+func _on_track_input(event: InputEvent, b: Button) -> void:
+	var click := event as InputEventMouseButton
+	if click == null or not click.pressed \
+			or click.button_index != MOUSE_BUTTON_RIGHT:
+		return
+	# Accepted so the click does not fall through to whatever is behind the panel.
+	b.accept_event()
+	var index: int = int(b.get_meta(&"track", 1))
+	var boss: bool = bool(b.get_meta(&"boss", false))
+	var name := Audio.boss_track(index) if boss else Audio.battle_track(index)
+	if name == _previewing:
+		# Right clicking the track already playing puts back whatever it interrupted,
+		# which is the only way out of a preview without leaving the screen.
+		_stop_preview()
+		_refresh_tracks()
+		return
+	if _previewing.is_empty():
+		_interrupted = Audio.now_playing()
+	_previewing = name
+	Audio.play_music(name)
+	_refresh_tracks()
+
+
+func _stop_preview() -> void:
+	if _previewing.is_empty():
+		return
+	_previewing = ""
+	if _interrupted.is_empty():
+		Audio.stop_music()
+	else:
+		Audio.play_music(_interrupted)
+	_interrupted = ""
 
 
 func _on_toggle_track(index: int) -> void:
@@ -257,18 +324,29 @@ func _on_toggle_track(index: int) -> void:
 func _refresh_tracks() -> void:
 	var list := GameSetup.playlist()
 	var only_one := GameSetup.tracks_on() <= 1
-	for i in _track_buttons.size():
-		var on: bool = list[i]
-		var b := _track_buttons[i]
-		# Just the number. Whether it is IN the rotation is the colour and the
-		# pressed look, not a tick glyph competing with the digit for the space.
-		b.text = Audio.battle_track_name(i + 1)
+	for b in _track_buttons:
+		var index: int = int(b.get_meta(&"track", 1))
+		var boss: bool = bool(b.get_meta(&"boss", false))
+		# Just the number, or "B1" for a boss track. Whether it is IN the rotation is
+		# the colour and the pressed look, not a tick glyph competing for the space.
+		b.text = Audio.boss_track_name(index) if boss else Audio.battle_track_name(index)
+		var name := Audio.boss_track(index) if boss else Audio.battle_track(index)
+		var playing := name == _previewing
+		if boss:
+			# No toggle of its own — see _build_playlist. Its own colour so it is not
+			# mistaken for a battle track that has been switched off.
+			b.disabled = false
+			b.add_theme_color_override("font_color",
+				Color(0.98, 0.84, 0.54) if playing else Color(0.72, 0.62, 0.44))
+			continue
+		var on: bool = list[index - 1]
 		b.button_pressed = on
 		# The last one standing is greyed rather than hidden, so the reason the
 		# click did nothing is visible instead of mysterious.
 		b.disabled = on and only_one
 		b.add_theme_color_override("font_color",
-			Color(0.86, 0.90, 0.96) if on else Color(0.48, 0.52, 0.60))
+			Color(1.00, 0.94, 0.70) if playing
+			else (Color(0.86, 0.90, 0.96) if on else Color(0.48, 0.52, 0.60)))
 
 
 func open() -> void:
@@ -280,5 +358,7 @@ func open() -> void:
 
 
 func _on_done() -> void:
+	# A preview must not follow the player out of the settings screen.
+	_stop_preview()
 	visible = false
 	closed.emit()

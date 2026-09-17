@@ -8,5 +8,7 @@ id = &"broad_front"
 display_name = "Broad Front"
 rank = 3
 width = 9
+height = 10
+has_neutral = false
 rows = PackedStringArray()
 note = "Wide and divided. Room to spread out, and a long walk to the enemy."

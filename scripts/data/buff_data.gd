@@ -76,6 +76,30 @@ const RARITY_COLORS := [
 ## Extra charge damage as a fraction, bronze/silver/gold. 0.5 is +50%.
 @export var charge_bonus: Vector3 = Vector3.ZERO
 
+## Gold only, like empowered_cap_at_gold: how long the Martyr's death-immunity
+## window lasts instead of the ability's own figure. Zero means the buff does not
+## touch it.
+##
+## A REPLACEMENT and not an addition, which is a judgement call worth naming. "Gain
+## 5s of death immunity" could be read either way; read as a replacement the card
+## says one number and the player can time it, whereas read as an addition the
+## window is 7.5s and the card has to explain arithmetic. If it ever wants to be
+## additive, TeamBuffs.frenzy_seconds_for is the only place that has to change.
+@export var frenzy_seconds_at_gold: float = 0.0
+
+## Movement speed handed to whatever an Usurper is wearing, bronze/silver/gold.
+## 0.75 is +75%, written the way a player reads it — the MOVE_TIME inversion is
+## applied when it is used, by signed_percent().
+##
+## The Usurper's OWN share of the same number is an ordinary unit-scoped stat buff
+## on the same row; this rider is only the half that has to follow the reins to a
+## body the buff has no other way to name.
+@export var host_move: Vector3 = Vector3.ZERO
+
+## Attack damage and maximum health handed to the host and to nothing else,
+## bronze/silver/gold. 0.5 is +50% of each.
+@export var host_power: Vector3 = Vector3.ZERO
+
 ## A tier ceiling. Zero means no ceiling — every buff in the game until now. Set
 ## it and the buff only touches units at or below that tier, which is a different
 ## axis from unit_id: "all units, but only the small ones" is not something a
@@ -180,6 +204,13 @@ func modifiers_for(r: Rarity) -> Array[StatModifier]:
 	return out
 
 
+static func signed_percent(s: StatModifier.Stat, value: float) -> float:
+	## The percentage conversion on its own, for a rider that has to build its
+	## modifier somewhere other than modifiers_for(). Same rule, one implementation
+	## — see _signed below for why doing this arithmetic by hand is a trap.
+	return _signed(s, StatModifier.Mode.PERCENT, value)
+
+
 static func _signed(s: StatModifier.Stat, mode: StatModifier.Mode,
 		value: float) -> float:
 	## Turns "faster" into the number the stat actually wants.
@@ -238,6 +269,24 @@ func charge_bonus_at(r: Rarity) -> float:
 	return charge_bonus.z
 
 
+func host_move_at(r: Rarity) -> float:
+	match r:
+		Rarity.BRONZE:
+			return host_move.x
+		Rarity.SILVER:
+			return host_move.y
+	return host_move.z
+
+
+func host_power_at(r: Rarity) -> float:
+	match r:
+		Rarity.BRONZE:
+			return host_power.x
+		Rarity.SILVER:
+			return host_power.y
+	return host_power.z
+
+
 func shield_on_hit_at(r: Rarity) -> float:
 	match r:
 		Rarity.BRONZE:
@@ -275,7 +324,14 @@ func describe(r: Rarity) -> String:
 			else "%s at tier %d or below" % [who, max_tier])
 	match kind:
 		Kind.STAT:
-			var line := "%s: %s" % [who, _stat_phrase_with_extra(m, r)]
+			# A buff made entirely of riders has no stat magnitude, and printing the
+			# phrase anyway produced "All Breakers: +0% max health." on Avalanche's
+			# card — a promise of nothing, sitting above the two lines that say what
+			# the buff actually does. The stat clause only appears when there is a
+			# stat.
+			var phrase := _stat_phrase_with_extra(m, r)
+			var line := ("%s: %s" % [who, phrase] if not _stat_is_empty(m, r)
+				else "%s:" % who)
 			# The one non-stat rider in the game, and it only exists at gold, so
 			# the card has to say so at every rarity or it reads as a surprise.
 			if empowered_cap_at_gold > 0:
@@ -300,9 +356,22 @@ func describe(r: Rarity) -> String:
 			var harder := charge_bonus_at(r)
 			if harder > 0.0:
 				line += "  And the charge itself hits %s harder." % _bare(harder)
+			# Gold only, like the empowered cap above, so the card names it at every
+			# rarity rather than springing it on the third pick.
+			if frenzy_seconds_at_gold > 0.0:
+				var secs := ("%.1f" % frenzy_seconds_at_gold).trim_suffix(".0")
+				line += ("  At gold it stays standing at zero health for %ss instead."
+					% secs) if r == Rarity.GOLD else \
+					("  At gold it also stays standing at zero health for %ss." % secs)
 			var plate := shield_on_hit_at(r)
 			if plate > 0.0:
 				line += "  Every hit it takes also adds %s of its max health to its shield." % _bare(plate)
+			var ridden := host_move_at(r)
+			if ridden > 0.0:
+				line += "  Whatever it is riding moves %s faster as well." % _bare(ridden)
+			var lent := host_power_at(r)
+			if lent > 0.0:
+				line += "  The host also gains %s attack damage and maximum health, for as long as it is held." % _bare(lent)
 			return line
 		Kind.REGEN:
 			return "Allies heal %s of max health every second." % _bare(m.x)
@@ -356,6 +425,18 @@ static func _one_stat(s: StatModifier.Stat, v: float, is_flat: bool) -> String:
 	if is_flat:
 		return "%s +%s" % [_stat_name(s), _flat_value(s, v)]
 	return "%s %s" % [_stat_name(s), _pct(v)]
+
+
+func _stat_is_empty(m: Vector2, r: Rarity) -> bool:
+	## Whether this buff changes any stat at all at this rarity. A rider-only buff
+	## answers true and its card says only what its riders do.
+	if not is_zero_approx(m.x):
+		return false
+	if uses_second_stat and not is_zero_approx(m.y):
+		return false
+	if uses_third_stat and not is_zero_approx(third_magnitude(r)):
+		return false
+	return true
 
 
 func _stat_phrase_with_extra(m: Vector2, r: Rarity) -> String:

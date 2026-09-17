@@ -15,7 +15,7 @@ func _check(label: String, condition: bool, detail := "") -> void:
 
 
 func _ready() -> void:
-	print("\n=== Six by Eleven — menu smoke test ===\n")
+	print("\n=== Sixfold — menu smoke test ===\n")
 	GameSetup.reload_catalogue()
 	_check("the menu loads its maps", GameSetup.maps.size() >= 5,
 		"%d maps" % GameSetup.maps.size())
@@ -110,14 +110,61 @@ func _section_volume() -> void:
 	print("\nSettings")
 
 
+
+func _tracks_on_disk(prefix: String) -> int:
+	## How many <prefix>_N.ogg files are actually there, counted the way the folder is
+	## rather than the way Audio walks it — otherwise this would be checking the counter
+	## against itself and a gap in the numbering would agree with itself perfectly.
+	var dir := DirAccess.open("res://assets/music")
+	if dir == null:
+		return -1
+	var highest := 0
+	var found := 0
+	for file_name in dir.get_files():
+		# .import files are skipped rather than trimmed. Trimming them turns
+		# "boss_1.ogg.import" back into "boss_1.ogg" and every track gets counted twice,
+		# which is exactly what the first version of this did.
+		if file_name.ends_with(".import"):
+			continue
+		var clean := file_name.trim_suffix(".remap")
+		if not clean.ends_with(".ogg") or not clean.begins_with(prefix + "_"):
+			continue
+		var n := clean.trim_suffix(".ogg").substr(prefix.length() + 1).to_int()
+		if n <= 0:
+			continue
+		found += 1
+		highest = maxi(highest, n)
+	# Reported as the highest number only when the run is unbroken. A folder holding
+	# 1..20 and 30 has thirty as its highest and twenty-one files, and the playlist a
+	# player hears stops at twenty — so the mismatch is the thing worth surfacing.
+	return highest if highest == found else -found
+
+
 func _check_boss_music() -> void:
 	print("\nBoss music")
 	var panel: SettingsPanel = _menu._settings
 	if panel == null:
 		return
 	panel.open()
-	_check("six boss tracks loaded", Audio.boss_track_count == 6,
-		"%d found" % Audio.boss_track_count)
+	# Counted off the folder rather than pinned to a number. The old version asserted
+	# "eighteen", which is a fact about how much music happened to be in the project on
+	# the day it was written — it broke the moment a track was added, and it never
+	# actually tested anything the counter could get wrong.
+	#
+	# What the counter CAN get wrong is stopping early, because it walks upward from 1
+	# until a number is missing. A gap in the sequence silently truncates the playlist
+	# and the only symptom is music you never hear, so that is what is checked here.
+	_check("every boss track on disk is loaded",
+		Audio.boss_track_count == _tracks_on_disk("boss"),
+		"counter says %d, folder has %d" % [
+			Audio.boss_track_count, _tracks_on_disk("boss")])
+	_check("and every battle track too",
+		Audio.battle_track_count == _tracks_on_disk("battle"),
+		"counter says %d, folder has %d" % [
+			Audio.battle_track_count, _tracks_on_disk("battle")])
+	_check("there is a real playlist to draw from",
+		Audio.boss_track_count >= 1 and Audio.battle_track_count >= 2,
+		"%d boss, %d battle" % [Audio.boss_track_count, Audio.battle_track_count])
 	_check("boss tracks are named apart from the battle ones",
 		Audio.boss_track(1) == "boss_1"
 		and Audio.boss_track_name(1) == "B1",
@@ -252,11 +299,27 @@ func _check_playlist(_buttons_unused: Array) -> void:
 	# are bare numbers now, and matching "ends with 1" against every Button on the
 	# screen finds things that are not tracks.
 	_menu._settings.open()
-	var toggles: Array[Button] = _menu._settings._track_buttons
+	# The grid now holds the boss tracks as well, for auditioning — see
+	# SettingsPanel._build_playlist. Only the battle ones carry a toggle, so the
+	# rotation checks below have to be read off the battle subset rather than off
+	# every button on the screen.
+	var all_buttons: Array[Button] = _menu._settings._track_buttons
+	var toggles: Array[Button] = []
+	var boss_buttons: Array[Button] = []
+	for b in all_buttons:
+		if bool(b.get_meta(&"boss", false)):
+			boss_buttons.append(b)
+		else:
+			toggles.append(b)
 	var count: int = Audio.battle_track_count
 	_check("there is a toggle for every battle track",
 		toggles.size() == count and count >= 2,
 		"%d buttons for %d tracks" % [toggles.size(), count])
+	_check("and a button for every boss track too, so they can be heard",
+		boss_buttons.size() == Audio.boss_track_count
+		and Audio.boss_track_count >= 1,
+		"%d buttons for %d boss tracks" % [
+			boss_buttons.size(), Audio.boss_track_count])
 	if toggles.size() < 2:
 		return
 	var numbered := true
@@ -266,16 +329,32 @@ func _check_playlist(_buttons_unused: Array) -> void:
 	_check("and each one is labelled with its number and nothing else", numbered,
 		"first three read %s, %s, %s" % [
 			toggles[0].text, toggles[1].text, toggles[2].text])
+	var marked := true
+	for i in boss_buttons.size():
+		if String(boss_buttons[i].text) != "B%d" % (i + 1):
+			marked = false
+	_check("and the boss ones are marked apart rather than renumbered", marked,
+		"first boss button reads %s" % (
+			"none" if boss_buttons.is_empty() else boss_buttons[0].text))
+	# A boss track's toggle means nothing — whether they enter the ordinary rotation
+	# is the Boss rounds switch — so they must not be togglable here, or the screen
+	# offers two controls for one rule.
+	var togglable := 0
+	for b in boss_buttons:
+		if b.toggle_mode:
+			togglable += 1
+	_check("boss buttons are preview-only, not a second rotation control",
+		togglable == 0, "%d of them are toggles" % togglable)
 
 	var screen := Rect2(Vector2.ZERO, _menu.get_viewport_rect().size)
 	var spilled := 0
-	for b in toggles:
+	for b in all_buttons:
 		if not screen.encloses(Rect2(b.global_position, b.size)):
 			spilled += 1
 	# Ten in a single row would be 1500 pixels wide. The grid is what keeps them
 	# on the screen, and this is the check that says so.
-	_check("every track toggle fits on the screen", spilled == 0,
-		"%d of %d are off the edge" % [spilled, toggles.size()])
+	_check("every track button fits on the screen", spilled == 0,
+		"%d of %d are off the edge" % [spilled, all_buttons.size()])
 
 	_check("every track starts in the rotation", GameSetup.tracks_on() == count,
 		"%d of %d" % [GameSetup.tracks_on(), count])
@@ -311,6 +390,243 @@ func _check_playlist(_buttons_unused: Array) -> void:
 		toggles[i].pressed.emit()
 	_check("switching them back on restores the whole rotation",
 		GameSetup.tracks_on() == count, "%d on" % GameSetup.tracks_on())
+
+	_check_track_preview(toggles, boss_buttons)
+
+
+func _right_click(b: Button) -> void:
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_RIGHT
+	click.pressed = true
+	b.gui_input.emit(click)
+
+
+func _check_track_preview(toggles: Array[Button], boss: Array[Button]) -> void:
+	print("\nTrack preview")
+	var panel: SettingsPanel = _menu._settings
+	# Something has to be playing first, or "puts back what it interrupted" has
+	# nothing to put back and the check passes for the wrong reason.
+	Audio.play_music("menu_theme")
+	var before := Audio.now_playing()
+	_check("the menu theme is playing before any preview", before == "menu_theme",
+		before)
+
+	_right_click(toggles[2])
+	_check("right clicking a battle track plays it",
+		Audio.now_playing() == Audio.battle_track(3), Audio.now_playing())
+	_check("and the button says which one is being heard",
+		panel._previewing == Audio.battle_track(3), panel._previewing)
+	# The LEFT click still only toggles. A right click that also switched the track
+	# out of the rotation would make auditioning destructive.
+	var on_before := GameSetup.tracks_on()
+	_right_click(toggles[3])
+	_check("and auditioning one does not change the rotation",
+		GameSetup.tracks_on() == on_before,
+		"%d on, was %d" % [GameSetup.tracks_on(), on_before])
+	_check("right clicking another switches the preview over",
+		Audio.now_playing() == Audio.battle_track(4), Audio.now_playing())
+
+	if not boss.is_empty():
+		_right_click(boss[0])
+		_check("boss tracks can be auditioned too",
+			Audio.now_playing() == Audio.boss_track(1), Audio.now_playing())
+		# Even while they are shut out of the ordinary rotation: hearing one and
+		# letting one come up in a round are different questions.
+		var was := GameSetup.boss_in_pool
+		GameSetup.boss_in_pool = false
+		panel._refresh_boss()
+		_right_click(boss[0])
+		_right_click(boss[0])
+		_check("including while they are shut out of ordinary rounds",
+			Audio.now_playing() == Audio.boss_track(1)
+			and not GameSetup.boss_in_pool, Audio.now_playing())
+		GameSetup.boss_in_pool = was
+		panel._refresh_boss()
+
+	# Right clicking whatever is playing stops the preview and puts back what it
+	# interrupted.
+	var playing := panel._previewing
+	_right_click(_button_for(toggles + boss, playing))
+	_check("right clicking it again puts back what it interrupted",
+		Audio.now_playing() == "menu_theme", Audio.now_playing())
+	_check("and nothing is marked as previewing", panel._previewing.is_empty(),
+		panel._previewing)
+
+	# And closing the screen cannot leave a preview running.
+	_right_click(toggles[1])
+	_check("a preview is playing before Done", panel._previewing != "")
+	panel._on_done()
+	_check("Done puts the music back as well",
+		Audio.now_playing() == "menu_theme" and panel._previewing.is_empty(),
+		Audio.now_playing())
+	panel.open()
+
+
+func _button_for(buttons: Array[Button], track: String) -> Button:
+	for b in buttons:
+		var index: int = int(b.get_meta(&"track", 1))
+		var boss: bool = bool(b.get_meta(&"boss", false))
+		var name := Audio.boss_track(index) if boss else Audio.battle_track(index)
+		if name == track:
+			return b
+	return buttons[0]
+
+
+func _check_custom_matches() -> void:
+	print("\nCustom matches")
+	var panel: CustomPanel = _menu._custom
+	_check("the menu has a custom match screen", panel != null)
+	if panel == null:
+		return
+	var was_mode := GameSetup.mode
+	var was_custom := GameSetup.custom
+	GameSetup.custom = false
+	GameSetup.reset_custom()
+
+	# With the rules off, every getter has to hand back the conventional value. That
+	# is what makes "off" a single code path rather than a second set of defaults
+	# living somewhere else and rotting.
+	_check("with custom off the match is the conventional one",
+		GameSetup.wins_needed() == MatchState.WINS_NEEDED
+		and GameSetup.buff_every() == 2
+		and is_equal_approx(GameSetup.sudden_death_at(), CombatSim.SUDDEN_DEATH)
+		and is_equal_approx(GameSetup.round_timeout(), CombatSim.DEFAULT_TIMEOUT),
+		"%d lives, every %d, %.0f / %.0f" % [GameSetup.wins_needed(),
+			GameSetup.buff_every(), GameSetup.sudden_death_at(),
+			GameSetup.round_timeout()])
+	_check("and no buff is banned", GameSetup.banned_buffs().is_empty())
+
+	_check("the screen starts hidden", not panel.visible)
+	panel.open()
+	_check("opening it shows it and turns the rules on",
+		panel.visible and GameSetup.custom)
+
+	# Match length, and the number that follows from it. "More than the conventional
+	# three buffs" is what the player is really asking for, so the screen has to say
+	# how many they are going to get.
+	var short_picks := panel.picks_in_match()
+	panel._wins_slider.value = 8
+	_check("the length slider sets the lives", GameSetup.wins_needed() == 8,
+		"%d lives" % GameSetup.wins_needed())
+	_check("a longer match reaches more buff picks",
+		panel.picks_in_match() > short_picks,
+		"%d picks against %d" % [panel.picks_in_match(), short_picks])
+	_check("and the screen says how many", panel._picks_note.text.contains(
+		str(panel.picks_in_match())), panel._picks_note.text)
+	_check("which is more than the conventional three",
+		panel.picks_in_match() > 3, "%d picks" % panel.picks_in_match())
+
+	# MatchState has to agree, or the number on the screen is decoration.
+	MatchState.wins = [7, 0]
+	_check("the match is not over at seven of eight", not MatchState.is_match_over())
+	MatchState.wins = [8, 0]
+	_check("and is at eight", MatchState.is_match_over()
+		and MatchState.match_winner() == 0)
+	MatchState.wins = [0, 0]
+	_check("lives left counts down from the custom number",
+		MatchState.lives_left(BoardModel.TEAM_A) == 8,
+		"%d" % MatchState.lives_left(BoardModel.TEAM_A))
+
+	# The cadence, and that the ROUND LOOP reads it — buff_pick_due is what decides
+	# whether a pick happens at all.
+	panel._every_slider.value = 1
+	_check("a cadence of one means a buff every round",
+		GameSetup.buff_every() == 1)
+	MatchState.round_index = 3
+	_check("so round three is a pick round", MatchState.buff_pick_due())
+	panel._every_slider.value = 4
+	_check("and at every four rounds it is not",
+		not MatchState.buff_pick_due(), "round 3, every %d" % GameSetup.buff_every())
+	MatchState.round_index = 4
+	_check("but round four is", MatchState.buff_pick_due())
+	_check("and the rarity odds advance on the cadence, not the round",
+		MatchState.buff_pick_number() == 1,
+		"pick %d on round 4 at every 4" % MatchState.buff_pick_number())
+	MatchState.round_index = 1
+
+	# The clock.
+	panel._death_slider.value = 40.0
+	_check("the sudden death slider sets it",
+		is_equal_approx(GameSetup.sudden_death_at(), 40.0),
+		"%.0f" % GameSetup.sudden_death_at())
+	# Dragging sudden death up past the draw clock has to carry the clock with it,
+	# because a sudden death after the round has already been called never fires.
+	panel._death_slider.value = panel.MAX_CLOCK - 15.0
+	_check("pushing it up pushes the draw clock up too",
+		GameSetup.round_timeout() > GameSetup.sudden_death_at(),
+		"%.0f against %.0f" % [GameSetup.round_timeout(),
+			GameSetup.sudden_death_at()])
+	panel._clock_slider.value = panel.MIN_CLOCK
+	_check("and pulling the draw clock down pulls sudden death with it",
+		GameSetup.sudden_death_at() < GameSetup.round_timeout(),
+		"%.0f against %.0f" % [GameSetup.sudden_death_at(),
+			GameSetup.round_timeout()])
+
+	# Which buffs may appear.
+	var buttons: Array[Button] = panel._buff_buttons
+	_check("every buff has a switch", buttons.size() == _buff_count(),
+		"%d switches for %d buffs" % [buttons.size(), _buff_count()])
+	if buttons.is_empty():
+		return
+	var first: StringName = buttons[0].get_meta(&"buff", &"")
+	buttons[0].pressed.emit()
+	_check("switching one off bans it", GameSetup.is_banned(first),
+		String(first))
+	_check("and it is reported as an exclusion",
+		GameSetup.banned_buffs().has(first))
+	buttons[0].pressed.emit()
+	_check("switching it back on allows it again", not GameSetup.is_banned(first))
+
+	# Banning down to nothing would not give the player a short pick — BuffPool.offer
+	# ignores the exclusions once they empty the pool and hands back EVERY buff — so
+	# the screen stops at enough for one full pick, and the ones it will not ban are
+	# greyed rather than silently refusing.
+	for b in buttons:
+		b.pressed.emit()
+	var allowed := 0
+	for b in buttons:
+		if not GameSetup.is_banned(b.get_meta(&"buff", &"")):
+			allowed += 1
+	_check("it stops at enough buffs to fill one pick",
+		allowed == panel.floor_allowed() and allowed == BuffPool.OPTIONS,
+		"%d allowed, floor is %d" % [allowed, panel.floor_allowed()])
+	var greyed := 0
+	for b in buttons:
+		if not GameSetup.is_banned(b.get_meta(&"buff", &"")):
+			if b.disabled:
+				greyed += 1
+	_check("and every one it will not ban is greyed, so the refusal is visible",
+		greyed == allowed, "%d of %d greyed" % [greyed, allowed])
+
+	panel._on_reset()
+	_check("Reset puts everything back", GameSetup.banned_buffs().is_empty()
+		and GameSetup.wins_needed() == MatchState.WINS_NEEDED
+		and GameSetup.buff_every() == 2)
+	panel._on_done()
+	_check("Back closes it", not panel.visible)
+
+	# Backing out of the screen must not leave an ordinary match running custom
+	# rules. Structural rather than remembered: picking any other mode clears them,
+	# so there is no code path that can carry them into an ordinary match.
+	GameSetup.custom = true
+	GameSetup.mode = GameSetup.Mode.VS_COMPUTER
+	_check("choosing an ordinary mode clears the custom rules",
+		not GameSetup.custom)
+	GameSetup.custom = true
+	GameSetup.mode = GameSetup.Mode.LOCAL_PVP
+	_check("either ordinary mode, not just one of them", not GameSetup.custom)
+	GameSetup.mode = GameSetup.Mode.CUSTOM
+	GameSetup.custom = true
+	_check("and the custom mode keeps them", GameSetup.custom)
+	GameSetup.mode = was_mode
+	GameSetup.custom = was_custom
+	GameSetup.reset_custom()
+
+
+func _buff_count() -> int:
+	var pool := BuffPool.new()
+	pool.load_all()
+	return pool.buffs.size()
 
 
 func _check_drawn_rounds() -> void:
@@ -356,9 +672,10 @@ func _run() -> void:
 	var labels: PackedStringArray = []
 	for b in buttons:
 		labels.append(b.text)
-	_check("the menu offers all four choices",
+	_check("the menu offers all five choices",
 		labels.has("Battle the Computer") and labels.has("Local PvP")
-		and labels.has("Loadouts") and labels.has("Settings"),
+		and labels.has("Custom Match") and labels.has("Loadouts")
+		and labels.has("Settings"),
 		"found %s" % str(labels))
 
 	var screen := Rect2(Vector2.ZERO, _menu.get_viewport_rect().size)
@@ -367,10 +684,12 @@ func _run() -> void:
 		if not screen.encloses(Rect2(b.global_position, b.size)):
 			spilled.append(b.text)
 	_check("every menu button is on screen", spilled.is_empty(), "; ".join(spilled))
+	await _check_backdrop()
 	_check_playlist(buttons)
 	_check_portrait_toggle()
 	_check_volume_slider()
 	_check_boss_music()
+	_check_custom_matches()
 	_check_drawn_rounds()
 
 	GameSetup.mode = GameSetup.Mode.VS_COMPUTER
@@ -667,3 +986,120 @@ func _all_buttons(root: Node) -> Array[Button]:
 		for child in n.get_children():
 			stack.append(child)
 	return out
+
+
+func _check_backdrop() -> void:
+	print("\nThe living backdrop")
+
+	# The menu passed its whole suite before this existed, so none of these checks are
+	# about the menu working — they are about the backdrop being REACHED. A Control that
+	# is built and never processed looks identical from the outside to one that is not
+	# built at all.
+	var backdrop: MenuBackdrop = null
+	for child in _menu.get_children():
+		if child is MenuBackdrop:
+			backdrop = child as MenuBackdrop
+			break
+	_check("the menu has a backdrop", backdrop != null)
+	if backdrop == null:
+		return
+	_check("it is the FIRST child, so everything else draws over it",
+		_menu.get_child(0) == backdrop,
+		"child %d of %d" % [backdrop.get_index(), _menu.get_child_count()])
+	# It covers the whole screen and must never take a click: it sits under every button
+	# on the menu, and a Control that accepts input there would swallow presses.
+	_check("it ignores the mouse", backdrop.mouse_filter == Control.MOUSE_FILTER_IGNORE)
+	_check("and fills the screen", backdrop.size.x > 100.0 and backdrop.size.y > 100.0,
+		"%s" % backdrop.size)
+
+	var board: BoardModel = backdrop._board
+	_check("it built a board", board != null)
+	if board == null:
+		return
+	for team in [BoardModel.TEAM_A, BoardModel.TEAM_B]:
+		_check("it fielded units for team %d" % team,
+			board.living_count_of(team) > 1,
+			"%d alive" % board.living_count_of(team))
+	var walkers := 0
+	for u in board.units_view():
+		if u.data.can_move and u.data.can_attack:
+			walkers += 1
+	_check("every unit it picked can walk and swing, or nothing would happen",
+		walkers == board.units_view().size(),
+		"%d of %d" % [walkers, board.units_view().size()])
+
+	# The claim that matters and the one a static check cannot make: the simulation is
+	# actually advancing. Sampled across frames rather than by calling step() by hand,
+	# because "somebody calls _process" is the thing being tested.
+	# Two claims, and they need two different tests.
+	#
+	# First: the engine calls _process on this thing at all. That has to be measured
+	# across real frames, because "somebody drives it" is the whole point — and it is
+	# the failure a static check cannot see.
+	var ticks_before: float = backdrop._elapsed
+	for i in 40:
+		await get_tree().process_frame
+	_check("the battle advances on its own", backdrop._elapsed > ticks_before,
+		"%.3fs against %.3fs" % [backdrop._elapsed, ticks_before])
+
+	# Second: units cross tiles. This one must NOT be measured in frames. Headless frames
+	# run as fast as the machine allows, so forty of them are a few milliseconds of battle
+	# and nothing has time to walk anywhere — which is exactly what the first version of
+	# this check reported, and it was the test being impatient rather than the backdrop
+	# being broken. Driven with a fixed delta instead, which exercises the same
+	# accumulator on a clock that does not depend on how fast the box is.
+	var before_positions := {}
+	for u in backdrop._board.units_view():
+		before_positions[u.uid] = u.cell
+	for i in 60:
+		backdrop._process(0.1)
+	var moved := 0
+	for u in backdrop._board.units_view():
+		if before_positions.has(u.uid) and before_positions[u.uid] != u.cell:
+			moved += 1
+	_check("and units cross tiles once it has run a few seconds", moved > 0,
+		"%d of %d moved in %.1fs" % [moved, before_positions.size(),
+			backdrop._elapsed])
+	# Sliding between tiles is the only reason the movement does not look like a slideshow,
+	# and it depends on capturing a duration the simulation never stores. If that capture
+	# ever breaks, every unit snaps and nothing else complains.
+	var slid := false
+	for i in 40:
+		backdrop._process(0.05)
+		for u in backdrop._board.units_view():
+			if u.state != UnitInstance.State.MOVING:
+				continue
+			var at := backdrop._slide_position(u)
+			if at.distance_to(Vector2(u.cell)) > 0.05:
+				slid = true
+	_check("a walking unit is drawn between tiles, not snapped onto them", slid)
+
+	# The bug this design exists to avoid. The board's SHAPE is static state on
+	# BoardModel that every screen reads, so a backdrop that chose its own map would
+	# silently overwrite the map the player picked — and the symptom would be a map
+	# selection that does not stick, a long way from this file.
+	var chosen := GameSetup.current_map()
+	if chosen != null:
+		_check("the backdrop plays on the player's chosen map, not one of its own",
+			BoardModel.WIDTH == chosen.width and BoardModel.HEIGHT == chosen.height,
+			"board is %dx%d, %s is %dx%d" % [BoardModel.WIDTH, BoardModel.HEIGHT,
+				chosen.display_name, chosen.width, chosen.height])
+	# And it stays true after the backdrop starts a fresh battle, which is the moment it
+	# touches the map at all.
+	backdrop._new_battle()
+	if chosen != null:
+		_check("and still after it restarts one",
+			BoardModel.WIDTH == chosen.width and BoardModel.HEIGHT == chosen.height,
+			"board is %dx%d" % [BoardModel.WIDTH, BoardModel.HEIGHT])
+
+	# A finished battle has to be replaced, or the title screen ends on a still image of
+	# two corpses. Forced rather than waited for: a real one takes most of a minute.
+	backdrop._elapsed = MenuBackdrop.MAX_BATTLE + 1.0
+	var stale := backdrop._board
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check("a battle that runs long is replaced with a new one",
+		backdrop._board != stale and backdrop._board != null)
+	_check("and the new one has a full board again",
+		backdrop._board.living_count_of(BoardModel.TEAM_A) > 1
+		and backdrop._board.living_count_of(BoardModel.TEAM_B) > 1)

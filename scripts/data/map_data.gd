@@ -19,7 +19,23 @@ const RUBBLE := "%"
 ## tile or from another HIGH one. Without a set of these, a plateau is scenery.
 const STAIRS := "/"
 
-const GLYPHS := ".#X^%/"
+## A gate. Ordinary ground in every respect — you stand on it, shoot from it and are
+## hit on it like anywhere else — except that a unit which steps onto it is standing
+## on the OTHER gate instead.
+##
+## Gates come in pairs and the pairing is positional, not written down: a map's gates
+## are matched to their own mirror images, which is the only rule that can hold given
+## that every map has to be mirror-symmetric anyway. So a gate in your half always
+## leads to the matching tile in theirs, and there is no way to author a pair that is
+## unfair or a gate that leads nowhere.
+##
+## They exist to answer the Spire. A rooted caster behind a wall of its own bodies is
+## unreachable on a big board unless you brought an Assassin, and "bring an Assassin
+## or lose" is not a decision. A gate is the other answer, and unlike the Assassin it
+## is on the map rather than in the loadout — so it is a reason to pick a board.
+const GATE := "O"
+
+const GLYPHS := ".#X^%/O"
 
 @export var id: StringName = &""
 @export var display_name: String = "Map"
@@ -81,6 +97,30 @@ func is_high(c: Vector2i) -> bool:
 
 func is_stairs(c: Vector2i) -> bool:
 	return glyph(c) == STAIRS
+
+
+func is_gate(c: Vector2i) -> bool:
+	return glyph(c) == GATE
+
+
+func gate_pairs() -> Dictionary:
+	## Every gate mapped to the tile a unit standing on it arrives at.
+	##
+	## Paired by mirror image, and a gate whose mirror is not also a gate is dropped
+	## rather than guessed at — is_valid() refuses such a map, so this never has to
+	## invent a destination. A gate on the centre line would pair with itself, which
+	## is a gate that does nothing; those are dropped too.
+	var out := {}
+	for y in height:
+		for x in width:
+			var c := Vector2i(x, y)
+			if not is_gate(c):
+				continue
+			var other := mirror(c)
+			if other == c or not is_gate(other):
+				continue
+			out[c] = other
+	return out
 
 
 func blocked(c: Vector2i) -> bool:
@@ -201,6 +241,16 @@ func invalid_reason() -> String:
 			return "a barrier at %s-%s sits between two tiles nobody can reach" % [a, b]
 		if not keys.has(edge_key(mirror(a), mirror(b))):
 			return "the barrier at %s-%s has no mirror on the other half" % [a, b]
+
+	# A gate is a link between the two halves, so one that mirrors onto itself links
+	# nothing. It cannot happen on an even board — there is no self-mirroring row —
+	# but the check costs nothing and the alternative is a tile that silently does
+	# not work.
+	for y in height:
+		for x in width:
+			var c := Vector2i(x, y)
+			if is_gate(c) and mirror(c) == c:
+				return "the gate at %s is its own mirror, so it leads nowhere" % c
 
 	if half_tiles() < 8:
 		return "only %d usable tiles a side" % half_tiles()

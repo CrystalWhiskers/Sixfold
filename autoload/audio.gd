@@ -308,6 +308,13 @@ func play_music(name: String) -> void:
 	_music.play()
 
 
+func now_playing() -> String:
+	## Which track is on the music player right now, or "" for silence. Exists for
+	## the settings screen's track preview: it has to put back whatever it
+	## interrupted, and only this knows what that was.
+	return _music_now
+
+
 func battle_track(index: int) -> String:
 	## 1-based, matching the file names and what the menu shows.
 	return BATTLE_PREFIX % index

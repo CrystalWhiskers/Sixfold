@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_77fa3"]
+
+[resource]
+script = ExtResource("1_77fa3")
+id = &"martyrdom"
+display_name = "Martyrdom"
+description = "Passive, and there is nothing to spend. Every point of health it is missing is damage and attack speed back: on its last sliver it hits twice as hard, twice as fast. Below half health it starts bleeding 2.5% of its maximum every second of its own accord and nothing stops that — no healing outruns it for long, and a shield does not touch it, because it comes from the inside. At zero health it does not fall: for two and a half seconds it keeps standing, hitting for twice again as much, 60% faster, moving half again as quick, and cutting through three enemies at once. Then it goes, and it does not come back. Freeze it before the bleed finishes and it dies frozen like anything else — window and all."
+kind = 22
+cast_time = 0.3
+rage_per_missing = 1.0
+frenzy_decay = 0.025
+frenzy_threshold = 0.5
+frenzy_seconds = 2.5
+frenzy_damage = 1.0
+frenzy_attack_speed = 0.6
+frenzy_move = 0.5
+frenzy_pierce = 3

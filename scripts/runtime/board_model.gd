@@ -5,12 +5,12 @@ extends RefCounted
 # One board is live at a time; use_map() sets them and reset_map() puts the
 # default back, which is what every test starts from.
 const DEFAULT_WIDTH := 6
-const DEFAULT_HEIGHT := 11
+const DEFAULT_HEIGHT := 10
 
 static var WIDTH := DEFAULT_WIDTH
 static var HEIGHT := DEFAULT_HEIGHT
 static var NEUTRAL_ROW := DEFAULT_HEIGHT / 2
-static var HAS_NEUTRAL := true
+static var HAS_NEUTRAL := false
 static var map_name := "Standard"
 
 # Terrain follows the dimensions: one board is live, so one set of tables.
@@ -19,6 +19,10 @@ static var _voids: Dictionary = {}
 static var _high: Dictionary = {}
 static var _stairs: Dictionary = {}
 static var _edges: Dictionary = {}
+
+## cell -> the cell a unit standing on it arrives at. Symmetric: if A leads to B then
+## B leads to A, because MapData pairs gates by mirror image.
+static var _gates: Dictionary = {}
 
 # Terrain the battle itself changed. `_rubble` is which of the map's walls may be
 # knocked down at all; `_broken` and `_raised` are this round's damage and
@@ -84,6 +88,7 @@ static func use_map(m: MapData) -> void:
 	_wall_hp = {}
 	_wall_full = {}
 	_edges = m.edge_keys()
+	_gates = m.gate_pairs()
 	for y in HEIGHT:
 		for x in WIDTH:
 			var c := Vector2i(x, y)
@@ -102,7 +107,7 @@ static func use_map(m: MapData) -> void:
 static func reset_map() -> void:
 	WIDTH = DEFAULT_WIDTH
 	HEIGHT = DEFAULT_HEIGHT
-	HAS_NEUTRAL = true
+	HAS_NEUTRAL = false
 	NEUTRAL_ROW = DEFAULT_HEIGHT / 2
 	map_name = "Standard"
 	_walls = {}
@@ -115,6 +120,7 @@ static func reset_map() -> void:
 	_wall_hp = {}
 	_wall_full = {}
 	_edges = {}
+	_gates = {}
 
 
 static func first_row(team: int) -> int:
@@ -224,6 +230,21 @@ static func is_high(c: Vector2i) -> bool:
 
 static func is_stairs(c: Vector2i) -> bool:
 	return _stairs.has(c)
+
+
+static func is_gate(c: Vector2i) -> bool:
+	return _gates.has(c)
+
+
+static func gate_from(c: Vector2i) -> Vector2i:
+	## Where a unit standing on `c` comes out, or `c` itself when there is no gate
+	## there. Returning the same cell rather than an invalid one means every caller
+	## can ask without checking first, and a no-gate answer is a no-op step.
+	return _gates.get(c, c)
+
+
+static func gate_count() -> int:
+	return _gates.size()
 
 
 static func can_climb(from: Vector2i, to: Vector2i) -> bool:

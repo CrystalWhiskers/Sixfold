@@ -3,6 +3,11 @@ extends Control
 
 signal picked(buff: BuffData, rarity: int)
 
+## Asked for a fresh three at the same rarity. The picker does not roll its own
+## options — main.gd owns the pool, the seeded rng and the exclusions — so this is a
+## request, not the reroll itself.
+signal rerolled
+
 const CARD_WIDTH := 460.0
 const CARD_HEIGHT := 74.0
 const CARD_GAP := 10.0
@@ -12,6 +17,12 @@ const CENTER_VERTICALLY := false
 var _rarity: BuffData.Rarity = BuffData.Rarity.BRONZE
 var _options: Array[BuffData] = []
 var _panel: VBoxContainer = null
+var _reroll: Button = null
+
+## Rerolls left for this pick. One, deliberately: a reroll is meant to rescue a hand
+## of three buffs none of your units can use, not to let you shop until the best one
+## in the pool turns up.
+var _rerolls := 0
 var _title: Label = null
 var _subtitle: Label = null
 var _column: VBoxContainer = null
@@ -63,9 +74,13 @@ func _ready() -> void:
 
 
 func open(options: Array[BuffData], rarity: BuffData.Rarity, round_index: int,
-		note := "", who := "") -> void:
+		note := "", who := "", rerolls := -1) -> void:
 	_options = options
 	_rarity = rarity
+	# -1 means "this is a reroll of an open pick, leave the count alone". Anything
+	# else sets it, which is what a fresh pick does.
+	if rerolls >= 0:
+		_rerolls = rerolls
 	for child in _column.get_children():
 		_column.remove_child(child)
 		child.queue_free()
@@ -82,8 +97,41 @@ func open(options: Array[BuffData], rarity: BuffData.Rarity, round_index: int,
 
 	for i in options.size():
 		_column.add_child(_make_card(options[i], i, tint))
+	_column.add_child(_make_reroll(tint))
 
 	visible = true
+
+
+func _make_reroll(tint: Color) -> Control:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_reroll = Button.new()
+	_reroll.custom_minimum_size = Vector2(_card_width(), 0.0)
+	_reroll.add_theme_font_size_override("font_size", 14)
+	# The rarity is NOT rerolled, only the three cards. That is the whole shape of
+	# the thing: a gold pick stays gold, so a reroll can never be a downgrade and is
+	# never a reason to hesitate.
+	_reroll.text = ("Reroll these three (%s, %d left)" % [
+		BuffData.rarity_name(_rarity), _rerolls]) if _rerolls > 0 \
+		else "No rerolls left"
+	_reroll.disabled = _rerolls <= 0
+	_reroll.add_theme_color_override("font_color",
+		tint if _rerolls > 0 else Color(0.46, 0.50, 0.58))
+	_reroll.pressed.connect(_on_reroll)
+	row.add_child(_reroll)
+	return row
+
+
+func rerolls_left() -> int:
+	return _rerolls
+
+
+func _on_reroll() -> void:
+	if _rerolls <= 0:
+		return
+	_rerolls -= 1
+	Audio.play_select()
+	rerolled.emit()
 
 
 func close() -> void:

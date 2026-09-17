@@ -69,6 +69,26 @@ var cast_guarded := false
 var pop_t := 0.0
 var merge_target := false
 
+## Whether this unit is visibly stunned or frozen right now, and for how much
+## longer. Driven ENTIRELY by the event log, never read off the unit.
+##
+## That distinction is the whole reason these fields exist. The simulation resolves
+## the entire round before the first frame is drawn, so `unit.stun_left` during
+## playback is whatever it was when the battle ENDED — usually zero. A mark drawn
+## from `unit.is_held()` would be a mark that almost never appeared, and when it did
+## appear would show the wrong unit at the wrong time. The same trap as `unit.cell`.
+enum { HELD_NONE, HELD_STUNNED, HELD_FROZEN }
+var held := HELD_NONE
+var held_left := 0.0
+
+## The Martyr's window: zero health and still standing. Driven off the "frenzy" and
+## "frenzy_end" events with a clock of its own, for exactly the reason the `held`
+## fields above exist — during playback `unit.frenzy_left` is the unit's state at the
+## END of the round, so reading it would light up every Martyr from the first frame.
+var frenzied := false
+var frenzy_secs := 0.0
+var frenzy_t := 0.0
+
 # Whose side the person watching is on. The enemy's letters are drawn upside
 # down, which turns out to read faster than colour alone: at a glance the board
 # separates into "letters I can read" and "letters I cannot".
@@ -128,6 +148,19 @@ func hp_fraction() -> float:
 
 
 func _process(delta: float) -> void:
+	# A held unit's ring turns, so it is repainted every frame while it lasts.
+	if held != HELD_NONE:
+		held_left -= delta
+		if held_left <= 0.0:
+			held = HELD_NONE
+			held_left = 0.0
+		queue_redraw()
+	if frenzied:
+		frenzy_secs -= delta
+		frenzy_t = fmod(frenzy_t + delta * 9.0, TAU)
+		if frenzy_secs <= 0.0:
+			end_frenzy()
+		queue_redraw()
 	if reviving:
 		revive_t = fmod(revive_t + delta * 2.4, TAU)
 		queue_redraw()
@@ -153,6 +186,46 @@ func _process(delta: float) -> void:
 	if flash > 0.0:
 		flash = maxf(flash - delta * 4.0, 0.0)
 		queue_redraw()
+
+
+func hold(kind: int, seconds: float) -> void:
+	## Marks the unit as stunned or frozen for `seconds` of playback time. A freeze
+	## outranks a stun when both land, because a freeze is the stronger condition —
+	## it also amplifies damage and cancels what the victim would have done on death.
+	if kind == HELD_NONE or seconds <= 0.0:
+		return
+	if held == HELD_FROZEN and kind == HELD_STUNNED:
+		held_left = maxf(held_left, seconds)
+		return
+	held = kind
+	held_left = maxf(held_left if held == kind else 0.0, seconds)
+	queue_redraw()
+
+
+func begin_frenzy(seconds: float) -> void:
+	## Opens the window. `seconds` is already in playback time — the caller divides by
+	## the speed multiplier, the same as hold() above.
+	if seconds <= 0.0:
+		return
+	frenzied = true
+	frenzy_secs = seconds
+	queue_redraw()
+
+
+func end_frenzy() -> void:
+	frenzied = false
+	frenzy_secs = 0.0
+	queue_redraw()
+
+
+func release(kind: int) -> void:
+	## The matching end event. Only lets go if it is the condition being ended, so a
+	## thaw does not clear a stun that landed on top of it.
+	if held != kind:
+		return
+	held = HELD_NONE
+	held_left = 0.0
+	queue_redraw()
 
 
 func hit() -> void:
@@ -364,6 +437,47 @@ func _draw() -> void:
 		# it lasts, and it should read that way.
 		draw_arc(Vector2.ZERO, half - 1.0, 0.0, TAU, 28,
 			Color(0.98, 0.78, 0.30, 0.90 * alpha), 3.0)
+
+	# Held: stunned or frozen. Nothing on the unit itself said so before, and the
+	# stun read as broken because of it — the tile flashed once when the charge
+	# landed and then there was no way at all to tell that the unit standing there
+	# was missing its turns. The two states get their own colour because they are
+	# not the same thing: a freeze also amplifies damage and cancels what the victim
+	# would have done on death.
+	if held != HELD_NONE:
+		var cold := held == HELD_FROZEN
+		var mark := Color(0.60, 0.82, 0.95) if cold else Color(1.00, 0.86, 0.46)
+		mark.a = 0.95 * alpha
+		# A broken ring rather than a solid one, so it cannot be mistaken for the
+		# taunt ring above it, and it spins so a held unit is never mistaken for a
+		# unit that is simply idle.
+		var spin: float = float(Time.get_ticks_msec()) * 0.004
+		for i in 4:
+			var from: float = spin + float(i) * TAU / 4.0
+			draw_arc(Vector2.ZERO, half + 1.5, from, from + 0.55, 6, mark, 2.5)
+		# Two pips above the body: stunned is one, frozen is two, so the difference
+		# is readable without relying on colour alone.
+		var pips := 2 if cold else 1
+		for i in pips:
+			draw_circle(Vector2((float(i) - float(pips - 1) * 0.5) * 6.0,
+				-half - 7.0), 2.2, mark)
+
+	if frenzied:
+		# An empty health bar on a unit that is still swinging looks exactly like a
+		# bug, so the tile has to say what is happening. Hot, moving, and drawn
+		# OUTSIDE the team ring, because for these few seconds it is the most
+		# important thing on the board.
+		var beat := 0.55 + 0.45 * sin(frenzy_t)
+		draw_rect(body.grow(2.0 + beat * 4.0),
+			Color(1.00, 0.30, 0.26, (0.55 + 0.40 * beat) * alpha), false, 3.0)
+		draw_rect(body, Color(0.95, 0.20, 0.22, 0.20 * beat * alpha), true)
+		# Three turning spokes. A pulse alone would read as a buff; something that
+		# turns reads as a clock, which is what this is.
+		for i in 3:
+			var ang: float = frenzy_t * 0.5 + float(i) * TAU / 3.0
+			var dir := Vector2(cos(ang), sin(ang))
+			draw_line(dir * (half - 2.0), dir * (half + 5.0 + beat * 3.0),
+				Color(1.00, 0.46, 0.30, 0.9 * alpha), 2.5)
 
 	if hidden_unit:
 		draw_rect(body.grow(3.0), Color(0.62, 0.52, 0.85, 0.75 * alpha), false, 2.0)

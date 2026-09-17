@@ -19,7 +19,7 @@ var _status_overflow := ""
 
 
 func _ready() -> void:
-	print("\n=== Six by Eleven — local PvP smoke test ===\n")
+	print("\n=== Sixfold — local PvP smoke test ===\n")
 	GameSetup.reload_catalogue()
 	GameSetup.mode = GameSetup.Mode.LOCAL_PVP
 	GameSetup.set_slot(BoardModel.TEAM_B, 0, 0)

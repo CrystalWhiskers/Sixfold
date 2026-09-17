@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/abilities/martyrdom.tres" id="1_8spkf"]
+[ext_resource type="Resource" path="res://data/units/martyr_t5.tres" id="2_8ptdm"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_jqaxc"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="4_7gq3w"]
+
+[resource]
+script = ExtResource("3_jqaxc")
+id = &"martyr"
+display_name = "Martyr IV"
+tier = 4
+max_hp = 1040.0
+attack_damage = 48.0
+attack_speed = 0.85
+move_time = 0.7000000000000001
+ability = ExtResource("1_8spkf")
+mana_per_attack = 0.0
+next_tier = ExtResource("2_8ptdm")
+note = "Every point of health it loses is damage and attack speed back. Below half it stops waiting for the enemy and opens its own veins, and it cannot be talked out of it — from there it is on a clock nobody can stop, getting worse to stand in front of the whole way down. At the bottom it does not fall over: it keeps swinging at nothing to lose for a few seconds, through three enemies at a time, and then it is gone. Mediocre at full health on purpose. You are not buying a fighter, you are buying the last eight seconds of one."
+sprite = ExtResource("4_7gq3w")
+accent = Color(0.78, 0.3, 0.4, 1)

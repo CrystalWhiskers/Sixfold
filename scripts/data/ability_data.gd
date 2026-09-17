@@ -23,6 +23,8 @@ enum Kind {
 	DRAIN,
 	FREEZE,
 	CHARGE,
+	POSSESS,
+	FRENZY,
 }
 
 @export var id: StringName = &""
@@ -98,7 +100,16 @@ enum Kind {
 ## version of its own swing has to be written this way or its tier 6 hits for
 ## the same as its tier 1.
 @export var burst_attack_multiple: float = 0.0
+## Read at TIER ONE. CombatSim.burst_damage_of doubles it per tier, the same way
+## the blink's base damage is doubled and the same way every stat on the unit table
+## is — so this number is the tier 1 figure and not the figure.
+##
+## It used to be taken flat, which is the trap the comment above warns about and
+## which the Pyre walked straight into: its tier 6 lance hit for exactly what its
+## tier 1 did, against health bars thirty-two times bigger.
 @export var burst_damage: float = 58.0
+## Scaled per tier alongside burst_damage. A splash that stayed flat while the
+## direct hit grew would quietly turn into nothing.
 @export var splash_damage: float = 12.0
 @export var splash_radius: int = 1
 
@@ -141,6 +152,56 @@ enum Kind {
 ## How far it will run before giving up. The board is eleven tall, so anything at
 ## or above that is "the whole board".
 @export var charge_distance: int = 11
+
+## Seconds the charge spends crossing ONE tile, and the whole reason a charge can be
+## dodged at all.
+##
+## This used to not exist: the charge resolved in a single tick, so the unit at the far
+## end of the lane was hit in the same instant the Breaker decided to run, and the run
+## you saw on screen was an animation played after the fact. Nothing could get out of
+## the way, because there was no "way" — there was a cast and a result.
+##
+## Now the charge advances a tile at a time and picks its victim ON ARRIVAL, so anything
+## that leaves the lane before it gets there is missed and anything that walks INTO the
+## lane is hit instead. That makes the number below the unit's whole character: at zero
+## it is the old instant slam, at a walking pace it is just a unit that walks. It wants
+## to be clearly faster than a unit on foot and slow enough to be seen coming.
+@export var charge_tile_seconds: float = 0.0
+
+@export_group("Possess")
+## A higher-tier Usurper drags its host up to its own tier for the round. The
+## owner does not keep it: release_possession() puts the original row back at the
+## round boundary.
+@export var possess_forces_tier: bool = true
+
+## What the husk's move time is multiplied by once its host dies. Above 1.0 is
+## slower, because MOVE_TIME is seconds per tile.
+@export var husk_move_mult: float = 2.6
+
+## Damage dealt when it tries to take something ABOVE its own tier, as a multiple
+## of its own max health per tier of the gap. It dies doing it.
+@export var backlash_per_tier: float = 1.0
+
+## How long the grip holds, in seconds PER TIER of the Usurper. Zero means "the
+## whole round", which is what the unit was asked for first and is no longer the
+## default — see below.
+##
+## Per tier rather than flat because a bigger Usurper should hold on longer, and
+## because the whole-round version is decisive: a single Usurper in a five-unit
+## line wins 100% of measured matches, since it opens the fight six against four
+## and never gives the body back. The curve from there is steep and worth having
+## written down —
+##
+##     whole round  100%  ·  10s  85%  ·  5s  50%  ·  3s  31.5%
+##
+## against a 49.8% baseline for an ordinary unit in the same slot. At 2.5 seconds a
+## tier the ladder runs 2.5 / 5 / 7.5 / 10 / 12.5 / 15, which puts a tier 2 exactly
+## on the median and lets the top of the ladder keep a body for most of a round.
+##
+## Halving the host's damage instead does nothing at all (still 100%): the value is
+## in the body count, not in what the body hits for, which is the same lesson the
+## six-wisp Conjurer taught.
+@export var possess_seconds_per_tier: float = 0.0
 
 @export_group("Summon")
 @export var summon_unit: UnitData = null
@@ -271,10 +332,61 @@ enum Kind {
 ## current, so it does not tail off — and deliberately not counting shields, so
 ## a Warden cannot hide behind one.
 @export var drain_percent: float = 0.025
+
+## Added to drain_percent for every tier above the first. Deliberately small.
+##
+## The drain already grows in absolute terms without any help — it is a share of
+## the victim's maximum health, and that doubles per tier — which is why it was
+## written flat. What it did not do was get better at its job: a tier 6 Leech took
+## the same 2.5% slice as a tier 1, so merging one up bought nothing but a bigger
+## body. 0.005 takes it from 2.5% to 5% across the whole ladder, which is a real
+## reason to merge and not a second damage curve on top of the first.
+@export var drain_percent_per_tier: float = 0.0
 @export var drain_interval: float = 1.0
 
 @export_group("Mana aura")
 @export var mana_aura_radius: int = 1
+
+@export_group("Frenzy")
+## How much damage and attack speed a FULL health bar's worth of missing health
+## is worth, as a multiplier on top of 1.0. At 1.0 a unit on its last sliver hits
+## roughly twice as hard and twice as fast as it did at full.
+##
+## This is deliberately linear in MISSING health rather than stepped at
+## thresholds: a step means the unit is either enraged or not, which reads as a
+## bug the first few times you watch it, while a slope is legible from the health
+## bar itself. It is applied to damage and attack speed and nothing else — max
+## health would recurse through the number it is computed from, and movement
+## would let a wounded unit outrun the line it is supposed to be holding.
+@export var rage_per_missing: float = 0.0
+
+## Once below `frenzy_threshold` of its max health, the unit bleeds this fraction
+## of its MAX health every second, of its own accord, until it hits zero.
+##
+## Max health rather than current, so it does not tail off into an asymptote and
+## leave the unit alive at 0.4 health forever. This is the cost of the rage above:
+## the unit is stronger the closer it is to dead, so something has to walk it
+## there whether or not the enemy cooperates.
+@export var frenzy_decay: float = 0.0
+@export var frenzy_threshold: float = 0.0
+
+## Seconds of death immunity once it reaches zero health: still standing, still
+## swinging, with nothing left to lose. A gold pick of the unit's own buff can
+## lengthen this — that figure lives on BuffData.frenzy_seconds_at_gold, next to
+## the Sentinel's empowered_cap_at_gold, because it is the buff's effect and not
+## the unit's.
+@export var frenzy_seconds: float = 0.0
+
+## What the window is worth while it is open. Movement is seconds per tile, so
+## this is converted rather than multiplied — see UnitInstance.frenzy_bonus.
+@export var frenzy_damage: float = 0.0
+@export var frenzy_attack_speed: float = 0.0
+@export var frenzy_move: float = 0.0
+
+## How many enemies its swings cut through while the window is open. Three, so
+## the last few seconds are spent hitting the whole front rank rather than one
+## unlucky unit.
+@export var frenzy_pierce: int = 1
 
 
 func describe() -> String:
@@ -362,6 +474,12 @@ func describe() -> String:
 		Kind.BUILD:
 			return "Raises %d wall(s) worth %d damage on empty ground within %d tile(s), for the rest of the round. It blocks both sides, and anything can chew through it eventually." % [
 				terrain_tiles, roundi(wall_hp), terrain_reach]
+		Kind.FRENZY:
+			return "Every point of health it is missing is damage and attack speed: at the brink it hits %d%% harder and that much faster. Below %d%% it starts bleeding %.0f%% of its max health a second and nothing can stop it. At zero it keeps standing for %.1fs — %d%% damage, %d%% attack speed, %d%% faster on its feet, cutting through %d enemies at once — and then it goes." % [
+				roundi(rage_per_missing * 100.0), roundi(frenzy_threshold * 100.0),
+				frenzy_decay * 100.0, frenzy_seconds,
+				roundi(frenzy_damage * 100.0), roundi(frenzy_attack_speed * 100.0),
+				roundi(frenzy_move * 100.0), frenzy_pierce]
 		Kind.ASCEND:
 			return "The first full bar changes it: %.1fx health, %.0f%% faster swings, %.0f%% faster on its feet. Every bar after that arms the next swing to kill outright, whatever it hits." % [
 				ascend_hp_mult,
