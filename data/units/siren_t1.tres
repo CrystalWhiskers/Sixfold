@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/abilities/vertigo.tres" id="1_7wfl5"]
+[ext_resource type="Resource" path="res://data/units/siren_t2.tres" id="2_qi7qh"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_v6wrl"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="4_mt6k0"]
+
+[resource]
+script = ExtResource("3_v6wrl")
+id = &"siren"
+display_name = "Siren"
+max_hp = 70.0
+attack_damage = 6.0
+attack_speed = 2.0
+move_time = 0.8
+attack_range = 3
+sight_range = 6
+attack_type = 1
+ability = ExtResource("1_7wfl5")
+mana_per_attack = 9.0
+next_tier = ExtResource("2_qi7qh")
+note = "Shoots from the back of the board, constantly, for almost nothing. The damage is not the point — the rate is: every shot is a fraction of the next bar, and every bar sends an enemy reeling. A disoriented unit wanders off and stops swinging entirely, so the Siren does not kill things, it takes them out of the fight for a moment and hands the moment to everyone else. Fragile, and worthless on its own."
+sprite = ExtResource("4_mt6k0")
+accent = Color(0.46, 0.72, 0.78, 1)

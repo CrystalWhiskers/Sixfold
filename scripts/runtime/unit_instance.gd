@@ -41,6 +41,7 @@ enum Status {
 	STEALTH,
 	HASTE,
 	NO_RECOVERY,
+	DISORIENTED,
 }
 
 ## `debuff` is whether it is done TO the unit by an enemy; `cleansable` is
@@ -58,6 +59,7 @@ const STATUSES := [
 	{id = Status.HASTE, name = "Haste", debuff = false, cleansable = false},
 	{id = Status.NO_RECOVERY, name = "Sudden Death", debuff = true,
 		cleansable = false},
+	{id = Status.DISORIENTED, name = "Disoriented", debuff = true, cleansable = true},
 ]
 
 var data: UnitData = null
@@ -168,6 +170,23 @@ var frenzy_spent: bool = false
 var charge_left: int = 0
 var charge_step: Vector2i = Vector2i.ZERO
 var charge_timer: float = 0.0
+
+## Lost: wandering, and not swinging at anything.
+##
+## `disorient_immune_left` is the five seconds afterwards during which it cannot be
+## disoriented again. Without it two of these units lock a target out of the round
+## between them, and the counterplay — kill the Siren — is not available to a unit that
+## never gets to act. The immunity is what makes the ability a tempo tool rather than a
+## disable.
+var disorient_left: float = 0.0
+var disorient_immune_left: float = 0.0
+
+## How long the immunity will last once THIS disorientation ends. Carried on the victim
+## because the figure belongs to the CASTER's ability, and by the time the clock runs out
+## the caster may be dead, may be a different Siren, or may never have been on the board
+## the view is looking at. Reading it off the victim's own ability at that point is the
+## obvious version and it is wrong: the victim is not the unit with the ability.
+var disorient_immune_after: float = 0.0
 
 var taunt_left: float = 0.0
 var reflect_left: float = 0.0
@@ -380,6 +399,14 @@ func stop_charging() -> void:
 	charge_timer = 0.0
 
 
+func is_disoriented() -> bool:
+	return disorient_left > 0.0
+
+
+func is_disorient_immune() -> bool:
+	return disorient_immune_left > 0.0
+
+
 func is_frozen() -> bool:
 	return frozen_left > 0.0
 
@@ -408,7 +435,12 @@ func can_move_now() -> bool:
 
 
 func can_attack_now() -> bool:
-	return data.can_attack and not is_taunting() and not is_held()
+	# Disorientation is deliberately NOT part of is_held(). Held means frozen or stunned:
+	# rooted to the spot, doing nothing. A disoriented unit is the opposite shape — it is
+	# very much moving, it just has no idea where, and it does not swing at anything on
+	# the way. Folding it into is_held() would plant it, which is a different ability.
+	return (data.can_attack and not is_taunting() and not is_held()
+		and not is_disoriented())
 
 
 func taunt_damage_taken() -> float:
@@ -696,6 +728,8 @@ func has_status(s: Status) -> bool:
 			return haste_stacks > 0
 		Status.NO_RECOVERY:
 			return recovery_denied
+		Status.DISORIENTED:
+			return disorient_left > 0.0
 	return false
 
 
@@ -723,6 +757,11 @@ func clear_status(s: Status) -> void:
 			haste_stacks = 0
 		Status.NO_RECOVERY:
 			recovery_denied = false
+		Status.DISORIENTED:
+			# The immunity is deliberately NOT granted here. A cleanse is an ally
+			# pulling you together, not you shaking it off yourself — handing out the
+			# five seconds too would make one Seraph the answer to the whole unit.
+			disorient_left = 0.0
 
 
 static func status_name(s: Status) -> String:
@@ -819,6 +858,11 @@ func reset_for_battle() -> void:
 	gate_used = false
 	frenzy_left = 0.0
 	frenzy_spent = false
+	# The immunity goes with the round too. It is cleared by the STATUSES walk below for
+	# the disorientation itself, but the immunity is not a status — it is the absence of
+	# one — so it needs its own line here.
+	disorient_immune_left = 0.0
+	disorient_immune_after = 0.0
 	# A charge cannot outlive the round it was started in. Without this a Breaker that
 	# was still running when the bell went would resume mid-lane on the next board, from
 	# a tile it is no longer standing on.

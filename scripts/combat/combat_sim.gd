@@ -352,6 +352,7 @@ func step() -> void:
 	# already taken their turns this tick, so a unit that stepped out of the lane this
 	# tick is already out of it when the charge arrives. That ordering is the dodge.
 	_tick_charges()
+	_tick_disorient()
 	_tick_shields()
 	_tick_possessions()
 	_tick_dry_spells()
@@ -537,6 +538,11 @@ func _decide(u: UnitInstance) -> void:
 	# full-mana cast below, so a bar that filled the tick before it landed is held
 	# rather than spent.
 	if u.is_held():
+		return
+	if u.is_disoriented():
+		# Lost. It still moves — that is the whole difference between this and a stun —
+		# but it moves somewhere arbitrary and it swings at nothing on the way.
+		_wander(u)
 		return
 	u.target = _mark_for(u)
 	if u.is_taunting():
@@ -1032,6 +1038,39 @@ func _begin_move(u: UnitInstance) -> bool:
 	return true
 
 
+func _wander(u: UnitInstance) -> void:
+	## One step in a direction it did not choose.
+	##
+	## Drawn from the simulation's own seeded generator, so a disoriented unit wanders the
+	## same way every time the same battle is replayed — the view replays an event log and
+	## a unit that took a different path on playback than it did in the simulation would
+	## desync the board from the model for the rest of the round.
+	##
+	## A blocked or occupied choice is simply a step not taken rather than a re-roll: a
+	## unit hemmed in by its own line mills about on the spot, which is what being lost in
+	## a crowd looks like.
+	u.target = null
+	if not u.can_move_now():
+		return
+	# The same offsets the pathfinder uses, so a wandering unit cannot reach a tile a
+	# walking one could not.
+	var dirs := _neighbour_offsets()
+	var to: Vector2i = u.cell + dirs[rng.randi_range(0, dirs.size() - 1)]
+	if not board.in_bounds(to) or not board.is_empty(to):
+		return
+	if BoardModel.is_blocked(to) or not BoardModel.can_climb(u.cell, to):
+		return
+	if BoardModel.blocks_between(u.cell, to):
+		return
+	var from := u.cell
+	if not board.move_unit(u, to):
+		return
+	var dur := maxf(u.stat(StatModifier.Stat.MOVE_TIME) / pressure(), MIN_MOVE_TIME)
+	u.move_from = from
+	_enter(u, UnitInstance.State.MOVING, dur)
+	_emit("move", {uid = u.uid, from = from, to = to, duration = dur})
+
+
 func may_use_gate(u: UnitInstance) -> bool:
 	## Whether this unit may go through a gate: it has not spent its own transit, and
 	## its side has a transit left to spend. See GATE_TRANSITS_PER_TEAM.
@@ -1268,6 +1307,8 @@ func _resolve_ability(u: UnitInstance) -> void:
 			_resolve_mana_aura(u, ab)
 		AbilityData.Kind.FREEZE:
 			_resolve_freeze(u, ab)
+		AbilityData.Kind.DISORIENT:
+			_resolve_disorient(u, ab)
 		AbilityData.Kind.CHARGE:
 			_resolve_charge(u, ab)
 		AbilityData.Kind.POSSESS:
@@ -1928,6 +1969,18 @@ func host_bonuses(team: int) -> Dictionary:
 	return {move = tb.host_move_bonus(), power = tb.host_power_bonus()}
 
 
+func possess_weakness_of(u: UnitInstance) -> float:
+	## How much weaker this Usurper's puppets are, after its tier has paid some of it off.
+	## Clamped at zero rather than allowed to go negative: past the tier where the penalty
+	## runs out, a stolen body is simply at full strength — it does not start getting
+	## BETTER than the unit it was taken from.
+	if u == null or u.data == null or u.data.ability == null:
+		return 0.0
+	var ab := u.data.ability
+	var paid := ab.possess_weakness_per_tier * float(maxi(u.data.tier, 1) - 1)
+	return clampf(ab.possess_weakness - paid, 0.0, 1.0)
+
+
 func _apply_host_buffs(u: UnitInstance, host: UnitInstance) -> void:
 	## The Usurper buff's host-only half, applied at the moment the reins change
 	## hands. Battle modifiers, so the round boundary takes them away — a host
@@ -1949,11 +2002,26 @@ func _apply_host_buffs(u: UnitInstance, host: UnitInstance) -> void:
 			StatModifier.Stat.ATTACK_DAMAGE, StatModifier.Mode.PERCENT, power))
 		lent.append(StatModifier.make(
 			StatModifier.Stat.MAX_HP, StatModifier.Mode.PERCENT, power))
+	# The ability's own penalty, on top of whatever the buff lent. It goes in the SAME
+	# list on purpose: release_possession removes exactly what is in lent_modifiers, so a
+	# debuff recorded anywhere else would survive the hand-back and quietly follow the
+	# host around for the rest of the round as its owner's unit.
+	var weak := possess_weakness_of(u)
+	if weak > 0.0:
+		lent.append(StatModifier.make(
+			StatModifier.Stat.ATTACK_DAMAGE, StatModifier.Mode.PERCENT, -weak))
+		lent.append(StatModifier.make(
+			StatModifier.Stat.MAX_HP, StatModifier.Mode.PERCENT, -weak))
 	for m in lent:
 		host.add_battle_modifier(m)
 	# Remembered, so a timed release can hand back exactly what was lent and leave
 	# the host's own empowerment and roster bonuses alone.
 	host.lent_modifiers = lent
+	if weak > 0.0:
+		# The maximum just fell, so the bar has to come down with it — a unit left holding
+		# more health than its maximum reads as a full bar that will not move when it is
+		# hit, and heals back to a cap that no longer exists.
+		host.current_hp = minf(host.current_hp, host.stat(StatModifier.Stat.MAX_HP))
 	if power > 0.0:
 		# The bigger body is filled, exactly as an empowerment or a forced tier is:
 		# a unit that gains maximum health and stays on the old number has been
@@ -2084,6 +2152,89 @@ func _reinfect(u: UnitInstance, victim: UnitInstance) -> void:
 		_burst_against(u, ab, victim)
 		return
 	_take_host(u, ab, victim)
+
+
+func disorient_seconds_of(u: UnitInstance, ab: AbilityData) -> float:
+	## How long this caster's disorientation lasts.
+	##
+	## The cap applies to the TIER ladder only. A buff that lengthens it adds on top,
+	## because the cap describes how far the unit gets on its own — not how long anything
+	## can ever be disoriented for. Written the other way round the buff would be worth
+	## nothing at all on the tier where you most want it.
+	var tiers := float(maxi(u.data.tier, 1) - 1)
+	var own := minf(ab.disorient_seconds + ab.disorient_seconds_per_tier * tiers,
+		maxf(ab.disorient_max, 0.0))
+	var tb: TeamBuffs = team_buffs.get(u.team, null)
+	return maxf(own, 0.0) + (tb.disorient_bonus_for(u) if tb != null else 0.0)
+
+
+func _resolve_disorient(u: UnitInstance, ab: AbilityData) -> void:
+	## Sends one enemy reeling. Whatever the caster was already shooting at, so the
+	## disorientation lands on the unit its own side is already working on rather than
+	## splitting the army's attention — the same rule the freeze uses.
+	var mark := u.target
+	if mark == null or not mark.is_alive() or mark.team == u.team \
+			or mark.is_disorient_immune():
+		mark = _nearest_disorientable(u)
+	if mark == null:
+		_wasted_summon(u, ab, "no_target")
+		return
+	var secs := disorient_seconds_of(u, ab)
+	if secs <= 0.0:
+		_wasted_summon(u, ab, "no_target")
+		return
+	# RESET, not extended, and not "longest wins". Catching a unit that is already
+	# reeling starts its count again from the top — which is what was asked for, and it
+	# is a different rule from the freeze deliberately: the immunity below is what stops
+	# it becoming a permanent lock, so the reset does not have to.
+	mark.disorient_left = secs
+	# Recorded now, spent when the clock runs out. See UnitInstance.disorient_immune_after.
+	mark.disorient_immune_after = maxf(ab.disorient_immunity, 0.0)
+	# Whatever it was in the middle of is dropped. A unit that keeps its half-finished
+	# swing and lands it a moment after being sent reeling reads as the ability failing.
+	mark.state = UnitInstance.State.IDLE
+	mark.state_timer = 0.0
+	mark.target = null
+	_emit("ability", {uid = u.uid, ability = ab.id, kind = ab.kind,
+		cell = u.cell, target_cell = mark.cell,
+		cells = [mark.cell] as Array[Vector2i]})
+	_emit("disorient", {uid = mark.uid, cell = mark.cell, seconds = secs,
+		source_uid = u.uid})
+
+
+func _nearest_disorientable(u: UnitInstance) -> UnitInstance:
+	## The closest enemy that is not already immune. Immunity is checked HERE rather than
+	## only at the moment of application, or the cast picks the one unit it cannot touch
+	## and is wasted while three others stand in range.
+	var best: UnitInstance = null
+	var best_gap := 1 << 30
+	for v in _units:
+		if not v.is_alive() or v.team == u.team or v.is_disorient_immune():
+			continue
+		var gap := BoardModel.tile_distance(u.cell, v.cell)
+		if gap < best_gap:
+			best_gap = gap
+			best = v
+	return best
+
+
+func _tick_disorient() -> void:
+	for u in _units:
+		if u.disorient_immune_left > 0.0:
+			u.disorient_immune_left = maxf(u.disorient_immune_left - TICK, 0.0)
+		if u.disorient_left <= 0.0:
+			continue
+		u.disorient_left -= TICK
+		if u.disorient_left > 0.0:
+			continue
+		u.disorient_left = 0.0
+		# The immunity starts the moment it comes OUT of it, not when it went in. Started
+		# at the other end it would overlap the disorientation itself and a long one would
+		# burn most of its own protection.
+		u.disorient_immune_left = maxf(u.disorient_immune_after, 0.0)
+		u.disorient_immune_after = 0.0
+		_emit("disorient_end", {uid = u.uid, cell = u.cell,
+			immune = u.disorient_immune_left})
 
 
 func _tick_stuns() -> void:

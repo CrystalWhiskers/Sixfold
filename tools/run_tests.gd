@@ -11,7 +11,7 @@ extends SceneTree
 ## So the count itself is asserted. If it drops, something died quietly and the
 ## run says so. Raise this when you add tests — it is a ratchet, and the number
 ## only ever goes up.
-const MIN_CHECKS := 2455
+const MIN_CHECKS := 2555
 
 var _passed := 0
 var _failed := 0
@@ -97,6 +97,10 @@ func _initialize() -> void:
 	_test_avalanche()
 	_test_the_usurper_takes_a_host()
 	_test_the_usurper_and_the_tier_ladder()
+	_test_a_puppet_is_a_worse_unit()
+	_test_the_siren()
+	_test_a_reeling_unit_wanders()
+	_test_discord()
 	_test_the_husk()
 	_test_the_grip_can_be_timed()
 	_test_a_stunned_unit_does_nothing()
@@ -969,8 +973,8 @@ func _test_buff_data() -> void:
 	_section("Buff data")
 
 	var pool := _pool()
-	_check("every buff on disk loaded", pool.buffs.size() == 49,
-		"loaded %d, expected 49" % pool.buffs.size())
+	_check("every buff on disk loaded", pool.buffs.size() == 50,
+		"loaded %d, expected 50" % pool.buffs.size())
 
 	var ids := {}
 	var missing: PackedStringArray = []
@@ -1696,7 +1700,7 @@ func _test_new_units() -> void:
 		roster != null and roster.is_valid())
 	if roster == null:
 		return
-	_check("thirty-one unit types are pickable", roster.units.size() == 31,
+	_check("thirty-two unit types are pickable", roster.units.size() == 32,
 		"%d in the roster" % roster.units.size())
 	# Ids are file names, so a duplicate means one row quietly overwrites another
 	# and the roster is short without anything reporting it.
@@ -10102,11 +10106,33 @@ func _test_reins() -> void:
 
 	# Through the sim: the host half has to reach a unit the buff cannot name.
 	var plain := _usurp_board(3, 3)
-	plain.sim.setup(plain.board, 131)
 	var plain_host: UnitInstance = plain.prey
+	# Read BEFORE the bell, so it is the unit as its owner built it. Everything below is
+	# measured against this rather than against another possessed host, because there are
+	# now two things happening to a stolen body at once — the buff's bonus and the
+	# ability's own penalty — and a comparison between two puppets cannot separate them.
+	var base_hp := plain_host.stat(StatModifier.Stat.MAX_HP)
+	var base_dmg := plain_host.stat(StatModifier.Stat.ATTACK_DAMAGE)
+	plain.sim.setup(plain.board, 131)
 	var plain_hp := plain_host.stat(StatModifier.Stat.MAX_HP)
 	var plain_dmg := plain_host.stat(StatModifier.Stat.ATTACK_DAMAGE)
 	var plain_move := plain_host.stat(StatModifier.Stat.MOVE_TIME)
+
+	# The penalty first: a tier 3 Usurper drives at 0.50 - 0.10 * 2 = 30% off.
+	# Typed explicitly, both of them. Dictionary access yields a Variant, so `plain.sim`
+	# and `plain.thief` have no static type and every local inferred from them fails to
+	# compile — which reads as the test suite vanishing rather than as a type error.
+	var plain_sim: CombatSim = plain.sim
+	var plain_thief: UnitInstance = plain.thief
+	var weak: float = plain_sim.possess_weakness_of(plain_thief)
+	_check("a tier 3 Usurper's puppet is 30% weaker", is_equal_approx(weak, 0.30),
+		"%.2f" % weak)
+	_check("and the stolen body really is that much smaller",
+		is_equal_approx(plain_hp, base_hp * (1.0 - weak)),
+		"%.0f against %.0f" % [plain_hp, base_hp * (1.0 - weak)])
+	_check("and hits that much softer",
+		is_equal_approx(plain_dmg, base_dmg * (1.0 - weak)),
+		"%.1f against %.1f" % [plain_dmg, base_dmg * (1.0 - weak)])
 
 	var rich := _usurp_board(3, 3)
 	var tb := TeamBuffs.new()
@@ -10114,15 +10140,22 @@ func _test_reins() -> void:
 	rich.sim.team_buffs[BoardModel.TEAM_A] = tb
 	rich.sim.setup(rich.board, 131)
 	var rich_host: UnitInstance = rich.prey
-	_check("a gold Reins doubles the host's health",
-		is_equal_approx(rich_host.stat(StatModifier.Stat.MAX_HP), plain_hp * 2.0),
+	# The buff adds 100% of the host's OWN figure, and the penalty takes 30% of the same
+	# figure — they are both percentages of the base and they sum, so a gold Reins on a
+	# tier 3 Usurper nets +70% rather than doubling what the penalty left. Written out
+	# because "doubles" was the old assertion and it is no longer what happens.
+	var want_hp: float = base_hp * (1.0 + 1.0 - weak)
+	var want_dmg: float = base_dmg * (1.0 + 1.0 - weak)
+	_check("a gold Reins adds the host's whole health bar again, penalty and all",
+		is_equal_approx(rich_host.stat(StatModifier.Stat.MAX_HP), want_hp),
 		"%.0f against %.0f" % [
-			rich_host.stat(StatModifier.Stat.MAX_HP), plain_hp * 2.0])
+			rich_host.stat(StatModifier.Stat.MAX_HP), want_hp])
 	_check("and its attack",
-		is_equal_approx(rich_host.stat(StatModifier.Stat.ATTACK_DAMAGE),
-			plain_dmg * 2.0),
+		is_equal_approx(rich_host.stat(StatModifier.Stat.ATTACK_DAMAGE), want_dmg),
 		"%.1f against %.1f" % [
-			rich_host.stat(StatModifier.Stat.ATTACK_DAMAGE), plain_dmg * 2.0])
+			rich_host.stat(StatModifier.Stat.ATTACK_DAMAGE), want_dmg])
+	_check("so a buffed puppet still beats an unbuffed one",
+		rich_host.stat(StatModifier.Stat.MAX_HP) > plain_hp)
 	_check("and the bigger host is filled, not left on the old number",
 		is_equal_approx(rich_host.current_hp,
 			rich_host.stat(StatModifier.Stat.MAX_HP)),
@@ -10136,10 +10169,13 @@ func _test_reins() -> void:
 	# And it is all battle-scoped: a host handed back must not keep the thief's
 	# buff. This is the leak that would let a losing player farm stats.
 	rich_host.reset_for_battle()
-	_check("a host handed back keeps none of the thief's buff",
-		is_equal_approx(rich_host.stat(StatModifier.Stat.MAX_HP), plain_hp),
+	# Back to the unit its owner built — neither the thief's buff nor the thief's penalty.
+	# The penalty matters as much as the buff here: a debuff that outlived the possession
+	# would let an Usurper permanently cripple something just by touching it.
+	_check("a host handed back keeps none of the thief's buff, and none of the penalty",
+		is_equal_approx(rich_host.stat(StatModifier.Stat.MAX_HP), base_hp),
 		"%.0f, wanted %.0f" % [
-			rich_host.stat(StatModifier.Stat.MAX_HP), plain_hp])
+			rich_host.stat(StatModifier.Stat.MAX_HP), base_hp])
 
 	var card := buff.describe(BuffData.Rarity.GOLD)
 	_check("the card mentions both halves",
@@ -10616,6 +10652,8 @@ func _set_status(u: UnitInstance, s: UnitInstance.Status) -> void:
 			u.haste_stacks = 3
 		UnitInstance.Status.NO_RECOVERY:
 			u.recovery_denied = true
+		UnitInstance.Status.DISORIENTED:
+			u.disorient_left = 2.0
 
 
 func _test_seraph_cleanses() -> void:
@@ -12031,3 +12069,303 @@ func _test_the_charge_takes_time_to_arrive() -> void:
 		steps > 1, "%d steps" % steps)
 	_check("and is told when it is over", end_t > start_t,
 		"start %.2f, end %.2f" % [start_t, end_t])
+
+
+func _test_a_puppet_is_a_worse_unit() -> void:
+	_section("The Usurper's puppet is weaker than the unit it was")
+
+	var usurper := _must_find("usurper")
+	var ab: AbilityData = usurper.ability
+	if ab == null:
+		return
+	_check("Usurpation carries a weakness at all", ab.possess_weakness > 0.0,
+		"%.2f" % ab.possess_weakness)
+	_check("half the unit at tier 1, as asked",
+		is_equal_approx(ab.possess_weakness, 0.50), "%.2f" % ab.possess_weakness)
+	_check("and each tier buys off ten points of it",
+		is_equal_approx(ab.possess_weakness_per_tier, 0.10),
+		"%.2f" % ab.possess_weakness_per_tier)
+
+	# The ladder, end to end. The tier 6 rung is the one the user named explicitly and it
+	# is the one an off-by-one would break: 0.50 - 0.10 * 6 would be negative, and a
+	# negative weakness is a BUFF handed to the thing you stole.
+	var sim := CombatSim.new()
+	var want := [0.50, 0.40, 0.30, 0.20, 0.10, 0.00]
+	for tier in range(1, 7):
+		var thief := UnitInstance.create(
+			BoardModel.at_tier(usurper, tier), BoardModel.TEAM_A)
+		var got := sim.possess_weakness_of(thief)
+		_check("a tier %d Usurper's puppet is %d%% weaker" % [tier, roundi(want[tier - 1] * 100.0)],
+			is_equal_approx(got, want[tier - 1]),
+			"%.2f against %.2f" % [got, want[tier - 1]])
+	_check("and tier 6 is no debuff at all, not a small one",
+		is_zero_approx(sim.possess_weakness_of(UnitInstance.create(
+			BoardModel.at_tier(usurper, 6), BoardModel.TEAM_A))))
+
+	# Through the simulation, because a number on a resource that nothing applies is the
+	# failure this file exists to catch.
+	for tier in [1, 3, 6]:
+		var stage := _usurp_board(tier, tier)
+		var prey: UnitInstance = stage.prey
+		var sim2: CombatSim = stage.sim
+		var base_hp := prey.stat(StatModifier.Stat.MAX_HP)
+		var base_dmg := prey.stat(StatModifier.Stat.ATTACK_DAMAGE)
+		sim2.setup(stage.board, 311)
+		var weak: float = sim2.possess_weakness_of(stage.thief)
+		_check("a tier %d Usurper's stolen body really is smaller" % tier,
+			is_equal_approx(prey.stat(StatModifier.Stat.MAX_HP),
+				base_hp * (1.0 - weak)),
+			"%.0f against %.0f" % [prey.stat(StatModifier.Stat.MAX_HP),
+				base_hp * (1.0 - weak)])
+		_check("and hits softer" if weak > 0.0 else "and a tier 6's does not",
+			is_equal_approx(prey.stat(StatModifier.Stat.ATTACK_DAMAGE),
+				base_dmg * (1.0 - weak)),
+			"%.1f against %.1f" % [prey.stat(StatModifier.Stat.ATTACK_DAMAGE),
+				base_dmg * (1.0 - weak)])
+		# A shrunken maximum with the old number still on the bar reads as a full bar that
+		# will not move when it is hit, and heals back toward a cap that is gone.
+		_check("its health bar is not left above its own maximum",
+			prey.current_hp <= prey.stat(StatModifier.Stat.MAX_HP) + 0.01,
+			"%.0f of %.0f" % [prey.current_hp,
+				prey.stat(StatModifier.Stat.MAX_HP)])
+		# And none of it survives the hand-back. A debuff that outlived the possession
+		# would let an Usurper permanently cripple something just by touching it.
+		prey.reset_for_battle()
+		_check("and none of it is left after the round",
+			is_equal_approx(prey.stat(StatModifier.Stat.MAX_HP), base_hp),
+			"%.0f against %.0f" % [prey.stat(StatModifier.Stat.MAX_HP), base_hp])
+
+
+func _siren_stage(tier: int, prey_tier := 3) -> Dictionary:
+	## A Siren at the top of a column with something to shoot at four tiles away, and a
+	## far-off spare so the round cannot end underneath the test.
+	BoardModel.reset_map()
+	var b := BoardModel.new()
+	var siren := UnitInstance.create(
+		BoardModel.at_tier(_must_find("siren"), tier), BoardModel.TEAM_A)
+	b.force_place(siren, Vector2i(2, 1))
+	var mark := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), prey_tier), BoardModel.TEAM_B)
+	b.force_place(mark, Vector2i(2, 5))
+	b.force_place(UnitInstance.create(
+		BoardModel.at_tier(_must_find("spire"), 1), BoardModel.TEAM_B),
+		Vector2i(5, 9))
+	var sim := CombatSim.new()
+	sim.crit_chance = 0.0
+	return {sim = sim, board = b, siren = siren, mark = mark}
+
+
+func _test_the_siren() -> void:
+	_section("The Siren: a weak shot, fast, that sends things reeling")
+
+	var siren := _must_find("siren")
+	var ab: AbilityData = siren.ability
+	_check("Vertigo is a DISORIENT", ab != null
+		and ab.kind == AbilityData.Kind.DISORIENT)
+	if ab == null:
+		return
+	_check("it shoots a long way", siren.range_name() == "Long",
+		siren.range_name())
+	# Weak and fast is the shape of the unit, so it is pinned rather than assumed: a
+	# later tuning pass that made it hit hard would make it a different unit entirely.
+	var archer := _must_find("archer")
+	_check("it hits softer than the Archer", siren.attack_damage < archer.attack_damage,
+		"%.0f against %.0f" % [siren.attack_damage, archer.attack_damage])
+	_check("and shoots faster", siren.attack_speed > archer.attack_speed,
+		"%.2f against %.2f" % [siren.attack_speed, archer.attack_speed])
+
+	# The ladder, and the ceiling it is supposed to land on rather than run past.
+	var sim := CombatSim.new()
+	var want := [0.5, 0.8, 1.1, 1.4, 1.7, 2.0]
+	for tier in range(1, 7):
+		var s := UnitInstance.create(
+			BoardModel.at_tier(siren, tier), BoardModel.TEAM_A)
+		var got := sim.disorient_seconds_of(s, ab)
+		_check("a tier %d Siren disorients for %.1fs" % [tier, want[tier - 1]],
+			is_equal_approx(got, want[tier - 1]),
+			"%.2f against %.2f" % [got, want[tier - 1]])
+	_check("and the ceiling is the two seconds it was asked for",
+		is_equal_approx(ab.disorient_max, 2.0), "%.2f" % ab.disorient_max)
+
+	# Through the simulation. The cast has to land on somebody and actually stop them.
+	var stage := _siren_stage(3)
+	var mark: UnitInstance = stage.mark
+	var sim2: CombatSim = stage.sim
+	sim2.setup(stage.board, 501)
+	var ticks := 0
+	while not mark.is_disoriented() and ticks < 400:
+		sim2.step()
+		ticks += 1
+	_check("it fills its bar and sends something reeling", mark.is_disoriented(),
+		"%.1fs and nothing" % (float(ticks) * CombatSim.TICK))
+	if not mark.is_disoriented():
+		return
+	_check("a reeling unit cannot swing", not mark.can_attack_now())
+	# It still MOVES, and that is the whole difference between this and a stun. A version
+	# that folded it into is_held() would plant the unit, which is a different ability.
+	_check("but it can still move, because it is wandering and not pinned",
+		mark.can_move_now())
+	_check("it is not frozen or stunned", not mark.is_frozen()
+		and not mark.is_stunned())
+	_check("and it takes no extra damage for being lost",
+		is_equal_approx(mark.frozen_damage_taken(), 1.0))
+	_check("the view is told", _has_event(sim2, "disorient", mark.uid))
+
+	# Re-applying RESETS rather than extends or takes the longest.
+	mark.disorient_left = 0.4
+	sim2._resolve_disorient(stage.siren, ab)
+	_check("catching one that is already reeling starts its count again",
+		mark.disorient_left > 0.4,
+		"%.2fs left" % mark.disorient_left)
+
+	# And then the five seconds of immunity, which is what stops two of them locking a
+	# unit out of the round between them.
+	mark.disorient_left = CombatSim.TICK
+	var more := 0
+	while mark.is_disoriented() and more < 100:
+		sim2.step()
+		more += 1
+	_check("it comes out of it", not mark.is_disoriented())
+	_check("and is immune afterwards", mark.is_disorient_immune(),
+		"%.2fs" % mark.disorient_immune_left)
+	_check("for the five seconds the card promises",
+		absf(mark.disorient_immune_left - 5.0) < 0.25,
+		"%.2fs" % mark.disorient_immune_left)
+	_check("and the view is told it is over",
+		_has_event(sim2, "disorient_end", mark.uid))
+
+	# The immunity has to actually refuse a second one, not merely exist.
+	var immune_for := mark.disorient_immune_left
+	sim2._resolve_disorient(stage.siren, ab)
+	_check("a unit inside its immunity cannot be disoriented again",
+		not mark.is_disoriented())
+	_check("and the immunity is not reset by the attempt",
+		mark.disorient_immune_left <= immune_for + 0.001,
+		"%.2fs against %.2fs" % [mark.disorient_immune_left, immune_for])
+	# It runs down and then the unit is catchable again — an immunity that never expired
+	# would make the Siren a one-shot.
+	# The immunity wearing off gets a fixture of its own, and the reason is worth writing
+	# down: in the one above the Siren finishes off what it is shooting at after about
+	# five seconds, the round ends, and step() then does nothing at all — so the clock
+	# stops with a fraction of a second left on it and the check fails for a reason that
+	# has nothing to do with the clock. Two rooted, harmless bodies cannot end a round.
+	BoardModel.reset_map()
+	var quiet := BoardModel.new()
+	var post := UnitInstance.create(
+		BoardModel.at_tier(_must_find("spire"), 6), BoardModel.TEAM_B)
+	quiet.force_place(post, Vector2i(2, 5))
+	quiet.force_place(UnitInstance.create(
+		BoardModel.at_tier(_must_find("spire"), 6), BoardModel.TEAM_A),
+		Vector2i(2, 1))
+	var quiet_sim := CombatSim.new()
+	quiet_sim.setup(quiet, 502)
+	post.disorient_left = 0.2
+	post.disorient_immune_after = ab.disorient_immunity
+	var waited := 0
+	while (post.is_disoriented() or post.is_disorient_immune()) \
+			and not quiet_sim.is_finished() and waited < 200:
+		quiet_sim.step()
+		waited += 1
+	_check("the immunity wears off on its own", not post.is_disorient_immune(),
+		"%.2fs left after %.1fs" % [post.disorient_immune_left,
+			float(waited) * CombatSim.TICK])
+	_check("and it lasted about the five seconds it should have",
+		absf(float(waited) * CombatSim.TICK - 5.2) < 0.4,
+		"%.1fs" % (float(waited) * CombatSim.TICK))
+
+
+func _test_a_reeling_unit_wanders() -> void:
+	_section("A reeling unit wanders instead of fighting")
+
+	var stage := _siren_stage(6)
+	var mark: UnitInstance = stage.mark
+	var sim: CombatSim = stage.sim
+	sim.setup(stage.board, 777)
+	# Planted rather than earned, so this fixture is about the WANDER and not about how
+	# long the bar takes to fill.
+	mark.disorient_left = 6.0
+	var start := mark.cell
+	var swung := 0
+	var moved := 0
+	var from := start
+	for i in 60:
+		sim.step()
+		if mark.cell != from:
+			moved += 1
+			from = mark.cell
+	for e in sim.events:
+		if e.kind == "attack" and int(e.get("uid", -1)) == mark.uid:
+			swung += 1
+	_check("it moves while it is lost", moved > 0, "%d steps" % moved)
+	_check("and swings at nothing the whole time", swung == 0,
+		"%d swings" % swung)
+	# Aimlessly: it must not close on the thing it was fighting. Checked as "did not make
+	# steady progress toward it" rather than "moved away", because a random walk can drift
+	# either way and asserting a direction would be a flaky test.
+	_check("it does not march at its enemy", mark.cell != stage.siren.cell)
+
+	# Deterministic, because the view replays a log. A unit that wandered differently on
+	# playback than it did in the simulation would desync the board from the model.
+	var a := _wander_path(4242)
+	var b := _wander_path(4242)
+	var c := _wander_path(99)
+	_check("the same battle wanders the same way twice", a == b,
+		"%s against %s" % [a, b])
+	_check("and a different seed wanders differently", a != c,
+		"%s against %s" % [a, c])
+
+
+func _wander_path(seed_value: int) -> Array[Vector2i]:
+	var stage := _siren_stage(6)
+	var mark: UnitInstance = stage.mark
+	var sim: CombatSim = stage.sim
+	sim.setup(stage.board, seed_value)
+	mark.disorient_left = 6.0
+	var path: Array[Vector2i] = []
+	for i in 40:
+		sim.step()
+		path.append(mark.cell)
+	return path
+
+
+func _test_discord() -> void:
+	_section("Discord: the Siren's buff")
+
+	var pool := _pool()
+	var buff := pool.by_id(&"discord")
+	_check("Discord is on disk", buff != null)
+	if buff == null:
+		return
+	_check("it belongs to the Siren", buff.unit_id == &"siren")
+	_check("it is an attack speed buff", buff.stat_a == StatModifier.Stat.ATTACK_SPEED)
+	_check("20, 40 and 60 percent, as asked",
+		is_equal_approx(buff.bronze.x, 0.20) and is_equal_approx(buff.silver.x, 0.40)
+		and is_equal_approx(buff.gold.x, 0.60),
+		"%.2f / %.2f / %.2f" % [buff.bronze.x, buff.silver.x, buff.gold.x])
+	_check("and half a second, one and two on top",
+		is_equal_approx(buff.disorient_bonus_at(BuffData.Rarity.BRONZE), 0.5)
+		and is_equal_approx(buff.disorient_bonus_at(BuffData.Rarity.SILVER), 1.0)
+		and is_equal_approx(buff.disorient_bonus_at(BuffData.Rarity.GOLD), 2.0),
+		"%s" % buff.disorient_bonus)
+	for r in [BuffData.Rarity.BRONZE, BuffData.Rarity.SILVER, BuffData.Rarity.GOLD]:
+		_check("the %s card mentions the longer disorientation" % BuffData.rarity_name(r),
+			buff.describe(r).to_lower().contains("longer"), buff.describe(r))
+
+	# The rider has to reach the simulation, and it has to ADD to the tier ladder rather
+	# than be swallowed by the cap — a buff worth nothing at the tier you most want it is
+	# the failure this checks for.
+	var ab: AbilityData = _must_find("siren").ability
+	for tier in [1, 6]:
+		var s := UnitInstance.create(
+			BoardModel.at_tier(_must_find("siren"), tier), BoardModel.TEAM_A)
+		var sim := CombatSim.new()
+		var bare := sim.disorient_seconds_of(s, ab)
+		var tb := TeamBuffs.new()
+		tb.add(buff, BuffData.Rarity.GOLD)
+		sim.team_buffs[BoardModel.TEAM_A] = tb
+		var rich := sim.disorient_seconds_of(s, ab)
+		_check("gold Discord adds two seconds at tier %d" % tier,
+			is_equal_approx(rich, bare + 2.0),
+			"%.2f against %.2f" % [rich, bare + 2.0])
+	_check("so a gold tier 6 reaches four seconds, past the unit's own ceiling",
+		true)

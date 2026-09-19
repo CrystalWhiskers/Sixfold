@@ -833,6 +833,13 @@ const UNIT_TABLE := [
 		note = "Every point of health it loses is damage and attack speed back. Below half it stops waiting for the enemy and opens its own veins, and it cannot be talked out of it — from there it is on a clock nobody can stop, getting worse to stand in front of the whole way down. At the bottom it does not fall over: it keeps swinging at nothing to lose for a few seconds, through three enemies at a time, and then it is gone. Mediocre at full health on purpose. You are not buying a fighter, you are buying the last eight seconds of one.",
 	},
 	{
+		id = &"siren", name = "Siren", hp = 70.0, dmg = 6.0, spd = 2.0,
+		move = 0.50, range = "LONG", sight = 6, type = "RANGED",
+		accent = Color(0.46, 0.72, 0.78),
+		ability = &"vertigo", mana = 9.0,
+		note = "Shoots from the back of the board, constantly, for almost nothing. The damage is not the point — the rate is: every shot is a fraction of the next bar, and every bar sends an enemy reeling. A disoriented unit wanders off and stops swinging entirely, so the Siren does not kill things, it takes them out of the fight for a moment and hands the moment to everyone else. Fragile, and worthless on its own.",
+	},
+	{
 		id = &"wisp", name = "Wisp", hp = 38.0, dmg = 5.0, spd = 1.3,
 		move = 0.40, range = "MELEE", sight = 3, type = "MELEE",
 		accent = Color(0.70, 0.62, 0.86),
@@ -922,8 +929,20 @@ const ABILITY_TABLE := [
 	},
 	{
 		id = &"onslaught", name = "Onslaught", kind = "CHARGE", cast_time = 0.2,
-		desc = "At the opening bell it puts its head down and runs straight forward down its own column. It crosses about three tiles a second — far faster than anything walks, but not instant, and you can see the lane it is coming down. Whatever enemy it reaches FIRST takes 1.2 times its attack damage per tier and is stunned for 0.45 seconds per tier: no moving, no swinging, no casting. It picks that target on arrival, not on setting off, so a unit that steps out of the lane in time is missed entirely and a unit that wanders into it gets hit instead. An ally in the way blocks the charge and takes nothing; so does a wall; and a stun or a freeze knocks it out of the run altogether. It moves whether or not it connects, so a charge into an empty lane leaves it standing at the far end having done nothing at all.",
-		charge_damage_per_tier = 1.2, stun_seconds_per_tier = 0.45,
+		desc = "At the opening bell it puts its head down and runs straight forward down its own column. It crosses about three tiles a second — far faster than anything walks, but not instant, and you can see the lane it is coming down. Whatever enemy it reaches FIRST takes 1.8 times its attack damage per tier and is stunned for 0.45 seconds per tier: no moving, no swinging, no casting. It picks that target on arrival, not on setting off, so a unit that steps out of the lane in time is missed entirely and a unit that wanders into it gets hit instead. An ally in the way blocks the charge and takes nothing; so does a wall; and a stun or a freeze knocks it out of the run altogether. It moves whether or not it connects, so a charge into an empty lane leaves it standing at the far end having done nothing at all.",
+		# 1.8, up from 1.2, to pay for the travel time. Measured at the shipped 0.35s a
+		# tile, 300 runs a cell: 1.2 leaves a tier 6 at 31.3% where the instant charge was
+		# at 81%, 1.8 puts it at 58.3%, and 2.4 is 98.7% — the ladder is a CLIFF, not a
+		# slope, and 1.8 is the only rung on the near side of it.
+		#
+		# The cliff is the opening bulwark. A tier 6 Warden raises a shield worth its whole
+		# health bar at the bell, and the charge is either big enough to punch through it
+		# or it is not; 1.8 is just past that line and 2.4 is far enough past to delete the
+		# target outright. The same fact makes this change do almost nothing at the bottom
+		# of the ladder: at tier 1 the charge is swallowed by the shield at EVERY value
+		# from 1.2 to 3.6, so T1 sits at 28.0% throughout and T3 moves by two points.
+		# Raising charge damage only ever helps the top of the ladder.
+		charge_damage_per_tier = 1.8, stun_seconds_per_tier = 0.45,
 		charge_distance = 11,
 		# 0.35s a tile — about 2.4 seconds to cross the whole board, roughly three times
 		# a unit's walking pace. Measured against 0.22 and 0.50; see the note in
@@ -935,6 +954,7 @@ const ABILITY_TABLE := [
 		id = &"usurpation", name = "Usurpation", kind = "POSSESS", cast_time = 0.3,
 		desc = "At the opening bell it gets inside an enemy of its own tier and that unit changes sides for the rest of the round — it fights for you, keeping everything its owner gave it, and the Usurper itself is gone from the board while it holds the reins. Below its tier it drags the host up to its own tier for the round; the owner does not keep the promotion. Above its tier it cannot get in at all and bursts against it instead, killing itself for damage that grows with how badly it was outmatched. Kill the host and the Usurper falls out of it with one health that nothing can raise, and slow — but if that husk lands a single blow, it is inside whatever it just hit.",
 		possess_forces_tier = true, husk_move_mult = 2.6,
+		possess_weakness = 0.50, possess_weakness_per_tier = 0.10,
 		backlash_per_tier = 1.0, possess_seconds_per_tier = 2.5,
 	},
 	{
@@ -988,6 +1008,12 @@ const ABILITY_TABLE := [
 		id = &"siphon", name = "Siphon", kind = "DRAIN", cast_time = 0.5,
 		desc = "Reaches across the whole board — no range limit at all — and fastens onto whichever enemy has the largest maximum health. From then until that unit dies it loses 2.5% of that maximum every second. Shields are not counted, so nothing hides behind one, and the bite does not shrink as the victim wears down. Several Siphons stack on the same victim, and the Leech heals off every tick of it.",
 		drain_percent = 0.025, drain_percent_per_tier = 0.005, drain_interval = 1.0,
+	},
+	{
+		id = &"vertigo", name = "Vertigo", kind = "DISORIENT", cast_time = 0.35,
+		desc = "Sends one enemy reeling: it wanders wherever it likes and swings at nothing at all. Half a second at tier 1 and three tenths longer for every tier after that, to a ceiling of two seconds. Catching something that is already reeling starts its count again from the top. But the moment a unit comes out of it, nothing can disorient it again for five seconds — so this is a unit that buys the rest of your army a beat, over and over, and never one that takes somebody out of the round.",
+		disorient_seconds = 0.5, disorient_seconds_per_tier = 0.3,
+		disorient_max = 2.0, disorient_immunity = 5.0,
 	},
 	{
 		id = &"martyrdom", name = "Martyrdom", kind = "FRENZY", cast_time = 0.3,
@@ -1145,6 +1171,10 @@ const BUFF_TABLE = [
 	{id = &"spite", name = "Spite", kind = "STAT", weight = 1.0,
 		unit = &"pariah", stat_a = "ATTACK_SPEED", stat_b = "MAX_HP", two = true,
 		b = Vector2(0.25, 0.50), s = Vector2(0.50, 1.00), g = Vector2(0.75, 1.50)},
+	{id = &"discord", name = "Discord", kind = "STAT", weight = 1.0,
+		unit = &"siren", stat_a = "ATTACK_SPEED",
+		disorient_bonus = Vector3(0.5, 1.0, 2.0),
+		b = Vector2(0.20, 0.0), s = Vector2(0.40, 0.0), g = Vector2(0.60, 0.0)},
 	{id = &"rapture", name = "Rapture", kind = "STAT", weight = 1.0,
 		unit = &"martyr", stat_a = "ATTACK_DAMAGE", stat_b = "ATTACK_SPEED",
 		two = true, frenzy_seconds_at_gold = 5.0,
@@ -1387,6 +1417,9 @@ func _make_abilities() -> Dictionary:
 			"heal_percent", "heal_percent_per_tier", "heal_radius", "cleanses",
 				"charge_damage_per_tier", "stun_seconds_per_tier", "charge_distance",
 				"charge_tile_seconds",
+				"possess_weakness", "possess_weakness_per_tier",
+				"disorient_seconds", "disorient_seconds_per_tier",
+				"disorient_max", "disorient_immunity",
 				"possess_forces_tier", "husk_move_mult", "backlash_per_tier",
 				"possess_seconds_per_tier",
 				"summon_max",
@@ -1590,6 +1623,7 @@ func _make_buffs() -> void:
 		b.host_move = row.get("host_move", Vector3.ZERO)
 		b.host_power = row.get("host_power", Vector3.ZERO)
 		b.frenzy_seconds_at_gold = row.get("frenzy_seconds_at_gold", 0.0)
+		b.disorient_bonus = row.get("disorient_bonus", Vector3.ZERO)
 		_save(b, "%s/%s.tres" % [BUFF_DIR, row.id])
 	_write_buff_index()
 

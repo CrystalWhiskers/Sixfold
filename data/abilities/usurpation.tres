@@ -10,3 +10,5 @@ description = "At the opening bell it gets inside an enemy of its own tier and t
 kind = 21
 cast_time = 0.3
 possess_seconds_per_tier = 2.5
+possess_weakness = 0.5
+possess_weakness_per_tier = 0.1

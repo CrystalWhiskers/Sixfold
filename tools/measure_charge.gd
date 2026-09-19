@@ -34,10 +34,14 @@ func _line(board: BoardModel, team: int, spec: Array) -> void:
 func _at(slot, tier: int) -> Array:
 	return [[slot, tier], ["archer", 2], ["warden", 1], ["archer", 1], ["seraph", 1]]
 
+var _damage_per_tier := -1.0
+
 func _breaker(tier: int, per_tile: float) -> UnitData:
 	var v := BoardModel.at_tier(_pick("breaker"), tier).duplicate() as UnitData
 	var ab := v.ability.duplicate() as AbilityData
 	ab.charge_tile_seconds = per_tile
+	if _damage_per_tier > 0.0:
+		ab.charge_damage_per_tier = _damage_per_tier
 	v.ability = ab
 	return v
 
@@ -89,10 +93,12 @@ func _initialize() -> void:
 	print("\nThe Breaker's charge. 300 runs a cell; 49.5%% is the baseline for an")
 	print("ordinary unit in the swapped slot. 0.00s/tile is the old instant charge.")
 	print("\n  tier  s/tile    win     connected   missed   knocked out   mean run")
-	for tier in [1, 3, 6]:
-		for per_tile in [0.0, 0.22, 0.35, 0.50]:
-			var r := _trial(tier, per_tile)
-			print("  T%d    %.2f    %5.1f%%    %5.1f%%    %5.1f%%    %5.1f%%        %.2fs" % [
-				tier, per_tile, r.win, r.hit, r.missed, r.stopped, r.travel])
-		print("")
+	print("\n  Charge damage per tier, at the shipped 0.35s travel time.")
+	print("  As built is 1.2. Instant-charge baselines were T1 35.3, T3 39.3, T6 81.0.")
+	for dmg in [1.2, 1.8, 2.4, 3.0, 3.6]:
+		_damage_per_tier = dmg
+		var line := "    x%.1f  " % dmg
+		for tier in [1, 3, 6]:
+			line += "  T%d %5.1f%%" % [tier, _trial(tier, 0.35).win]
+		print(line)
 	quit()

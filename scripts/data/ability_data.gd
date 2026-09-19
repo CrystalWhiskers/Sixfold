@@ -25,6 +25,7 @@ enum Kind {
 	CHARGE,
 	POSSESS,
 	FRENZY,
+	DISORIENT,
 }
 
 @export var id: StringName = &""
@@ -203,6 +204,24 @@ enum Kind {
 ## six-wisp Conjurer taught.
 @export var possess_seconds_per_tier: float = 0.0
 
+## How much weaker a stolen body is while it is being driven, as a fraction taken off its
+## attack damage and its maximum health. 0.5 is "half the unit it was".
+##
+## The point is that a puppet is not the same as the real thing. Without it the Usurper
+## hands you a fully effective enemy unit AND takes one off their board, which measured
+## out at 95-100% win rates at the top of the tier ladder — it was not that the unit hit
+## too hard, it was that body count beats power and the swing was two bodies wide.
+@export var possess_weakness: float = 0.0
+
+## How much of that weakness is bought off by each tier above the first. At 0.10 against a
+## 0.50 base the ladder runs 50 / 40 / 30 / 20 / 10 / 0 — so a tier 6 Usurper drives a
+## stolen body at full strength and every tier below it is a compromise.
+##
+## This is the merge incentive for a unit that had none worth the name. Its old reward for
+## merging was a longer grip and a higher forced tier on the host; now the difference
+## between a tier 1 and a tier 6 is whether the thing you stole actually fights.
+@export var possess_weakness_per_tier: float = 0.0
+
 @export_group("Summon")
 @export var summon_unit: UnitData = null
 @export var summon_max: int = 3
@@ -344,6 +363,30 @@ enum Kind {
 @export var drain_percent_per_tier: float = 0.0
 @export var drain_interval: float = 1.0
 
+@export_group("Disorient")
+## Seconds of disorientation at tier 1, and how much each tier above it adds. A
+## disoriented unit wanders and does not swing at anything.
+##
+## Two numbers rather than one per-tier figure because the ladder has to LAND on its cap
+## rather than run past it: 0.5 + 0.3 per tier gives 0.5 / 0.8 / 1.1 / 1.4 / 1.7 / 2.0,
+## so a tier 6 is exactly the two seconds the unit was specified to reach and every rung
+## below it is worth climbing. A single per-tier figure either overshoots and wastes the
+## top of the ladder against the cap, or undershoots and never gets there.
+@export var disorient_seconds: float = 0.0
+@export var disorient_seconds_per_tier: float = 0.0
+
+## The ceiling on the TIER scaling, and only on that. A buff that lengthens the
+## disorientation adds on top of this — the cap describes how far the unit itself gets,
+## not how long anything can ever be disoriented for.
+@export var disorient_max: float = 2.0
+
+## Seconds a unit cannot be disoriented again for, once it has shaken one off.
+##
+## Without it two of these lock one target out of the round between them, and the
+## counterplay — kill the caster — is not available to a unit that never acts. The
+## immunity is the difference between a tempo tool and a disable.
+@export var disorient_immunity: float = 5.0
+
 @export_group("Mana aura")
 @export var mana_aura_radius: int = 1
 
@@ -474,6 +517,10 @@ func describe() -> String:
 		Kind.BUILD:
 			return "Raises %d wall(s) worth %d damage on empty ground within %d tile(s), for the rest of the round. It blocks both sides, and anything can chew through it eventually." % [
 				terrain_tiles, roundi(wall_hp), terrain_reach]
+		Kind.DISORIENT:
+			return "Sends one enemy reeling for %.1fs, and %.1fs longer per tier after the first, up to %.1fs. A disoriented unit wanders where it likes and swings at nothing. Catching one that is already reeling starts its count again from the top — but once it comes out of it, nothing can disorient it for another %.0f seconds." % [
+				disorient_seconds, disorient_seconds_per_tier, disorient_max,
+				disorient_immunity]
 		Kind.FRENZY:
 			return "Every point of health it is missing is damage and attack speed: at the brink it hits %d%% harder and that much faster. Below %d%% it starts bleeding %.0f%% of its max health a second and nothing can stop it. At zero it keeps standing for %.1fs — %d%% damage, %d%% attack speed, %d%% faster on its feet, cutting through %d enemies at once — and then it goes." % [
 				roundi(rage_per_missing * 100.0), roundi(frenzy_threshold * 100.0),

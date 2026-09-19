@@ -6,9 +6,9 @@
 script = ExtResource("1_fdwx3")
 id = &"onslaught"
 display_name = "Onslaught"
-description = "At the opening bell it puts its head down and runs straight forward down its own column. It crosses about three tiles a second — far faster than anything walks, but not instant, and you can see the lane it is coming down. Whatever enemy it reaches FIRST takes 1.2 times its attack damage per tier and is stunned for 0.45 seconds per tier: no moving, no swinging, no casting. It picks that target on arrival, not on setting off, so a unit that steps out of the lane in time is missed entirely and a unit that wanders into it gets hit instead. An ally in the way blocks the charge and takes nothing; so does a wall; and a stun or a freeze knocks it out of the run altogether. It moves whether or not it connects, so a charge into an empty lane leaves it standing at the far end having done nothing at all."
+description = "At the opening bell it puts its head down and runs straight forward down its own column. It crosses about three tiles a second — far faster than anything walks, but not instant, and you can see the lane it is coming down. Whatever enemy it reaches FIRST takes 1.8 times its attack damage per tier and is stunned for 0.45 seconds per tier: no moving, no swinging, no casting. It picks that target on arrival, not on setting off, so a unit that steps out of the lane in time is missed entirely and a unit that wanders into it gets hit instead. An ally in the way blocks the charge and takes nothing; so does a wall; and a stun or a freeze knocks it out of the run altogether. It moves whether or not it connects, so a charge into an empty lane leaves it standing at the far end having done nothing at all."
 kind = 20
 cast_time = 0.2
-charge_damage_per_tier = 1.2
+charge_damage_per_tier = 1.8
 stun_seconds_per_tier = 0.45
 charge_tile_seconds = 0.35

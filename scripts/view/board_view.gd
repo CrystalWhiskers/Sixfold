@@ -2,6 +2,14 @@ class_name BoardView
 extends Node2D
 
 signal cell_pressed(cell: Vector2i)
+
+## A double-click on one of your own units, so the board can offer a one-gesture merge.
+##
+## Its own signal rather than something main.gd works out from two cell_pressed events:
+## the double-click flag is set by the input system, which already knows the platform's
+## timing and distance thresholds, and a hand-rolled timer here would disagree with every
+## other double-click on the machine.
+signal cell_double_clicked(cell: Vector2i)
 signal drag_dropped(from: Vector2i, to: Vector2i)
 
 const UNIT_VIEW := preload("res://scenes/units/unit_view.tscn")
@@ -584,6 +592,13 @@ func _unhandled_input(event: InputEvent) -> void:
 				_end_drag(pos_to_cell(to_local(at)))
 			return
 		if not view_area.has_point(at):
+			return
+		if interactive and event.double_click:
+			# Emitted INSTEAD of starting a drag. The second press of a double-click would
+			# otherwise pick the unit up, and the release that follows lands it back on
+			# its own tile — harmless, but it plays the pickup sound and lights the merge
+			# targets for an instant every time you double-click, which reads as a stutter.
+			cell_double_clicked.emit(pos_to_cell(to_local(at)))
 			return
 		if interactive:
 			_begin_drag(pos_to_cell(to_local(at)))

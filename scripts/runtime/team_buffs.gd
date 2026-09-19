@@ -188,6 +188,18 @@ func host_power_bonus() -> float:
 	return extra
 
 
+func disorient_bonus_for(u: UnitInstance) -> float:
+	# Summed like the rest of the riders: two picks that both lengthen it should both
+	# count.
+	var extra := 0.0
+	for p in picks:
+		var buff: BuffData = p.buff
+		if buff.kind != BuffData.Kind.STAT or not buff.applies_to(u):
+			continue
+		extra += buff.disorient_bonus_at(p.rarity)
+	return extra
+
+
 func charge_bonus_for(u: UnitInstance) -> float:
 	var extra := 0.0
 	for p in picks:

@@ -76,6 +76,10 @@ const RARITY_COLORS := [
 ## Extra charge damage as a fraction, bronze/silver/gold. 0.5 is +50%.
 @export var charge_bonus: Vector3 = Vector3.ZERO
 
+## Extra SECONDS of disorientation, bronze/silver/gold. Flat, like stun_bonus and for the
+## same reason: a percentage of half a second is a number nobody can feel.
+@export var disorient_bonus: Vector3 = Vector3.ZERO
+
 ## Gold only, like empowered_cap_at_gold: how long the Martyr's death-immunity
 ## window lasts instead of the ability's own figure. Zero means the buff does not
 ## touch it.
@@ -260,6 +264,15 @@ func stun_bonus_at(r: Rarity) -> float:
 	return stun_bonus.z
 
 
+func disorient_bonus_at(r: Rarity) -> float:
+	match r:
+		Rarity.BRONZE:
+			return disorient_bonus.x
+		Rarity.SILVER:
+			return disorient_bonus.y
+	return disorient_bonus.z
+
+
 func charge_bonus_at(r: Rarity) -> float:
 	match r:
 		Rarity.BRONZE:
@@ -353,6 +366,11 @@ func describe(r: Rarity) -> String:
 				line += "  Its charge stuns for %s second%s longer." % [
 					("%.1f" % longer).trim_suffix(".0"),
 					"" if is_equal_approx(longer, 1.0) else "s"]
+			var reeling := disorient_bonus_at(r)
+			if reeling > 0.0:
+				line += "  Everything it disorients stays lost %s second%s longer." % [
+					("%.1f" % reeling).trim_suffix(".0"),
+					"" if is_equal_approx(reeling, 1.0) else "s"]
 			var harder := charge_bonus_at(r)
 			if harder > 0.0:
 				line += "  And the charge itself hits %s harder." % _bare(harder)

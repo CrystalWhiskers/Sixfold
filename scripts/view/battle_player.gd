@@ -290,6 +290,7 @@ func _apply(e: Dictionary) -> void:
 			var rv := _view.view_for(int(e.uid))
 			if rv != null:
 				rv.set_hp(float(e.hp), float(e.max_hp))
+				rv.possessed = false
 				rv.queue_redraw()
 			_view.spawn_label(_at(int(e.uid), e.cell), "FREED",
 				Color(0.72, 0.88, 0.72))
@@ -328,6 +329,18 @@ func _apply(e: Dictionary) -> void:
 				maxf(float(e.seconds), 0.4))
 			_view.spawn_label(_at(int(e.uid), e.cell), "NOTHING TO LOSE",
 				Color(1.00, 0.44, 0.34))
+		"disorient":
+			var dzv := _view.view_for(int(e.uid))
+			if dzv != null:
+				dzv.begin_reeling(float(e.seconds) / maxf(speed, 0.01))
+			_view.flash_cells([e.cell], Color(0.88, 0.80, 0.40, 0.40),
+				maxf(float(e.seconds), 0.4))
+			_view.spawn_label(_at(int(e.uid), e.cell), "LOST",
+				Color(0.92, 0.86, 0.50))
+		"disorient_end":
+			var dev := _view.view_for(int(e.uid))
+			if dev != null:
+				dev.end_reeling()
 		"frenzy_end":
 			var fev := _view.view_for(int(e.uid))
 			if fev != null:
@@ -765,6 +778,11 @@ func _possess(e: Dictionary) -> void:
 		# UnitView reads unit.team live when it draws, and the simulation has
 		# already flipped it, so a repaint is the whole of the colour change.
 		hv.set_hp(float(e.hp), float(e.max_hp))
+		# The mark that says the body is on loan. Set from the EVENT and not from
+		# host.is_possessed(), which during playback is the host's state at the end of the
+		# round — so a host that was freed before the bell would never show it and one
+		# still held would show it from frame one.
+		hv.possessed = true
 		hv.queue_redraw()
 	var forced := int(e.get("forced_tier", 0))
 	_view.spawn_label(_at(host_uid, e.host_cell),
@@ -775,6 +793,17 @@ func _possess(e: Dictionary) -> void:
 
 func _husk(e: Dictionary) -> void:
 	## Its puppet died under it and it is back on the board with one health.
+	##
+	## The other way a possession ends, and it has to clear the host's mark too — the host
+	## is dead, but a revived one (a Revenant, a Vigil raising it) comes back as its
+	## owner's again and must not come back still wearing the brackets.
+	# The simulation calls it from_uid on this event — the body it fell OUT of.
+	var host_uid := int(e.get("from_uid", -1))
+	if host_uid >= 0:
+		var freed := _view.view_for(host_uid)
+		if freed != null:
+			freed.possessed = false
+			freed.queue_redraw()
 	var uid := int(e.uid)
 	var unit: UnitInstance = _units.get(uid, null)
 	if unit == null:

@@ -336,15 +336,46 @@ func _check_playlist(_buttons_unused: Array) -> void:
 	_check("and the boss ones are marked apart rather than renumbered", marked,
 		"first boss button reads %s" % (
 			"none" if boss_buttons.is_empty() else boss_buttons[0].text))
-	# A boss track's toggle means nothing — whether they enter the ordinary rotation
-	# is the Boss rounds switch — so they must not be togglable here, or the screen
-	# offers two controls for one rule.
 	var togglable := 0
 	for b in boss_buttons:
 		if b.toggle_mode:
 			togglable += 1
-	_check("boss buttons are preview-only, not a second rotation control",
-		togglable == 0, "%d of them are toggles" % togglable)
+	_check("boss buttons choose which boss themes play, like the battle ones",
+		togglable == boss_buttons.size(),
+		"%d of %d are toggles" % [togglable, boss_buttons.size()])
+
+	# The right click worked on these from the day they went on the screen and
+	# nobody could tell, because the only heading above them said "Battle music" and
+	# a row of B1..B19 under it reads as decoration. A capability the screen does not
+	# name is a capability nobody uses, so the label is the feature here — not the
+	# handler, which was already there.
+	var labelled := false
+	for label in _labels_in(_menu._settings):
+		var text := String(label.text).to_lower()
+		if text.contains("boss themes") and text.contains("right click"):
+			labelled = true
+	_check("and the screen says out loud that they can be heard", labelled,
+		"no heading mentions both boss themes and right click")
+	# A switched-on toggle is held in the PRESSED state, which is drawn with
+	# font_pressed_color, not font_color. Setting only the resting colour left every
+	# live boss button white — the row's colour is the only thing separating it from
+	# the battle tracks, so white means the two rows read as one list again.
+	if not boss_buttons.is_empty():
+		var warm := true
+		for slot in SettingsPanel.FONT_SLOTS:
+			if boss_buttons[0].get_theme_color(slot) != SettingsPanel.TRACK_COLOURS[true].on:
+				warm = false
+		_check("a live boss track is drawn warm in every state, not just at rest",
+			warm, "resting %s, pressed %s" % [
+				boss_buttons[0].get_theme_color("font_color"),
+				boss_buttons[0].get_theme_color("font_pressed_color")])
+	# Under their OWN heading, which means their own container: in one shared grid
+	# the new label would sit above the battle tracks as well, and the boss row would
+	# start half way along a line whenever the battle count is not a full row.
+	if not boss_buttons.is_empty() and not toggles.is_empty():
+		_check("and they sit under it rather than trailing the battle grid",
+			boss_buttons[0].get_parent() != toggles[0].get_parent(),
+			"both rows are in %s" % boss_buttons[0].get_parent())
 
 	var screen := Rect2(Vector2.ZERO, _menu.get_viewport_rect().size)
 	var spilled := 0
@@ -391,7 +422,98 @@ func _check_playlist(_buttons_unused: Array) -> void:
 	_check("switching them back on restores the whole rotation",
 		GameSetup.tracks_on() == count, "%d on" % GameSetup.tracks_on())
 
+	_check_boss_rotation(boss_buttons, toggles)
 	_check_track_preview(toggles, boss_buttons)
+
+
+func _check_boss_rotation(boss: Array[Button], toggles: Array[Button]) -> void:
+	print("\nBoss theme rotation")
+	if boss.size() < 2:
+		_check("skipped — needs at least two boss tracks", true,
+			"%d on disk" % boss.size())
+		return
+	var count := boss.size()
+	_check("every boss theme starts in the rotation",
+		GameSetup.boss_tracks_on() == count,
+		"%d of %d" % [GameSetup.boss_tracks_on(), count])
+	var rolled := {}
+	for i in count * 40:
+		rolled[GameSetup.roll_boss_track()] = true
+	_check("and a boss round can roll any of them", rolled.size() == count,
+		"only ever rolled %d of %d" % [rolled.size(), count])
+
+	boss[0].pressed.emit()
+	_check("switching one off takes it out of the boss rounds",
+		GameSetup.boss_tracks_on() == count - 1,
+		"%d still on" % GameSetup.boss_tracks_on())
+	var gone := Audio.boss_track(1)
+	var after := {}
+	for i in count * 40:
+		after[GameSetup.roll_boss_track()] = true
+	_check("and it never comes up on one again", not after.has(gone),
+		"%s came up anyway" % gone)
+
+	# The other door into the rotation. A boss theme switched off here must not walk
+	# back in through "boss themes may play in ordinary rounds" — that switch says
+	# WHEN the live ones play, not which ones are live.
+	var was_in_pool := GameSetup.boss_in_pool
+	GameSetup.boss_in_pool = true
+	var ordinary := {}
+	for i in (count + GameSetup.tracks_on()) * 40:
+		ordinary[GameSetup.roll_battle_track()] = true
+	_check("nor in an ordinary round when boss themes are let into the pool",
+		not ordinary.has(gone), "%s came up anyway" % gone)
+	_check("while the boss themes still on do come up there",
+		ordinary.has(Audio.boss_track(2)), "none of them did")
+	GameSetup.boss_in_pool = was_in_pool
+
+	# The floors are per list. Switching every boss theme off but one must not be
+	# blocked by, or block, the battle tracks.
+	var battle_before := GameSetup.tracks_on()
+	for i in range(1, count - 1):
+		boss[i].pressed.emit()
+	_check("they can all be switched off but one",
+		GameSetup.boss_tracks_on() == 1, "%d on" % GameSetup.boss_tracks_on())
+	boss[count - 1].pressed.emit()
+	_check("and the last one standing cannot be switched off either",
+		GameSetup.boss_tracks_on() == 1, "%d on" % GameSetup.boss_tracks_on())
+	_check("it is greyed out so the refusal is visible rather than mysterious",
+		boss[count - 1].disabled)
+	_check("and the battle rotation is untouched by any of it",
+		GameSetup.tracks_on() == battle_before,
+		"%d on, was %d" % [GameSetup.tracks_on(), battle_before])
+	# Greyed out is not silenced: the one theme you are left with is the one you
+	# most want to hear before committing to it.
+	var before := Audio.now_playing()
+	_right_click(boss[count - 1])
+	_check("the last one standing can still be auditioned",
+		Audio.now_playing() == Audio.boss_track(count), Audio.now_playing())
+	_right_click(boss[count - 1])
+	_check("and that preview puts the music back like any other",
+		Audio.now_playing() == before, Audio.now_playing())
+
+	for i in count - 1:
+		boss[i].pressed.emit()
+	_check("switching them back on restores the whole boss rotation",
+		GameSetup.boss_tracks_on() == count, "%d on" % GameSetup.boss_tracks_on())
+	_check("and the battle tracks are still where they were",
+		GameSetup.tracks_on() == toggles.size(),
+		"%d of %d" % [GameSetup.tracks_on(), toggles.size()])
+
+
+func _labels_in(root: Node) -> Array[Label]:
+	## Every Label anywhere under a node. Walks rather than reaching for a known path
+	## so it keeps working when the panel is rearranged, which is exactly what the
+	## check above is guarding against.
+	var out: Array[Label] = []
+	if root == null:
+		return out
+	for child in root.get_children():
+		var label := child as Label
+		if label != null:
+			out.append(label)
+		out.append_array(_labels_in(child))
+	return out
 
 
 func _right_click(b: Button) -> void:
@@ -688,6 +810,7 @@ func _run() -> void:
 	_check_playlist(buttons)
 	_check_portrait_toggle()
 	_check_volume_slider()
+	_check_category_sliders()
 	_check_boss_music()
 	_check_custom_matches()
 	_check_drawn_rounds()
@@ -1042,36 +1165,47 @@ func _check_backdrop() -> void:
 	_check("the battle advances on its own", backdrop._elapsed > ticks_before,
 		"%.3fs against %.3fs" % [backdrop._elapsed, ticks_before])
 
-	# Second: units cross tiles. This one must NOT be measured in frames. Headless frames
-	# run as fast as the machine allows, so forty of them are a few milliseconds of battle
-	# and nothing has time to walk anywhere — which is exactly what the first version of
-	# this check reported, and it was the test being impatient rather than the backdrop
-	# being broken. Driven with a fixed delta instead, which exercises the same
-	# accumulator on a clock that does not depend on how fast the box is.
+	# Second: units cross tiles. Two things had to be got right here and both were got
+	# wrong first.
+	#
+	# It must NOT be measured in frames — headless frames run as fast as the machine
+	# allows, so forty of them are a few milliseconds of battle and nothing has had time
+	# to walk anywhere. Driven with a fixed delta instead.
+	#
+	# And it must hold still while it is measured. The backdrop starts a FRESH battle when
+	# one finishes, on a board of new units with new uids, so a check that recorded
+	# positions and then ran sixty ticks could find itself comparing against units that no
+	# longer exist — reported as "0 of 9 moved", failing about one run in three. Seeding
+	# the backdrop's own generator and stopping the moment the board is swapped makes it
+	# the same test every time.
+	backdrop._rng.seed = 424242
+	backdrop._new_battle()
+	var watched := backdrop._board
 	var before_positions := {}
-	for u in backdrop._board.units_view():
+	for u in watched.units_view():
 		before_positions[u.uid] = u.cell
-	for i in 60:
-		backdrop._process(0.1)
 	var moved := 0
-	for u in backdrop._board.units_view():
-		if before_positions.has(u.uid) and before_positions[u.uid] != u.cell:
-			moved += 1
-	_check("and units cross tiles once it has run a few seconds", moved > 0,
-		"%d of %d moved in %.1fs" % [moved, before_positions.size(),
-			backdrop._elapsed])
-	# Sliding between tiles is the only reason the movement does not look like a slideshow,
-	# and it depends on capturing a duration the simulation never stores. If that capture
-	# ever breaks, every unit snaps and nothing else complains.
 	var slid := false
-	for i in 40:
-		backdrop._process(0.05)
-		for u in backdrop._board.units_view():
-			if u.state != UnitInstance.State.MOVING:
-				continue
-			var at := backdrop._slide_position(u)
-			if at.distance_to(Vector2(u.cell)) > 0.05:
+	for i in 120:
+		backdrop._process(0.1)
+		if backdrop._board != watched:
+			# The battle it was watching ended. Whatever it did before that still counts;
+			# carrying on would be measuring a different board.
+			break
+		for u in watched.units_view():
+			if before_positions.has(u.uid) and before_positions[u.uid] != u.cell:
+				moved += 1
+			# Sliding between tiles is the only reason the movement does not look like a
+			# slideshow, and it rests on capturing a duration the simulation never stores.
+			# If that capture breaks, every unit snaps and nothing else complains.
+			if u.state == UnitInstance.State.MOVING \
+					and backdrop._slide_position(u).distance_to(Vector2(u.cell)) > 0.05:
 				slid = true
+		if moved > 0 and slid:
+			break
+	_check("and units cross tiles once it has run a few seconds", moved > 0,
+		"%d units of %d moved in %.1fs" % [moved, before_positions.size(),
+			backdrop._elapsed])
 	_check("a walking unit is drawn between tiles, not snapped onto them", slid)
 
 	# The bug this design exists to avoid. The board's SHAPE is static state on
@@ -1103,3 +1237,105 @@ func _check_backdrop() -> void:
 	_check("and the new one has a full board again",
 		backdrop._board.living_count_of(BoardModel.TEAM_A) > 1
 		and backdrop._board.living_count_of(BoardModel.TEAM_B) > 1)
+
+
+func _check_category_sliders() -> void:
+	print("\nPer-category faders")
+	var panel: SettingsPanel = _menu._settings
+	if panel == null:
+		return
+	panel.open()
+
+	# Every category named in the panel has to have a bus behind it. This is the failure
+	# that matters and the one a slider cannot show you: AudioServer.get_bus_index on a
+	# name that does not exist returns -1, _apply_bus returns early, and the fader moves
+	# smoothly while changing absolutely nothing.
+	var buses := {
+		"music_volume": Audio.MUSIC_BUS,
+		"sfx_volume": Audio.SFX_BUS,
+		"voice_volume": Audio.VOICE_BUS,
+		"volume": "Master",
+	}
+	for prop in buses:
+		_check("there is a %s bus to drive" % buses[prop],
+			AudioServer.get_bus_index(buses[prop]) >= 0, buses[prop])
+	for prop in buses:
+		if prop == "volume":
+			continue
+		var idx := AudioServer.get_bus_index(buses[prop])
+		if idx < 0:
+			continue
+		# Feeding Master rather than standing on its own, or the overall fader would stop
+		# applying to whatever it carries.
+		_check("the %s bus feeds Master" % buses[prop],
+			AudioServer.get_bus_send(idx) == "Master",
+			AudioServer.get_bus_send(idx))
+
+	# One slider per category, and each one moves ONLY its own.
+	var props: Array[String] = ["volume", "music_volume", "sfx_volume", "voice_volume"]
+	for prop in props:
+		_check("there is a fader for %s" % prop,
+			panel._level_sliders.has(prop) and panel._level_sliders[prop] != null)
+	for prop in props:
+		if not panel._level_sliders.has(prop):
+			continue
+		for other in props:
+			Audio.set(other, 1.0)
+		var slider: HSlider = panel._level_sliders[prop]
+		slider.value = 0.4
+		_check("moving the %s fader sets it" % prop,
+			is_equal_approx(float(Audio.get(prop)), 0.4),
+			"%.2f" % float(Audio.get(prop)))
+		var leaked: PackedStringArray = []
+		for other in props:
+			if other != prop and not is_equal_approx(float(Audio.get(other)), 1.0):
+				leaked.append(other)
+		_check("and leaves the other three alone", leaked.is_empty(),
+			"also moved %s" % ", ".join(leaked))
+		# The number under it has to agree with what is actually playing.
+		var label: Label = panel._level_labels[prop]
+		_check("the %s label reads 40%%" % prop, label.text.contains("40"), label.text)
+
+	# The level has to reach the bus, not just the variable. Checked in decibels off the
+	# server, which is the only place that can say whether any of this is audible.
+	for prop in ["music_volume", "sfx_volume", "voice_volume"]:
+		var idx := AudioServer.get_bus_index(buses[prop])
+		if idx < 0:
+			continue
+		Audio.set(prop, 1.0)
+		var full := AudioServer.get_bus_volume_db(idx)
+		Audio.set(prop, 0.4)
+		_check("pulling %s down really does quieten its bus" % prop,
+			AudioServer.get_bus_volume_db(idx) < full - 1.0,
+			"%.1f dB against %.1f dB" % [AudioServer.get_bus_volume_db(idx), full])
+		# Silence at zero, not a faint hiss: linear_to_db(0) is negative infinity, so the
+		# bus is muted outright instead.
+		Audio.set(prop, 0.0)
+		_check("and zero is muted, not nearly muted" % [],
+			AudioServer.is_bus_mute(idx))
+		Audio.set(prop, 1.0)
+		_check("while full is not muted", not AudioServer.is_bus_mute(idx))
+
+	# And the sounds actually go through those buses. A fader on a bus nothing plays into
+	# is the same bug as a bus that does not exist.
+	_check("the music player is on the music bus",
+		Audio._music != null and Audio._music.bus == Audio.MUSIC_BUS,
+		"" if Audio._music == null else Audio._music.bus)
+	var on_sfx := 0
+	for v in Audio._voices:
+		if v.bus == Audio.SFX_BUS:
+			on_sfx += 1
+	_check("the effects pool is on the effects bus",
+		on_sfx == Audio._voices.size(),
+		"%d of %d" % [on_sfx, Audio._voices.size()])
+	# The voice lines share that pool and pick their bus per play, so the only honest way
+	# to check is to play one and look at where it went.
+	if not Audio._death_voice.is_empty():
+		Audio.play_death_voice(false)
+		var found := false
+		for v in Audio._voices:
+			if v.bus == Audio.VOICE_BUS:
+				found = true
+		_check("and a voice line plays through the voice bus", found)
+	for prop in props:
+		Audio.set(prop, 1.0)

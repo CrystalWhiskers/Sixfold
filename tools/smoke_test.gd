@@ -161,6 +161,9 @@ func _process(_delta: float) -> void:
 			_check_banned_buffs_reach_the_picker()
 			_check_the_boss_rule_reaches_the_music()
 			_check_the_charge_reaches_the_view()
+			_check_double_click_merges()
+			_check_the_apex_and_the_puppet_are_marked()
+			_check_merge_all_button()
 			_check_the_assassin_cloaks_before_it_jumps()
 			_check_possession_reaches_the_view()
 			var asked: int = _main.music_checks - _music_checks_at_start
@@ -912,11 +915,39 @@ func _check_the_boss_rule_reaches_the_music() -> void:
 	_main._refresh_music()
 	_check("a tier 6 on the board switches the music to a boss track",
 		Audio._music_now.begins_with("boss_"), Audio._music_now)
+	var turned_to := Audio._music_now
 
-	# And it goes back when the tier 6 does.
+	# It is a ONE-WAY door, and this used to assert the opposite.
+	#
+	# The old rule went back to the ordinary theme on every round without a tier 6 and
+	# re-rolled a boss track on every round with one, so a match where the big unit died
+	# and got merged back flipped between two kinds of music round after round, and a run
+	# of boss rounds played a different boss theme each time. The moment is meant to be
+	# "the fight changed", and a moment that happens five times is not a moment.
 	board.remove(boss)
 	_main._refresh_music()
-	_check("and it goes back to the match track when the tier 6 leaves",
+	_check("and it does NOT go back when the tier 6 leaves",
+		Audio._music_now == turned_to,
+		"playing %s, turned over to %s" % [Audio._music_now, turned_to])
+
+	# Nor does it pick a different boss track next time it is asked. Checked across
+	# several rounds, because a re-roll can land on the same track by luck once.
+	var stayed := true
+	for i in 6:
+		board.force_place(boss, spot)
+		_main._refresh_music()
+		board.remove(boss)
+		_main._refresh_music()
+		if Audio._music_now != turned_to:
+			stayed = false
+	_check("and it is the same boss track every round after", stayed,
+		"drifted to %s" % Audio._music_now)
+
+	# The door only reopens for a NEW match. Without this the boss theme would leak from
+	# one match into the next one's opening prep phase.
+	_main._boss_track = ""
+	_main._refresh_music()
+	_check("a fresh match starts on ordinary music again",
 		Audio._music_now == _main._match_track, Audio._music_now)
 	_check("the board is as it was", board.all_units().size() == had,
 		"%d units, started with %d" % [board.all_units().size(), had])
@@ -1414,3 +1445,258 @@ func _report() -> void:
 	else:
 		print("Scene smoke test passed.")
 	get_tree().quit(1 if _failed > 0 else 0)
+
+
+func _check_double_click_merges() -> void:
+	# The gesture has to reach the board and actually merge. A signal nobody connected
+	# looks identical from the outside to a signal nobody emits, and both look identical
+	# to a game that simply does not have the feature.
+	var board: BoardModel = _main.board
+	_check("the board view offers a double-click",
+		_main._board_view.has_signal("cell_double_clicked"))
+	_check("and main is listening for it",
+		_main._board_view.cell_double_clicked.is_connected(
+			_main._on_cell_double_clicked))
+
+	var was_phase := MatchState.phase
+	MatchState.phase = MatchState.Phase.PREP
+	var team: int = _main._active_team
+
+	# Two of a kind, somewhere they can legally sit, and NOT next to each other — the
+	# whole point of the gesture is that the drag would have been long.
+	#
+	# Room is MADE rather than looked for. This runs after a full match, so the player's
+	# half is usually full and a version that scanned for empty cells reported "0 free"
+	# and skipped itself — which is the worst way for a test to fail, because it passes.
+	# Whatever is standing on the two tiles is lifted off and put back at the end.
+	var kind: UnitData = load("res://data/units/warden_t1.tres")
+	var spots: Array[Vector2i] = []
+	for y in range(BoardModel.first_row(team), BoardModel.last_row(team)):
+		for x in BoardModel.WIDTH:
+			var c := Vector2i(x, y)
+			if not BoardModel.is_blocked(c):
+				spots.append(c)
+	_check("there are two usable tiles on this half", spots.size() >= 2,
+		"%d usable" % spots.size())
+	if spots.size() < 2:
+		MatchState.phase = was_phase
+		return
+	var evicted: Array[Dictionary] = []
+	for c in [spots[0], spots[spots.size() - 1]]:
+		var sitting := board.unit_at(c)
+		if sitting != null:
+			evicted.append({unit = sitting, cell = c})
+			board.remove(sitting)
+	var here: Vector2i = spots[0]
+	var there: Vector2i = spots[spots.size() - 1]
+	var a := UnitInstance.create(kind, team)
+	var b := UnitInstance.create(kind, team)
+	board.force_place(a, here)
+	board.force_place(b, there)
+	var before := board.all_units().size()
+
+	# Which twin it picks is checked directly rather than inferred from where the board
+	# ends up. The board after a full match has plenty of the player's units on it, so the
+	# nearest twin to the clicked tile is often NOT the one this test placed — an earlier
+	# version asserted the far tile had been emptied and failed for that reason, which
+	# says nothing about the feature.
+	# Typed explicitly: _main is reached through a Variant, so anything inferred from a
+	# call on it has no static type and the whole file stops compiling.
+	var chosen: UnitInstance = _main._merge_twin_for(board.unit_at(here))
+	var nearest_gap := 1 << 30
+	for other in board.units_of(team):
+		if other == board.unit_at(here) or not board.can_merge(other, board.unit_at(here)):
+			continue
+		nearest_gap = mini(nearest_gap,
+			BoardModel.tile_distance(other.cell, here))
+	_check("it picks a twin at all", chosen != null)
+	_check("and it picks the NEAREST one, so the result is predictable",
+		chosen != null
+		and BoardModel.tile_distance(chosen.cell, here) == nearest_gap,
+		"gap %d, nearest is %d" % [
+			0 if chosen == null else BoardModel.tile_distance(chosen.cell, here),
+			nearest_gap])
+
+	_main._on_cell_double_clicked(here)
+	var landed := board.unit_at(here)
+	# On the tile you POINTED AT. You said where you wanted the bigger unit; putting it
+	# somewhere else and leaving a hole where you clicked is the opposite of the gesture.
+	_check("double-clicking one of a pair merges them onto the clicked tile",
+		landed != null and landed.data.tier == 2,
+		"tier %d" % (0 if landed == null else landed.data.tier))
+	_check("two units became one", board.all_units().size() == before - 1,
+		"%d against %d" % [board.all_units().size(), before - 1])
+
+	# A lone unit has nothing to merge with, and has to say so rather than do nothing.
+	var lonely := UnitInstance.create(
+		load("res://data/units/reaver_t1.tres"), team)
+	var free_spot := Vector2i(-1, -1)
+	for c in spots:
+		if board.is_empty(c):
+			free_spot = c
+			break
+	if free_spot.x >= 0:
+		board.force_place(lonely, free_spot)
+		var count := board.all_units().size()
+		_main._on_cell_double_clicked(free_spot)
+		_check("double-clicking a unit with no twin changes nothing",
+			board.all_units().size() == count and board.unit_at(free_spot) == lonely)
+		_check("and it says so instead of failing silently",
+			_main._status.text.to_lower().contains("nothing to merge"),
+			_main._status.text)
+		board.remove(lonely)
+
+	if board.unit_at(here) != null:
+		board.remove(board.unit_at(here))
+	# Everything that was standing here goes back, so the checks after this one see the
+	# board they expect rather than one this test hollowed out.
+	for row in evicted:
+		board.force_place(row.unit, row.cell)
+	MatchState.phase = was_phase
+
+
+func _check_the_apex_and_the_puppet_are_marked() -> void:
+	# Two marks that are pure drawing, so what is checked is the STATE behind them: the
+	# flag the draw reads, and whether anything sets it. A halo nobody turns on and a halo
+	# that is not drawn look the same from here, but the first is the one that keeps
+	# happening in this codebase.
+	var view := BoardView.new()
+	add_child(view)
+	view.fit_to(Rect2(Vector2.ZERO, Vector2(900, 700)))
+	BoardModel.reset_map()
+	var model := BoardModel.new()
+	var apex := UnitInstance.create(
+		load("res://data/units/warden_t6.tres") as UnitData, BoardModel.TEAM_A)
+	var small := UnitInstance.create(
+		load("res://data/units/warden_t3.tres") as UnitData, BoardModel.TEAM_B)
+	model.force_place(apex, Vector2i(1, 1))
+	model.force_place(small, Vector2i(3, 1))
+	view.bind(model)
+	var av := view.ensure_view(apex)
+	var sv := view.ensure_view(small)
+	_check("both units have views", av != null and sv != null)
+	if av == null or sv == null:
+		return
+
+	# The halo turns. Motion is the whole point of it — a static glow stops being visible
+	# after a minute of looking at the board — so a phase that never advances is the
+	# failure worth catching.
+	var before: float = av.apex_t
+	for i in 12:
+		av._process(0.05)
+		sv._process(0.05)
+	_check("a tier 6's halo animates", not is_equal_approx(av.apex_t, before),
+		"%.3f against %.3f" % [av.apex_t, before])
+	_check("and a tier 3 has no halo to animate", is_zero_approx(sv.apex_t),
+		"%.3f" % sv.apex_t)
+	_check("the apex tier is the top of the ladder, not a number picked at random",
+		UnitView.APEX_TIER == 6, "%d" % UnitView.APEX_TIER)
+
+	# The possession brackets, driven off the log like every other condition on a unit —
+	# during playback the host's own is_possessed() is its state at the END of the round.
+	var player := BattlePlayer.new()
+	add_child(player)
+	var log: Array[Dictionary] = []
+	log.append({kind = "spawn", t = 0.0, uid = small.uid, cell = Vector2i(3, 1),
+		hp = 100.0, max_hp = 100.0})
+	log.append({kind = "possess", t = 0.0, uid = apex.uid, cell = Vector2i(1, 1),
+		host_uid = small.uid, host_cell = Vector2i(3, 1),
+		hp = 100.0, max_hp = 100.0, team = BoardModel.TEAM_A, forced_tier = 0})
+	log.append({kind = "counts", t = 999.0, a = 1, b = 1})
+	player.play(view, log, {apex.uid: apex, small.uid: small})
+	player._process(0.05)
+	_check("a possessed host is marked as one", sv.possessed)
+	_check("and the mark animates so it does not read as a border",
+		not is_zero_approx(sv.possessed_t) or _tick_possessed(sv))
+
+	# Freed, and the mark has to go. A host handed back is its owner's again and must not
+	# still be wearing the brackets.
+	player._apply({kind = "possess_end", t = 0.0, uid = small.uid,
+		cell = Vector2i(3, 1), hp = 100.0, max_hp = 100.0})
+	_check("and a freed host loses the mark", not sv.possessed)
+
+	# The other way it ends: the host dies and the husk pops out. A revived host must not
+	# come back still marked.
+	sv.possessed = true
+	player._apply({kind = "husk", t = 0.0, uid = apex.uid, cell = Vector2i(2, 1),
+		from_uid = small.uid, hp = 1.0, max_hp = 1.0})
+	_check("and a husk popping out clears it too", not sv.possessed)
+
+	player.stop()
+	player.queue_free()
+	view.queue_free()
+
+
+func _tick_possessed(v: UnitView) -> bool:
+	for i in 6:
+		v._process(0.05)
+	return not is_zero_approx(v.possessed_t)
+
+
+func _check_merge_all_button() -> void:
+	# The button has to exist, be wired, and actually empty the board of pairs. A handler
+	# nobody connected and a button that merges one pair look the same from the outside as
+	# a game that does not have the feature.
+	_check("there is a Merge All button", _main._merge_all_btn != null)
+	if _main._merge_all_btn == null:
+		return
+	_check("and it is wired up",
+		_main._merge_all_btn.pressed.is_connected(_main._on_merge_all_pressed))
+
+	var board: BoardModel = _main.board
+	var was_phase := MatchState.phase
+	MatchState.phase = MatchState.Phase.PREP
+	var team: int = _main._active_team
+
+	# Four of a kind, made room for the same way the double-click test does it. Four is
+	# the number that matters: two merges make two tier 2s, and those two then pair — so
+	# a single pass leaves work on the board and only a loop finishes the job.
+	var spots: Array[Vector2i] = []
+	for y in range(BoardModel.first_row(team), BoardModel.last_row(team)):
+		for x in BoardModel.WIDTH:
+			var c := Vector2i(x, y)
+			if not BoardModel.is_blocked(c):
+				spots.append(c)
+	if spots.size() < 4:
+		_check("there is room for four of a kind", false, "%d tiles" % spots.size())
+		MatchState.phase = was_phase
+		return
+	var evicted: Array[Dictionary] = []
+	var used: Array[Vector2i] = []
+	for i in 4:
+		var c: Vector2i = spots[i]
+		var sitting := board.unit_at(c)
+		if sitting != null:
+			evicted.append({unit = sitting, cell = c})
+			board.remove(sitting)
+		used.append(c)
+	var kind: UnitData = load("res://data/units/warden_t1.tres")
+	for c in used:
+		board.force_place(UnitInstance.create(kind, team), c)
+
+	var before := board.units_of(team).size()
+	_main._on_merge_all_pressed()
+	var after := board.units_of(team).size()
+	_check("pressing it merges more than one pair", before - after >= 3,
+		"%d units became %d" % [before, after])
+	# The real claim: nothing mergeable is LEFT. Pressing it twice must do nothing the
+	# first press should have done.
+	_check("and nothing mergeable is left behind",
+		_main._next_merge_for(team).is_empty())
+	var settled := board.units_of(team).size()
+	_main._on_merge_all_pressed()
+	_check("so pressing it again changes nothing",
+		board.units_of(team).size() == settled,
+		"%d against %d" % [board.units_of(team).size(), settled])
+	_check("and it says so rather than doing nothing silently",
+		_main._status.text.to_lower().contains("nothing left to merge"),
+		_main._status.text)
+
+	# Put the board back the way the rest of the suite expects it.
+	for c in used:
+		var left := board.unit_at(c)
+		if left != null:
+			board.remove(left)
+	for row in evicted:
+		board.force_place(row.unit, row.cell)
+	MatchState.phase = was_phase

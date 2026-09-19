@@ -1,6 +1,10 @@
 class_name UnitView
 extends Node2D
 
+## The tier at which a unit stops being a merge result and starts being the thing you
+## built the whole round for. Only tier 6 gets the halo.
+const APEX_TIER := 6
+
 const BAR_HEIGHT := 9.0
 const BAR_INSET := 6.0
 const DEATH_TIME := 0.35
@@ -89,6 +93,26 @@ var frenzied := false
 var frenzy_secs := 0.0
 var frenzy_t := 0.0
 
+## Reeling: wandering, not swinging. Event-driven with its own clock, like every other
+## condition here — during playback `unit.disorient_left` is the END-of-round value.
+var reeling := false
+var reeling_secs := 0.0
+var reeling_t := 0.0
+
+## Whether an Usurper is currently inside this unit.
+##
+## Event-driven, like every other condition here. The simulation flips the host's `team`
+## the moment it is taken, so the board already recolours it — but a recoloured unit just
+## looks like one of yours, and there is nothing on it to say the body is stolen and
+## comes back if you kill whatever is wearing it.
+var possessed := false
+var possessed_t := 0.0
+
+## Animation phase for a tier 6's halo. Kept here rather than derived from a global clock
+## so that two tier 6s side by side are not locked in step, which reads as one effect
+## drawn twice rather than two units.
+var apex_t := 0.0
+
 # Whose side the person watching is on. The enemy's letters are drawn upside
 # down, which turns out to read faster than colour alone: at a glance the board
 # separates into "letters I can read" and "letters I cannot".
@@ -161,6 +185,18 @@ func _process(delta: float) -> void:
 		if frenzy_secs <= 0.0:
 			end_frenzy()
 		queue_redraw()
+	if reeling:
+		reeling_secs -= delta
+		reeling_t = fmod(reeling_t + delta * 4.0, TAU)
+		if reeling_secs <= 0.0:
+			end_reeling()
+		queue_redraw()
+	if possessed:
+		possessed_t = fmod(possessed_t + delta * 2.2, TAU)
+		queue_redraw()
+	if unit != null and unit.data != null and unit.data.tier >= APEX_TIER:
+		apex_t = fmod(apex_t + delta * 1.1, TAU)
+		queue_redraw()
 	if reviving:
 		revive_t = fmod(revive_t + delta * 2.4, TAU)
 		queue_redraw()
@@ -199,6 +235,24 @@ func hold(kind: int, seconds: float) -> void:
 		return
 	held = kind
 	held_left = maxf(held_left if held == kind else 0.0, seconds)
+	queue_redraw()
+
+
+func begin_reeling(seconds: float) -> void:
+	## Sent reeling for `seconds` of playback time. Overwrites rather than takes the
+	## longest, because the ability RESETS the count rather than extending it — the view
+	## has to agree with the simulation about that or a re-application looks like it did
+	## nothing.
+	if seconds <= 0.0:
+		return
+	reeling = true
+	reeling_secs = seconds
+	queue_redraw()
+
+
+func end_reeling() -> void:
+	reeling = false
+	reeling_secs = 0.0
 	queue_redraw()
 
 
@@ -432,6 +486,57 @@ func _draw() -> void:
 		var glow := Color(1.00, 0.86, 0.42, 0.85 * alpha)
 		draw_rect(body.grow(2.5), glow, false, 2.0)
 		draw_rect(body.grow(5.0), Color(glow, 0.35 * alpha), false, 2.0)
+	if tier >= APEX_TIER:
+		# The apex halo. A tier 6 is the most expensive thing on the board — thirty-two
+		# tier 1s — and until now it was distinguishable from a tier 5 only by a badge
+		# reading "T6" and one extra pip, which is a lot of investment to express as a
+		# number. Drawn OUTSIDE the team ring and the tier rim so it reads at a glance,
+		# and in the tier colour so it says which tier rather than just "special".
+		var halo := tint
+		var pulse := 0.5 + 0.5 * sin(apex_t)
+		# Two rings breathing against each other rather than one, so it does not read as
+		# the empowered outline below, which is a single steady gold rectangle.
+		halo.a = (0.30 + 0.30 * pulse) * alpha
+		draw_arc(Vector2.ZERO, half + 2.0 + pulse * 2.0, 0.0, TAU, 40, halo, 2.5)
+		halo.a = (0.14 + 0.16 * (1.0 - pulse)) * alpha
+		draw_arc(Vector2.ZERO, half + 6.0 - pulse * 2.0, 0.0, TAU, 40, halo, 2.0)
+		# Four slow motes turning around it. Motion is what separates "this unit is
+		# important" from "this unit has a thicker border": a static glow stops being
+		# visible after a minute of looking at the board.
+		for i in 4:
+			var ang: float = apex_t + float(i) * TAU / 4.0
+			var at := Vector2(cos(ang), sin(ang)) * (half + 4.0)
+			draw_circle(at, maxf(tile_size * 0.035, 2.0),
+				Color(tint.lightened(0.45), (0.55 + 0.35 * pulse) * alpha))
+
+	if possessed:
+		# Somebody else is driving. The team ring has already changed colour, so this has
+		# to say something the colour cannot: that the body is on loan and goes back if
+		# you kill what is inside it.
+		var grip := Color(0.78, 0.50, 1.00, (0.85 + 0.15 * sin(possessed_t)) * alpha)
+		# Corner brackets rather than another ring. Every other condition on this unit is
+		# drawn as a ring or an outline, and a fourth one would be indistinguishable from
+		# the other three at a glance.
+		#
+		# Drawn OUTSIDE the body rather than on it. The first version put them on the body
+		# edge, where they sat on top of the portrait and under the tier rim, and a
+		# screenshot showed them as a faint discolouration of a border that was already
+		# two colours. Out here there is nothing else on that ring.
+		var claws := body.grow(4.0)
+		var claw := tile_size * 0.26
+		var corners := [claws.position,
+			Vector2(claws.end.x, claws.position.y),
+			Vector2(claws.position.x, claws.end.y), claws.end]
+		for i in corners.size():
+			var c: Vector2 = corners[i]
+			var sx := 1.0 if i == 0 or i == 2 else -1.0
+			var sy := 1.0 if i < 2 else -1.0
+			draw_line(c, c + Vector2(claw * sx, 0.0), grip, 3.0)
+			draw_line(c, c + Vector2(0.0, claw * sy), grip, 3.0)
+		# One mote at the centre: the thing inside it.
+		draw_circle(body.get_center(), maxf(tile_size * 0.05, 3.0),
+			Color(0.78, 0.56, 0.98, 0.55 * alpha))
+
 	if unit.is_taunting():
 		# A ring outside everything: it is the loudest thing on the board while
 		# it lasts, and it should read that way.
@@ -514,6 +619,35 @@ func _draw() -> void:
 		Color(0.06, 0.07, 0.10, alpha))
 
 	_draw_tier_pips(body, tier, tint, alpha)
+
+	if reeling:
+		# Lost. Drawn as birds going round its head rather than as another ring: this unit
+		# is not held in place — it is walking about — and a ring reads as "pinned",
+		# which is what the stun and freeze marks already mean.
+		#
+		# LAST in the whole function, and that is not a style choice. The first version
+		# drew it with the other conditions, up where the health bar and the damage
+		# numbers go — and the bar is painted later, so it covered the motes completely.
+		# A screenshot showed a unit with no mark on it at all.
+		var swirl := Color(0.96, 0.88, 0.40, (0.80 + 0.20 * sin(reeling_t * 2.0)) * alpha)
+		# Named for what it is rather than "ring" — the team ring already owns that name
+		# further up this function, and reusing it does not shadow, it fails to compile.
+		# A FLAT ellipse across the unit's middle, not a ring above its head. Above the
+		# head was the obvious place and it is already occupied: the health readout and
+		# the floating damage numbers live there, and a screenshot showed the motes
+		# disappearing behind them completely. Across the body there is nothing else, and
+		# a squashed orbit that passes in front of the portrait cannot be confused with
+		# the tier 6 halo, which is a true circle outside the tile.
+		var wide := half * 0.86
+		var tall := half * 0.34
+		for i in 3:
+			var ang: float = reeling_t + float(i) * TAU / 3.0
+			var at := body.get_center() + Vector2(cos(ang) * wide, sin(ang) * tall)
+			# Each mote carries its own dark backing, because it is drawn over portrait
+			# art rather than over a flat plate and a bare dot vanishes into a light one.
+			draw_circle(at, maxf(tile_size * 0.075, 3.5),
+				Color(0.08, 0.07, 0.04, 0.70 * alpha))
+			draw_circle(at, maxf(tile_size * 0.055, 2.5), swirl)
 
 	if dying:
 		var k := body.grow(-body.size.x * 0.28)

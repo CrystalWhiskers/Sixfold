@@ -103,6 +103,12 @@ var map_index := 0
 ## Empty until the first read, because Audio has to have counted the files first.
 var battle_playlist: Array[bool] = []
 
+## The same, for the boss themes. A SECOND list rather than a longer first one,
+## because the two answer different questions: switching off half the battle music
+## says nothing about which boss themes you want, and a boss theme that is on still
+## only plays when a tier 6 is on the board unless boss_in_pool says otherwise.
+var boss_playlist: Array[bool] = []
+
 ## Whether boss tracks may come up as ordinary battle music. Off by default: a
 ## boss theme means something when it only plays for a boss, and a player who
 ## wants them in the general rotation can say so.
@@ -156,28 +162,54 @@ func reload_maps() -> int:
 
 
 func playlist() -> Array[bool]:
+	return _grown(battle_playlist, Audio.battle_track_count)
+
+
+func boss_list() -> Array[bool]:
+	return _grown(boss_playlist, Audio.boss_track_count)
+
+
+func _grown(list: Array[bool], count: int) -> Array[bool]:
 	# Grown, never rebuilt: a track dropped into assets/music turns up switched on
-	# and the choices already made about the others are kept.
-	while battle_playlist.size() < Audio.battle_track_count:
-		battle_playlist.append(true)
-	return battle_playlist
+	# and the choices already made about the others are kept. Returns the list
+	# itself, not a copy — the callers below toggle through it.
+	while list.size() < count:
+		list.append(true)
+	return list
 
 
 func toggle_track(index: int) -> void:
+	_toggle(playlist(), index)
+
+
+func toggle_boss_track(index: int) -> void:
+	_toggle(boss_list(), index)
+
+
+func _toggle(list: Array[bool], index: int) -> void:
 	# One-based, matching the file names. The last track on cannot be switched
 	# off — silence is a setting, but it is not one you should be able to reach by
-	# clicking things off one at a time without noticing.
-	var list := playlist()
+	# clicking things off one at a time without noticing. The two lists keep that
+	# floor separately: switching every boss theme but one off has nothing to do
+	# with how much battle music is left.
 	if index < 1 or index > list.size():
 		return
-	if list[index - 1] and tracks_on() <= 1:
+	if list[index - 1] and _on_in(list) <= 1:
 		return
 	list[index - 1] = not list[index - 1]
 
 
 func tracks_on() -> int:
+	return _on_in(playlist())
+
+
+func boss_tracks_on() -> int:
+	return _on_in(boss_list())
+
+
+func _on_in(list: Array[bool]) -> int:
 	var n := 0
-	for on in playlist():
+	for on in list:
 		if on:
 			n += 1
 	return n
@@ -196,11 +228,23 @@ func roll_battle_track() -> String:
 		# Let in as full members of the rotation rather than with some separate
 		# weight: "allow boss themes into the pool" means the pool, and a boss
 		# track being longer is not a reason for it to be rarer.
-		for i in Audio.boss_track_count:
-			live.append(Audio.boss_track(i + 1))
+		#
+		# Only the ones switched on, though. A boss theme you have switched off is
+		# off everywhere — letting it back in through this door would make the
+		# switch mean "off, unless you also ticked the other box".
+		live.append_array(_live_boss_tracks())
 	if live.is_empty():
 		return Audio.battle_track(1)
 	return live[_music_rng.randi_range(0, live.size() - 1)]
+
+
+func _live_boss_tracks() -> Array[String]:
+	var live: Array[String] = []
+	var list := boss_list()
+	for i in list.size():
+		if list[i]:
+			live.append(Audio.boss_track(i + 1))
+	return live
 
 
 func roll_boss_track() -> String:
@@ -209,7 +253,12 @@ func roll_boss_track() -> String:
 	## of them in one match should not sound like the same event twice.
 	if Audio.boss_track_count <= 0:
 		return ""
-	return Audio.boss_track(_music_rng.randi_range(1, Audio.boss_track_count))
+	var live := _live_boss_tracks()
+	# Cannot normally be empty — the last one on cannot be switched off — but a
+	# fallback beats returning "" and dropping the music on a boss round.
+	if live.is_empty():
+		return Audio.boss_track(1)
+	return live[_music_rng.randi_range(0, live.size() - 1)]
 
 
 static func is_boss_round(board: BoardModel) -> bool:

@@ -31,6 +31,23 @@ var _interrupted := ""
 var _portrait_button: Button = null
 var _volume_slider: HSlider = null
 var _volume_label: Label = null
+
+## The category faders, keyed by the Audio property each one drives.
+##
+## Held in dictionaries rather than as four named pairs of fields because the four are
+## identical in every respect except which property they set — and the version with named
+## fields was four copies of the same eight lines, which is four places to forget the
+## mute-at-zero wording.
+var _level_sliders: Dictionary = {}
+var _level_labels: Dictionary = {}
+
+## Each row: the Audio property it drives, and what the label calls it.
+const LEVELS := [
+	{prop = "volume", name = "Overall"},
+	{prop = "music_volume", name = "Music"},
+	{prop = "sfx_volume", name = "Effects"},
+	{prop = "voice_volume", name = "Voices"},
+]
 var _boss_button: Button = null
 
 
@@ -67,7 +84,7 @@ func _ready() -> void:
 	title.add_theme_font_size_override("font_size", 30)
 	column.add_child(title)
 
-	column.add_child(_build_volume())
+	column.add_child(_build_levels())
 	column.add_child(_build_portrait_toggle())
 	column.add_child(_build_playlist())
 	column.add_child(_build_boss_toggle())
@@ -92,42 +109,75 @@ func _heading(text: String) -> Label:
 	return l
 
 
-func _build_volume() -> Control:
+func _build_levels() -> Control:
 	var box := VBoxContainer.new()
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
-	box.add_theme_constant_override("separation", 6)
-
-	_volume_label = _heading("")
-	box.add_child(_volume_label)
-
-	_volume_slider = HSlider.new()
-	_volume_slider.min_value = 0.0
-	_volume_slider.max_value = 1.0
-	# A hundred stops across the bar, so the number under it can read in whole
-	# percent without the fader and the label disagreeing about where it is.
-	_volume_slider.step = 0.01
-	_volume_slider.value = Audio.volume
-	_volume_slider.custom_minimum_size = Vector2(PANEL_WIDTH * 0.6, 24.0)
-	_volume_slider.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	# value_changed, not drag_ended: the whole point of a volume fader is that you
-	# hear the change while you are moving it.
-	_volume_slider.value_changed.connect(_on_volume)
-	box.add_child(_volume_slider)
-
-	_refresh_volume()
+	box.add_theme_constant_override("separation", 4)
+	for row in LEVELS:
+		box.add_child(_build_level(row.prop, row.name))
 	return box
 
 
-func _on_volume(value: float) -> void:
-	Audio.volume = value
-	_refresh_volume()
+func _build_level(prop: String, label_text: String) -> Control:
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 2)
+
+	var label := _heading("")
+	_level_labels[prop] = label
+	box.add_child(label)
+
+	var slider := HSlider.new()
+	slider.min_value = 0.0
+	slider.max_value = 1.0
+	# A hundred stops across the bar, so the number under it can read in whole
+	# percent without the fader and the label disagreeing about where it is.
+	slider.step = 0.01
+	slider.value = Audio.get(prop)
+	slider.custom_minimum_size = Vector2(PANEL_WIDTH * 0.6, 20.0)
+	slider.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	# value_changed, not drag_ended: the whole point of a volume fader is that you
+	# hear the change while you are moving it.
+	slider.value_changed.connect(_on_level.bind(prop))
+	_level_sliders[prop] = slider
+	box.add_child(slider)
+
+	# The first one is also the one the rest of the panel already knew about, so the
+	# existing handles keep pointing at something real rather than every caller of
+	# _volume_slider having to learn about the dictionary.
+	if prop == "volume":
+		_volume_slider = slider
+		_volume_label = label
+
+	_refresh_level(prop)
+	return box
+
+
+func _on_level(value: float, prop: String) -> void:
+	Audio.set(prop, value)
+	_refresh_level(prop)
+
+
+func _refresh_level(prop: String) -> void:
+	var label: Label = _level_labels.get(prop, null)
+	if label == null:
+		return
+	var name := prop
+	for row in LEVELS:
+		if row.prop == prop:
+			name = row.name
+	# Read back off Audio rather than off the slider: Audio clamps, and a label that
+	# trusted the slider would disagree with what is actually playing the moment
+	# anything set the level from outside this panel.
+	var level: float = Audio.get(prop)
+	label.text = ("%s — muted" % name if level <= 0.0
+		else "%s — %d%%" % [name, roundi(level * 100.0)])
 
 
 func _refresh_volume() -> void:
-	if _volume_label == null:
-		return
-	_volume_label.text = ("Volume — muted" if Audio.volume <= 0.0
-		else "Volume — %d%%" % roundi(Audio.volume * 100.0))
+	## Kept as a name because the rest of the panel and the menu suite both call it.
+	for row in LEVELS:
+		_refresh_level(row.prop)
 
 
 func _build_portrait_toggle() -> Control:
@@ -217,64 +267,71 @@ func _refresh_boss() -> void:
 
 
 func _build_playlist() -> Control:
-	# Every track is a toggle; a round rolls one of whatever is switched on. Built
-	# from Audio.battle_track_count rather than a list here, so dropping
-	# battle_23.ogg into assets/music puts another button on this screen with no
-	# edit to this file at all.
+	# Two labelled blocks, not one grid with the boss tracks tacked on the end.
+	#
+	# They WERE one grid, and the right click worked on the boss buttons the whole
+	# time — but the only heading on screen said "Battle music", so the B row read as
+	# decoration rather than as something you could click. A capability nothing names
+	# is a capability nobody uses. Splitting them also stops the boss row starting
+	# half way along a line whenever the battle count is not a multiple of
+	# TRACKS_PER_ROW, which today it happens to be and tomorrow it will not.
 	var box := VBoxContainer.new()
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.add_theme_constant_override("separation", 6)
-	box.add_child(_heading(
-		"Battle music — left click to switch a track off, right click to hear it"))
-
-	# A grid, not a row: forty tracks at 46 pixels each is nearly two thousand wide
-	# and the panel is not. The grid wraps however many there turn out to be.
-	var grid := GridContainer.new()
-	grid.columns = mini(maxi(_all_tracks(), 1), TRACKS_PER_ROW)
-	grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	grid.add_theme_constant_override("h_separation", 6)
-	grid.add_theme_constant_override("v_separation", 6)
-	box.add_child(grid)
 
 	_track_buttons.clear()
-	for i in Audio.battle_track_count:
-		grid.add_child(_track_button(i + 1, false))
-	# The boss tracks are in the grid too, marked "B1", "B2" and so on. They are
-	# previewable exactly like the rest — auditioning the music is the point of the
-	# right click, and a track you cannot hear is the one you most want to.
-	#
-	# Their TOGGLE means something narrower: whether they may come up in an ordinary
-	# round. That is the Boss rounds switch above, so these are preview-only and say
-	# so by being drawn in their own colour.
-	for i in Audio.boss_track_count:
-		grid.add_child(_track_button(i + 1, true))
-	if _all_tracks() == 0:
-		var none := Label.new()
-		none.text = "no tracks found"
-		none.add_theme_font_size_override("font_size", 13)
-		grid.add_child(none)
+
+	box.add_child(_heading(
+		"Battle music — left click to switch a track off, right click to hear it"))
+	box.add_child(_track_grid(Audio.battle_track_count, false))
+
+	# These toggle too, and their toggle means the same thing a battle track's does:
+	# switched off is out of the rotation, boss rounds included. What stays separate
+	# is WHEN the ones left play — that is the Boss rounds switch below. Drawn in
+	# their own colour so the two rows are not mistaken for one list.
+	box.add_child(_heading(
+		"Boss themes — left click to switch one off, right click to hear it"))
+	box.add_child(_track_grid(Audio.boss_track_count, true))
+
 	_refresh_tracks()
 	return box
 
 
-func _all_tracks() -> int:
-	return Audio.battle_track_count + Audio.boss_track_count
+func _track_grid(count: int, boss: bool) -> Control:
+	# A grid, not a row: forty tracks at 46 pixels each is nearly two thousand wide
+	# and the panel is not. The grid wraps however many there turn out to be. Built
+	# from the count Audio found on disk rather than a list here, so dropping
+	# battle_31.ogg into assets/music puts another button on this screen with no edit
+	# to this file at all.
+	var grid := GridContainer.new()
+	grid.columns = mini(maxi(count, 1), TRACKS_PER_ROW)
+	grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	grid.add_theme_constant_override("h_separation", 6)
+	grid.add_theme_constant_override("v_separation", 6)
+	if count <= 0:
+		var none := Label.new()
+		none.text = "no boss tracks found" if boss else "no tracks found"
+		none.add_theme_font_size_override("font_size", 13)
+		grid.add_child(none)
+		return grid
+	for i in count:
+		grid.add_child(_track_button(i + 1, boss))
+	return grid
 
 
 func _track_button(index: int, boss: bool) -> Button:
 	var b := Button.new()
 	b.custom_minimum_size = TRACK_BUTTON_SIZE
 	b.add_theme_font_size_override("font_size", 15)
-	# Toggle mode purely for the look — the state of record is
-	# GameSetup.playlist(), and _refresh_tracks writes the button from it. A
-	# programmatic button_pressed emits `toggled`, not `pressed`, so writing it
-	# back here cannot loop.
-	b.toggle_mode = not boss
+	# Toggle mode purely for the look — the state of record is GameSetup.playlist()
+	# or boss_list(), and _refresh_tracks writes the button from it. A programmatic
+	# button_pressed emits `toggled`, not `pressed`, so writing it back here cannot
+	# loop.
+	b.toggle_mode = true
 	b.set_meta(&"track", index)
 	b.set_meta(&"boss", boss)
-	if not boss:
-		b.pressed.connect(Audio.play_confirm)
-		b.pressed.connect(_on_toggle_track.bind(index))
+	b.pressed.connect(Audio.play_confirm)
+	b.pressed.connect(_on_toggle_track.bind(index, boss))
 	# Right click auditions it. gui_input rather than a second pressed handler,
 	# because a Button only reports the left one.
 	b.gui_input.connect(_on_track_input.bind(b))
@@ -316,14 +373,37 @@ func _stop_preview() -> void:
 	_interrupted = ""
 
 
-func _on_toggle_track(index: int) -> void:
-	GameSetup.toggle_track(index)
+func _on_toggle_track(index: int, boss: bool) -> void:
+	if boss:
+		GameSetup.toggle_boss_track(index)
+	else:
+		GameSetup.toggle_track(index)
 	_refresh_tracks()
 
 
+## The four colours a track button can be, in both rows: currently being heard, in
+## the rotation, switched off. The boss row runs warm and the battle row cool so the
+## two are never read as one list — the SHAPE of the rule is identical, only the hue
+## differs, because the rule is now identical too.
+const TRACK_COLOURS := {
+	false: {
+		playing = Color(1.00, 0.94, 0.70),
+		on = Color(0.86, 0.90, 0.96),
+		off = Color(0.48, 0.52, 0.60),
+	},
+	true: {
+		playing = Color(1.00, 0.88, 0.58),
+		on = Color(0.90, 0.74, 0.44),
+		off = Color(0.46, 0.40, 0.32),
+	},
+}
+
+
 func _refresh_tracks() -> void:
-	var list := GameSetup.playlist()
-	var only_one := GameSetup.tracks_on() <= 1
+	var battle := GameSetup.playlist()
+	var boss_tracks := GameSetup.boss_list()
+	var last_battle := GameSetup.tracks_on() <= 1
+	var last_boss := GameSetup.boss_tracks_on() <= 1
 	for b in _track_buttons:
 		var index: int = int(b.get_meta(&"track", 1))
 		var boss: bool = bool(b.get_meta(&"boss", false))
@@ -331,22 +411,46 @@ func _refresh_tracks() -> void:
 		# the colour and the pressed look, not a tick glyph competing for the space.
 		b.text = Audio.boss_track_name(index) if boss else Audio.battle_track_name(index)
 		var name := Audio.boss_track(index) if boss else Audio.battle_track(index)
-		var playing := name == _previewing
-		if boss:
-			# No toggle of its own — see _build_playlist. Its own colour so it is not
-			# mistaken for a battle track that has been switched off.
-			b.disabled = false
-			b.add_theme_color_override("font_color",
-				Color(0.98, 0.84, 0.54) if playing else Color(0.72, 0.62, 0.44))
+		var list: Array[bool] = boss_tracks if boss else battle
+		var only_one: bool = last_boss if boss else last_battle
+		if index < 1 or index > list.size():
 			continue
 		var on: bool = list[index - 1]
 		b.button_pressed = on
 		# The last one standing is greyed rather than hidden, so the reason the
-		# click did nothing is visible instead of mysterious.
+		# click did nothing is visible instead of mysterious. It can still be
+		# auditioned — a disabled Button stops reporting its own press, not the
+		# right click, which arrives through gui_input.
 		b.disabled = on and only_one
-		b.add_theme_color_override("font_color",
-			Color(1.00, 0.94, 0.70) if playing
-			else (Color(0.86, 0.90, 0.96) if on else Color(0.48, 0.52, 0.60)))
+		var shades: Dictionary = TRACK_COLOURS[boss]
+		var colour: Color = (shades.playing if name == _previewing
+			else (shades.on if on else shades.off))
+		_paint(b, colour)
+
+
+## The font colour slots a track button can actually be drawn with.
+##
+## NOT just "font_color". That one is the RESTING colour, and a toggle button that
+## is switched on is held in the pressed state, which reads font_pressed_color
+## instead — so setting only the first left every switched-on boss button white
+## while the switched-off ones were correctly amber. It cost a screenshot to see,
+## because the battle row's "on" colour is near-white anyway and hid the same bug.
+##
+## font_disabled_color is deliberately absent: the last track standing is greyed by
+## the theme's own disabled colour, and that dimming IS the message that it cannot
+## be switched off.
+const FONT_SLOTS: Array[StringName] = [
+	&"font_color",
+	&"font_pressed_color",
+	&"font_hover_color",
+	&"font_hover_pressed_color",
+	&"font_focus_color",
+]
+
+
+func _paint(b: Button, colour: Color) -> void:
+	for slot in FONT_SLOTS:
+		b.add_theme_color_override(slot, colour)
 
 
 func open() -> void:

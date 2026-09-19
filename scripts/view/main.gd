@@ -18,6 +18,7 @@ const BATTLE_START_HOLD := 1.3
 @onready var _hud: Label = $UI/Root/Hud
 @onready var _status: Label = $UI/Root/Status
 @onready var _fight_btn: Button = $UI/Root/Buttons/Fight
+@onready var _merge_all_btn: Button = $UI/Root/Buttons/MergeAll
 @onready var _speed_btn: Button = $UI/Root/Buttons/Speed
 @onready var _menu_btn: Button = $UI/Root/Buttons/Menu
 
@@ -37,6 +38,17 @@ var _picker: BuffPicker = null
 ## The track this MATCH drew. Held so the boss rule has something to put back
 ## when the tier 6 that triggered it is off the board again.
 var _match_track := ""
+
+## The boss track this match turned over to, once it has. Empty until the first round
+## with a tier 6 on the board, and then never empty again for the rest of the match.
+##
+## This is what makes the change a ONE-WAY door. It used to re-roll a boss track at the
+## start of every boss round and fall back to the ordinary theme on every round without a
+## tier 6 — so a match where the big unit died and got merged back flipped between two
+## kinds of music round after round, and even a run of consecutive boss rounds played a
+## different boss theme each time. The moment is supposed to be "the fight changed", and a
+## moment that happens five times is not a moment.
+var _boss_track := ""
 
 ## How many times the boss rule has been asked. Exists for one reason: the smoke
 ## test checks it against the number of rounds played, which is the only way to
@@ -90,6 +102,7 @@ func _blind_then(next_team: int, action: Callable) -> void:
 		return
 	_board_view.interactive = false
 	_fight_btn.disabled = true
+	_merge_all_btn.disabled = true
 	_after_blind = action
 	_handover.blind(next_team)
 
@@ -98,6 +111,7 @@ func _on_handover_ready() -> void:
 	var action := _after_blind
 	_after_blind = Callable()
 	_fight_btn.disabled = false
+	_merge_all_btn.disabled = false
 	if action.is_valid():
 		action.call()
 
@@ -108,6 +122,9 @@ func _ready() -> void:
 	# music from the first prep phase to the last body — the boss rule below is
 	# the single exception, and it puts this track back when the tier 6 is gone.
 	_match_track = GameSetup.roll_battle_track()
+	# Per MATCH, not per round: a new match starts on ordinary music however the last one
+	# ended, or the boss theme would leak from one match into the next.
+	_boss_track = ""
 	Audio.play_music(_match_track)
 	# The map decides the board's shape, so it has to be chosen before anything
 	# asks the board how big it is.
@@ -150,6 +167,7 @@ func _ready() -> void:
 	_player.counts_changed.connect(_on_counts_changed)
 	_board_view.cell_pressed.connect(_on_cell_pressed)
 	_board_view.drag_dropped.connect(_on_drag_dropped)
+	_board_view.cell_double_clicked.connect(_on_cell_double_clicked)
 
 	# Fight gets the bell rather than the confirm click: it IS the round starting,
 	# and two sounds on one press is one too many. Menu keeps the confirm; the
@@ -157,6 +175,7 @@ func _ready() -> void:
 	# setting.
 	_fight_btn.pressed.connect(Audio.play_round_start)
 	_fight_btn.pressed.connect(_on_fight_pressed)
+	_merge_all_btn.pressed.connect(_on_merge_all_pressed)
 	_speed_btn.pressed.connect(_cycle_speed)
 	_menu_btn.pressed.connect(Audio.play_confirm)
 	_menu_btn.pressed.connect(_on_menu_pressed)
@@ -384,7 +403,7 @@ func _on_unit_inspected(u: UnitInstance) -> void:
 		return
 	_status.text = UnitCodex.one_line_of(u)
 	if MatchState.phase == MatchState.Phase.PREP and u.team == _active_team:
-		_status.text += " Drag onto a twin to merge."
+		_status.text += " Drag onto a twin to merge, or double-click one."
 
 
 func _refresh_rosters() -> void:
@@ -434,13 +453,22 @@ func _refresh_music() -> void:
 	# guaranteed to play an ordinary battle theme, and the announcement arrived a
 	# round late, attached to nothing. Asked here, the answer is about the board
 	# the fight is actually being fought on.
+	if not _boss_track.is_empty():
+		# Already turned over. It stays turned over: no re-roll, and no going back to the
+		# ordinary theme because the tier 6 happens to be dead this round.
+		Audio.play_music(_boss_track)
+		return
 	if not GameSetup.is_boss_round(board):
 		Audio.play_music(_match_track)
 		return
 	var boss := GameSetup.roll_boss_track()
-	# No boss files on disk is a perfectly ordinary state — the match track just
-	# keeps playing.
-	Audio.play_music(boss if not boss.is_empty() else _match_track)
+	if boss.is_empty():
+		# No boss files on disk is a perfectly ordinary state — the match track just keeps
+		# playing, and nothing is remembered, so the rule is still armed if files appear.
+		Audio.play_music(_match_track)
+		return
+	_boss_track = boss
+	Audio.play_music(_boss_track)
 
 
 func _resync_buffs() -> void:
@@ -461,6 +489,7 @@ func _open_prep_turn(team: int, placed := -1) -> void:
 	_board_view.rebuild()
 	_board_view.sync_positions()
 	_fight_btn.disabled = false
+	_merge_all_btn.disabled = false
 	_fight_btn.text = "Fight" if _prep_queue.size() <= 1 else "Done"
 	_refresh_hud()
 	_refresh_buff_bars()
@@ -543,7 +572,101 @@ func _on_cell_pressed(cell: Vector2i) -> void:
 	var u := board.unit_at(cell)
 	if u == null or u.team != _active_team:
 		return
-	_status.text = "%s Drag onto a twin to merge." % UnitCodex.one_line_of(u)
+	_status.text = "%s Drag onto a twin to merge, or double-click." % UnitCodex.one_line_of(u)
+
+
+func _next_merge_for(team: int) -> Dictionary:
+	## One legal merge for this side, or an empty dictionary. Deliberately returns the
+	## FIRST it finds rather than the best: there is no "best" here — a merge is a merge,
+	## the pool decides what comes out, and picking by some other rule would only make the
+	## button's result harder to predict than doing it by hand.
+	var mine := board.units_of(team)
+	for a in mine:
+		for b in mine:
+			if board.can_merge(a, b):
+				return {a = a, b = b, at = b.cell}
+	return {}
+
+
+func _on_merge_all_pressed() -> void:
+	## Merges everything that can be merged, repeatedly, until nothing can.
+	##
+	## Repeatedly matters: merging two tier 1s makes a tier 2, which may now pair with a
+	## tier 2 that was already there. Stopping after one pass would leave the board in a
+	## state the player can obviously improve by pressing the button again, which is worse
+	## than not having the button.
+	##
+	## The loop cannot run away — every merge removes exactly one unit from the board — so
+	## the number of units it starts with is a real bound rather than a guessed cap.
+	if MatchState.phase != MatchState.Phase.PREP:
+		return
+	Audio.play_confirm()
+	var budget := board.units_of(_active_team).size()
+	var merged := 0
+	var last := Vector2i(-1, -1)
+	while merged < budget:
+		var pair := _next_merge_for(_active_team)
+		if pair.is_empty():
+			break
+		board.merge(pair.a, pair.b, pair.at)
+		last = pair.at
+		merged += 1
+	if merged == 0:
+		_after_board_change("Nothing left to merge.")
+		return
+	# ONE sound and one flourish for the batch, on the last tile. A merge sound per pair
+	# is a machine gun, and the player pressed one button.
+	var note := _proc_note()
+	_after_board_change("Merged %d time%s.%s" % [
+		merged, "" if merged == 1 else "s", note])
+	_celebrate_merge(last)
+	_show_merge_procs(last)
+
+
+func _on_cell_double_clicked(cell: Vector2i) -> void:
+	## Merge without the drag. Finds a twin of whatever is under the cursor and brings it
+	## here, so the common case — two of the same unit sitting somewhere on your half —
+	## takes one gesture instead of a drag across the board.
+	##
+	## The result lands on the tile you CLICKED, not on the twin's tile. You pointed at
+	## where you want the bigger unit to be; making it appear somewhere else and leaving a
+	## hole where you pointed would be the opposite of what the gesture asks for.
+	if MatchState.phase != MatchState.Phase.PREP:
+		return
+	var target := board.unit_at(cell)
+	if target == null or target.team != _active_team:
+		return
+	var twin := _merge_twin_for(target)
+	if twin == null:
+		# Said out loud rather than ignored. A gesture that silently does nothing is
+		# indistinguishable from one the game does not have.
+		_after_board_change("Nothing to merge that with.")
+		return
+	board.merge(twin, target, cell)
+	var note := _proc_note()
+	_after_board_change("Merged — rolled %s.%s" % [
+		board.unit_at(cell).data.display_name, note])
+	_celebrate_merge(cell)
+	_show_merge_procs(cell)
+
+
+func _merge_twin_for(target: UnitInstance) -> UnitInstance:
+	## The best other unit to merge INTO `target`, or null.
+	##
+	## Nearest first, and that is a real choice rather than a tidiness one: with three of
+	## a kind on the board, taking the nearest leaves the two you did not touch where you
+	## put them, which is the outcome you can predict without looking. Picking by uid or by
+	## board order would move a different one every time for no reason the player can see.
+	var best: UnitInstance = null
+	var best_gap := 1 << 30
+	for u in board.units_of(_active_team):
+		if u == target or not board.can_merge(u, target):
+			continue
+		var gap := BoardModel.tile_distance(u.cell, target.cell)
+		if gap < best_gap:
+			best_gap = gap
+			best = u
+	return best
 
 
 func _on_drag_dropped(from: Vector2i, to: Vector2i) -> void:
@@ -686,6 +809,7 @@ func _show_picker_for(team: int, fresh := true) -> void:
 	_active_team = team
 	_board_view.interactive = false
 	_fight_btn.disabled = true
+	_merge_all_btn.disabled = true
 	_status.text = "%s buff — %s picks one." % [
 		BuffData.rarity_name(_pick_rarity), GameSetup.team_name(team)]
 	_refresh_hud()
@@ -703,6 +827,7 @@ func _finish_buff_pick() -> void:
 	if not _pvp():
 		_ai_pick_buff(_pick_rarity)
 	_fight_btn.disabled = false
+	_merge_all_btn.disabled = false
 	_begin_prep()
 
 
@@ -883,6 +1008,7 @@ func _start_battle() -> void:
 	_refresh_music()
 	MatchState.set_phase(MatchState.Phase.BATTLE)
 	_fight_btn.disabled = true
+	_merge_all_btn.disabled = true
 
 	_roster.clear()
 	for u in board.all_units():
@@ -988,6 +1114,7 @@ func _conclude_round() -> void:
 	_refresh_hud()
 	_refresh_buff_bars()
 	_fight_btn.disabled = false
+	_merge_all_btn.disabled = false
 
 	if MatchState.is_match_over():
 		var champ := "%s wins the match." % GameSetup.team_name(MatchState.match_winner())

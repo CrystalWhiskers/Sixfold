@@ -51,6 +51,10 @@ theme_override_constants/separation = 12
 custom_minimum_size = Vector2(190, 54)
 text = "Fight"
 
+[node name="MergeAll" type="Button" parent="UI/Root/Buttons"]
+custom_minimum_size = Vector2(160, 54)
+text = "Merge All"
+
 [node name="Speed" type="Button" parent="UI/Root/Buttons"]
 custom_minimum_size = Vector2(150, 54)
 text = "Speed x2"

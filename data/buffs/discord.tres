@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_2r8hg"]
+
+[resource]
+script = ExtResource("1_2r8hg")
+id = &"discord"
+display_name = "Discord"
+unit_id = &"siren"
+disorient_bonus = Vector3(0.5, 1, 2)
+bronze = Vector2(0.2, 0)
+silver = Vector2(0.4, 0)
+gold = Vector2(0.6, 0)
+stat_a = 2

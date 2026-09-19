@@ -172,6 +172,21 @@ var _rng := RandomNumberGenerator.new()
 
 var enabled := true
 
+## The three buses everything plays through, each feeding Master.
+##
+## They exist so the sliders can exist. Until now every sound in the game — the music,
+## the swings, the death lines — went straight to Master, so there was exactly one fader
+## and it moved all of them together.
+##
+## Created at RUNTIME rather than in a default_bus_layout.tres. A bus layout is a
+## resource that has to be kept in step with the names this file uses, and if it goes
+## missing or is edited in the Godot audio panel, every one of these lookups quietly
+## returns -1 and the sliders do nothing with no error anywhere. Building them here means
+## the names are declared once, in the file that uses them.
+const MUSIC_BUS := "Music"
+const SFX_BUS := "Effects"
+const VOICE_BUS := "Voice"
+
 ## Overall loudness, 0 to 1, driven by the slider in the settings menu.
 ##
 ## Applied to the Master BUS rather than to any of the level constants above. The
@@ -186,6 +201,29 @@ var volume := 1.0:
 			return
 		_apply_volume()
 
+## The three category faders, each on its own bus and each multiplying with Master rather
+## than replacing it. Same reasoning as `volume` above and it is the whole reason these
+## are buses: within a category the mix ladder is untouched, so pulling the effects down
+## keeps the crits above the swings by exactly as much as before.
+var music_volume := 1.0:
+	set(value):
+		music_volume = clampf(value, 0.0, 1.0)
+		_apply_bus(MUSIC_BUS, music_volume)
+
+var sfx_volume := 1.0:
+	set(value):
+		sfx_volume = clampf(value, 0.0, 1.0)
+		_apply_bus(SFX_BUS, sfx_volume)
+
+## Kept apart from the effects deliberately, and not only for the mix. Everything in
+## assets/voice is borrowed placeholder material that is going to be pulled out, so being
+## able to switch exactly that off without touching the game's own sounds is worth a
+## fader of its own while it is still there.
+var voice_volume := 1.0:
+	set(value):
+		voice_volume = clampf(value, 0.0, 1.0)
+		_apply_bus(VOICE_BUS, voice_volume)
+
 ## How many battle_N.ogg files there are. Counted once at startup.
 var battle_track_count := 0
 
@@ -195,22 +233,52 @@ var boss_track_count := 0
 
 
 func _apply_volume() -> void:
-	var bus := AudioServer.get_bus_index("Master")
+	_apply_bus("Master", volume)
+
+
+func _apply_bus(name: String, level: float) -> void:
+	## One fader, on one bus. Shared by all four rather than written out per category,
+	## because the mute-at-zero rule below is the kind of thing that gets remembered in
+	## three places out of four.
+	var bus := AudioServer.get_bus_index(name)
 	if bus < 0:
 		return
 	# Muted outright at zero rather than left at some very small decibel figure.
 	# linear_to_db(0) is negative infinity, and a fader that reads "0%" should be
 	# silence and not a faint hiss.
-	AudioServer.set_bus_mute(bus, volume <= 0.0)
-	if volume > 0.0:
-		AudioServer.set_bus_volume_db(bus, linear_to_db(volume))
+	AudioServer.set_bus_mute(bus, level <= 0.0)
+	if level > 0.0:
+		AudioServer.set_bus_volume_db(bus, linear_to_db(level))
+
+
+func _ensure_buses() -> void:
+	## Adds the three category buses if they are not already there, each routed to Master.
+	##
+	## Idempotent on purpose: an autoload is built once per run, but this also has to
+	## survive a project that DOES ship a bus layout naming some of them, and adding a
+	## second bus with the same name would leave the lookups pointing at whichever one
+	## the server happened to return.
+	for name in [MUSIC_BUS, SFX_BUS, VOICE_BUS]:
+		if AudioServer.get_bus_index(name) >= 0:
+			continue
+		var at := AudioServer.bus_count
+		AudioServer.add_bus(at)
+		AudioServer.set_bus_name(at, name)
+		AudioServer.set_bus_send(at, "Master")
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	# Before anything is routed to them, and before the faders are applied — a player
+	# assigned to a bus that does not exist yet falls back to Master silently, and the
+	# symptom is a slider that moves and changes nothing.
+	_ensure_buses()
 	_apply_volume()
+	_apply_bus(MUSIC_BUS, music_volume)
+	_apply_bus(SFX_BUS, sfx_volume)
+	_apply_bus(VOICE_BUS, voice_volume)
 	_music = AudioStreamPlayer.new()
-	_music.bus = "Master"
+	_music.bus = MUSIC_BUS
 	_music.volume_db = MUSIC_DB
 	add_child(_music)
 	# Looping is set on the stream rather than by reacting to `finished`, which
@@ -219,7 +287,7 @@ func _ready() -> void:
 
 	for i in SFX_VOICES:
 		var v := AudioStreamPlayer.new()
-		v.bus = "Master"
+		v.bus = SFX_BUS
 		v.volume_db = SFX_DB
 		add_child(v)
 		_voices.append(v)
@@ -354,10 +422,16 @@ func _free_voice() -> AudioStreamPlayer:
 	return take
 
 
-func _fire(stream: AudioStream, db: float, pitch := 1.0) -> void:
+func _fire(stream: AudioStream, db: float, pitch := 1.0, bus := SFX_BUS) -> void:
+	## `bus` is what lets the voice lines be faded separately from the game's own sounds
+	## while still sharing this one pool of players. Set per PLAY rather than per player,
+	## because the pool is a ring of eight reused for everything — pinning a bus to a
+	## player would mean a voice line landing on whichever slot came free and playing
+	## through the effects fader about seven times out of eight.
 	if not enabled or stream == null:
 		return
 	var v := _free_voice()
+	v.bus = bus
 	v.stream = stream
 	v.volume_db = db
 	v.pitch_scale = pitch
@@ -452,4 +526,4 @@ func play_death_voice(overkill := false) -> void:
 	var pool := _overkill_voice if overkill else _death_voice
 	# No pitch wander here. It works on a thump because a thump has no pitch to
 	# speak of; on a voice it sounds like a broken tape.
-	_fire(_pick(pool), OVERKILL_DB if overkill else VOICE_DB)
+	_fire(_pick(pool), OVERKILL_DB if overkill else VOICE_DB, 1.0, VOICE_BUS)

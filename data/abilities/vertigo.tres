@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_3rtc5"]
+
+[resource]
+script = ExtResource("1_3rtc5")
+id = &"vertigo"
+display_name = "Vertigo"
+description = "Sends one enemy reeling: it wanders wherever it likes and swings at nothing at all. Half a second at tier 1 and three tenths longer for every tier after that, to a ceiling of two seconds. Catching something that is already reeling starts its count again from the top. But the moment a unit comes out of it, nothing can disorient it again for five seconds — so this is a unit that buys the rest of your army a beat, over and over, and never one that takes somebody out of the round."
+kind = 23
+cast_time = 0.35
+disorient_seconds = 0.5
+disorient_seconds_per_tier = 0.3
