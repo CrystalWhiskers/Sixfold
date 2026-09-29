@@ -760,7 +760,7 @@ func nearest_enemy(u: UnitInstance) -> UnitInstance:
 	var best: UnitInstance = null
 	var best_d := 1 << 30
 	for other in units_view():
-		if not other.is_alive() or other.team == u.team or other.is_hidden():
+		if not other.is_alive() or other.team == u.team or other.is_untargetable():
 			continue
 		var d := tile_distance(u.cell, other.cell)
 		if d < best_d or (d == best_d and best != null and other.uid < best.uid):

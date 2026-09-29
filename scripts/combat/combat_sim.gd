@@ -339,6 +339,11 @@ func step() -> void:
 			# halfway, which is the other half of what makes it dodgeable: the runner
 			# holds its line while everything else is free to move.
 			continue
+		if u.is_fusing():
+			# Dead, and not finished. It gets no turn at all — unlike the Martyr's
+			# window, which is a unit still fighting, this is a body on the floor with
+			# a clock in it. _tick_fuses() below is the only thing that touches it.
+			continue
 		match u.state:
 			UnitInstance.State.IDLE:
 				_decide(u)
@@ -353,6 +358,11 @@ func step() -> void:
 	# tick is already out of it when the charge arrives. That ordering is the dodge.
 	_tick_charges()
 	_tick_disorient()
+	# After the unit loop, like the charges and for the same reason: everything on the
+	# board has already had this tick's chance to run, so a unit that stepped clear of
+	# the blast this tick is clear when it lands. That ordering is what makes the fuse
+	# an escape window rather than a countdown to a foregone conclusion.
+	_tick_fuses()
 	_tick_shields()
 	_tick_possessions()
 	_tick_dry_spells()
@@ -538,6 +548,12 @@ func _decide(u: UnitInstance) -> void:
 	# full-mana cast below, so a bar that filled the tick before it landed is held
 	# rather than spent.
 	if u.is_held():
+		return
+	if u.is_fleeing():
+		# Running from a lit fuse, and checked BEFORE disorientation: a unit can be both
+		# lost and terrified, and terror wins. It does not swing on the way out, which is
+		# most of what the bomb buys even when the blast misses.
+		_flee_step(u)
 		return
 	if u.is_disoriented():
 		# Lost. It still moves — that is the whole difference between this and a stun —
@@ -810,7 +826,7 @@ func _swing_at_hand(u: UnitInstance) -> void:
 	var best: UnitInstance = null
 	var best_d := 1 << 30
 	for other in _units:
-		if other.team == u.team or not other.is_alive() or other.is_hidden():
+		if other.team == u.team or not other.is_alive() or other.is_untargetable():
 			continue
 		if not BoardModel.in_reach(u.cell, other.cell, reach_against(u, other)):
 			continue
@@ -887,13 +903,13 @@ func _choose_enemy(u: UnitInstance) -> UnitInstance:
 		return near
 	var give_up := _gave_up_on_target(u)
 	if not give_up and held != null and held.is_alive() and held.team != u.team \
-			and not held.is_hidden() \
+			and not held.is_untargetable() \
 			and BoardModel.tile_distance(u.cell, held.cell) <= reach:
 		return held
 
 	var pool: Array[UnitInstance] = []
 	for other in _units:
-		if other.team == u.team or not other.is_alive() or other.is_hidden():
+		if other.team == u.team or not other.is_alive() or other.is_untargetable():
 			continue
 		# The one it just gave up on is off the list, so "pick again" cannot pick
 		# the same body and leave the unit standing exactly where it was.
@@ -1363,7 +1379,7 @@ func _backline_enemy(u: UnitInstance) -> UnitInstance:
 	var deepest: UnitInstance = null
 	var best := -1
 	for other in board.units_view():
-		if not other.is_alive() or other.team == u.team or other.is_hidden():
+		if not other.is_alive() or other.team == u.team or other.is_untargetable():
 			continue
 		var depth: int = (BoardModel.HEIGHT - 1 - other.cell.y
 			if u.team == BoardModel.TEAM_B else other.cell.y)
@@ -1457,7 +1473,11 @@ func _worst_hurt_ally(u: UnitInstance, radius: int) -> UnitInstance:
 	var best: UnitInstance = null
 	var worst := 2.0
 	for ally in board.units_in_range(u.cell, radius, u.team):
-		if not ally.is_alive():
+		# A lit Powderkeg is on zero health, which makes it the most hurt ally on the
+		# board by any measure — and it is going to explode whatever anyone does.
+		# Without this skip a Seraph standing near one poured its whole cast into a
+		# corpse on a fuse.
+		if not ally.is_alive() or ally.is_fusing():
 			continue
 		var frac := ally.current_hp / maxf(ally.stat(StatModifier.Stat.MAX_HP), 1.0)
 		if frac >= 1.0:
@@ -2813,7 +2833,7 @@ func _thickest_cluster(u: UnitInstance, arm: int) -> UnitInstance:
 	var best_hits := -1
 	var best_d := 1 << 30
 	for other in _units:
-		if other.team == u.team or not other.is_alive() or other.is_hidden():
+		if other.team == u.team or not other.is_alive() or other.is_untargetable():
 			continue
 		var hits := 0
 		for c in cross_cells(other.cell, arm):
@@ -2949,7 +2969,7 @@ func _fattest_enemy(u: UnitInstance) -> UnitInstance:
 	var best: UnitInstance = null
 	var best_hp := -1.0
 	for other in _units:
-		if other.team == u.team or not other.is_alive() or other.is_hidden():
+		if other.team == u.team or not other.is_alive() or other.is_untargetable():
 			continue
 		var hp := other.stat(StatModifier.Stat.MAX_HP)
 		if hp > best_hp:
@@ -3376,6 +3396,223 @@ func _tick_frenzy() -> void:
 			_fell(u, u.uid)
 
 
+func fuse_seconds_of(u: UnitInstance, ab: AbilityData) -> float:
+	return maxf(ab.fuse_seconds, 0.0)
+
+
+func blast_damage_of(u: UnitInstance, ab: AbilityData) -> float:
+	## Same shape as charge_damage_of: a multiple of the unit's own attack damage times
+	## its tier, so one AbilityData can serve all six and the number rides every buff
+	## that sharpens the unit.
+	return u.stat(StatModifier.Stat.ATTACK_DAMAGE) \
+		* maxf(ab.blast_damage_per_tier, 0.0) * float(maxi(u.data.tier, 1))
+
+
+func blast_range_of(u: UnitInstance, ab: AbilityData) -> int:
+	## Zero means the ordinary square. Anything above it is the gold diamond's reach,
+	## and only a gold pick of the unit's own buff can hand it over.
+	var tb: TeamBuffs = team_buffs.get(u.team, null)
+	if tb == null:
+		return 0
+	return maxi(tb.blast_range_for(u), 0) if ab.blast_gold_range > 0 else 0
+
+
+func blast_cells(centre: Vector2i, radius: int, diamond_range: int) -> Array[Vector2i]:
+	## The tiles a blast covers. Two shapes, and which one you get is the whole gold
+	## pick: a square measured by the larger of the two axis distances (so it keeps its
+	## corners), or a diamond measured by their sum (so it loses them and reaches
+	## further along the axes instead).
+	##
+	## Returned as cells rather than tested per unit so the view can draw exactly what
+	## the simulation hit — a blast the player sees at a different size from the one
+	## that resolved is worse than no blast drawing at all.
+	var out: Array[Vector2i] = []
+	var reach: int = diamond_range if diamond_range > 0 else radius
+	for dy in range(-reach, reach + 1):
+		for dx in range(-reach, reach + 1):
+			var span: int = (absi(dx) + absi(dy) if diamond_range > 0
+				else maxi(absi(dx), absi(dy)))
+			if span > reach:
+				continue
+			var cell := centre + Vector2i(dx, dy)
+			if board.in_bounds(cell):
+				out.append(cell)
+	return out
+
+
+func _light_fuse(u: UnitInstance) -> bool:
+	## Turns a death into a lit fuse, or returns false and lets the death happen.
+	##
+	## Intercepts _fell() exactly where the Martyr's window does, and for the same
+	## reason: that is the single funnel every death goes through, so a bomb that only
+	## armed on an ordinary swing would be a bug the first time something cast at it.
+	if u.fuse_spent or u.data == null:
+		return false
+	var ab := u.data.ability
+	if ab == null or ab.kind != AbilityData.Kind.DETONATE:
+		return false
+	var secs := fuse_seconds_of(u, ab)
+	if secs <= 0.0:
+		return false
+	u.fuse_spent = true
+	u.fuse_left = secs
+	# Stood back up as a body, not as a fighter: take_damage() and _execute() both set
+	# DEAD before handing over, and step() skips anything fusing, so IDLE here only
+	# means "not flagged dead" — it never gets a turn.
+	u.state = UnitInstance.State.IDLE
+	u.state_timer = 0.0
+	u.target = null
+	u.shield = 0.0
+	u.shield_left = 0.0
+	# Stop it charging or being carried: a bomb that goes off mid-run would resolve its
+	# blast from a tile nothing was told about.
+	u.stop_charging()
+	var reach: int = maxi(ab.blast_radius, 0) + maxi(ab.flee_margin, 0)
+	var gold := blast_range_of(u, ab)
+	if gold > 0:
+		reach = gold + maxi(ab.flee_margin, 0)
+	_scatter(u, reach, secs)
+	_emit("fuse", {
+		uid = u.uid, cell = u.cell, seconds = secs,
+		cells = blast_cells(u.cell, maxi(ab.blast_radius, 0), gold),
+	})
+	return true
+
+
+func _scatter(bomb: UnitInstance, reach: int, secs: float) -> void:
+	## Everything close enough turns and runs, both sides.
+	##
+	## Indiscriminate is the point, and it is what stops the unit being a pure positive:
+	## your own line breaks around your own bomb. Measured on the SQUARE even when the
+	## blast will be a diamond, because a unit cannot see the shape any better than the
+	## player can and running from the corners is not a mistake worth modelling.
+	for other in _units:
+		if other == bomb or not other.is_alive() or other.is_riding():
+			continue
+		if other.is_fusing():
+			# Another bomb on its own clock. It is a corpse; it does not run.
+			continue
+		var d := other.cell - bomb.cell
+		if maxi(absi(d.x), absi(d.y)) > reach:
+			continue
+		other.flee_left = secs
+		other.flee_from = bomb.cell
+		_emit("flee", {
+			uid = other.uid, cell = other.cell,
+			from = bomb.cell, seconds = secs,
+		})
+
+
+func _square_gap(a: Vector2i, b: Vector2i) -> int:
+	## Chebyshev distance: how many rings out of a square one tile is from another.
+	## The blast is measured this way, so the running is too.
+	return maxi(absi(a.x - b.x), absi(a.y - b.y))
+
+
+func _flee_step(u: UnitInstance) -> void:
+	## One step directly away from the fuse, if there is one to take.
+	##
+	## A unit with nowhere to go simply stands there — no re-roll, no sidestep, no
+	## clever pathing around the blast. Being cornered by a bomb is supposed to be
+	## fatal, and a unit that always found a way out would make the ability a shove
+	## rather than a threat.
+	u.target = null
+	if not u.can_move_now():
+		return
+	var best := u.cell
+	# Chebyshev — the larger of the two axis distances — and NOT the board's own
+	# Manhattan tile_distance(), which is what this used first and it was wrong.
+	#
+	# The blast is a square. A unit at (3,4) running from a bomb at (2,4) can step to
+	# (3,3) and raise its Manhattan distance from 1 to 2 while staying inside the 3x3,
+	# so it "escaped" and then died anyway. Measuring the way the BLAST measures is the
+	# only version where running away means getting away.
+	var best_gap := _square_gap(u.cell, u.flee_from)
+	for step in _neighbour_offsets():
+		var to: Vector2i = u.cell + step
+		if not board.in_bounds(to) or not board.is_empty(to):
+			continue
+		if BoardModel.is_blocked(to) or not BoardModel.can_climb(u.cell, to):
+			continue
+		if BoardModel.blocks_between(u.cell, to):
+			continue
+		var gap := _square_gap(to, u.flee_from)
+		if gap > best_gap:
+			best_gap = gap
+			best = to
+	if best == u.cell:
+		return
+	var from := u.cell
+	if not board.move_unit(u, best):
+		return
+	var dur := maxf(u.stat(StatModifier.Stat.MOVE_TIME) / pressure(), MIN_MOVE_TIME)
+	u.move_from = from
+	_enter(u, UnitInstance.State.MOVING, dur)
+	_emit("move", {uid = u.uid, from = from, to = best, duration = dur})
+
+
+func _tick_fuses() -> void:
+	## Two clocks: the fuses burning down, and the panic they started.
+	##
+	## The panic is ticked for everyone rather than cleared when the bomb goes off,
+	## because a unit should keep running for a moment after the blast — it does not
+	## know the danger has passed any faster than it knew it was coming.
+	for u in _units:
+		if u.flee_left > 0.0:
+			u.flee_left = maxf(u.flee_left - TICK, 0.0)
+			if u.flee_left <= 0.0:
+				u.flee_from = Vector2i(-1, -1)
+				_emit("flee_end", {uid = u.uid, cell = u.cell})
+	for u in _units:
+		if u.fuse_left <= 0.0:
+			continue
+		u.fuse_left = maxf(u.fuse_left - TICK, 0.0)
+		if u.fuse_left > 0.0:
+			continue
+		_detonate(u)
+
+
+func _detonate(bomb: UnitInstance) -> void:
+	## The blast, and then the death that was owed since the fuse was lit.
+	var ab: AbilityData = bomb.data.ability
+	var gold := blast_range_of(bomb, ab)
+	var cells := blast_cells(bomb.cell, maxi(ab.blast_radius, 0), gold)
+	var hurt := blast_damage_of(bomb, ab)
+	_emit("detonate", {
+		uid = bomb.uid, cell = bomb.cell, cells = cells, amount = hurt,
+	})
+	# Collected before any of it lands. Damaging as we walk the cells would let the
+	# first casualty's own death — a second Powderkeg, a Corpse-feeder, a revive —
+	# reshuffle the board underneath the loop, and which units a blast hits must be
+	# decided by where they were standing when it went off.
+	var caught: Array[UnitInstance] = []
+	for cell in cells:
+		var other := board.unit_at(cell)
+		if other == null or other == bomb or not other.is_alive():
+			continue
+		if other.is_fusing():
+			# Another bomb mid-fuse is already a corpse. It cannot be killed twice, and
+			# chaining one blast into another's would make a pile of them a single
+			# button that deletes the board.
+			continue
+		caught.append(other)
+	for other in caught:
+		if not other.is_alive():
+			# Something earlier in the list took it with them.
+			continue
+		# is_spell true, hp_bonus false: it is not a swing, so it does not crit and it
+		# is not sharpened by the percent-max-health riders that attach to attacks. The
+		# same call the Breaker's charge makes, for the same reasons.
+		_damage(other, hurt, bomb, true, false)
+	# The death it was owed. fuse_spent is already set, so _fell cannot light it again
+	# and this one goes all the way through: the body pile, the revive roll, the
+	# scavengers' mana.
+	bomb.fuse_left = 0.0
+	bomb.state = UnitInstance.State.DEAD
+	bomb.target = null
+	_fell(bomb, bomb.uid)
+
+
 func displace(u: UnitInstance, dir: Vector2i, tiles: int) -> int:
 	if not u.is_alive():
 		return 0
@@ -3471,6 +3708,11 @@ func _fell(victim: UnitInstance, killer_uid: int, overkill := false) -> void:
 		# it. Gated on `frozen` alongside the revive roll below: dying frozen means
 		# nothing you would have done on death happens, and this is a thing it would
 		# have done on death.
+		return
+	if not frozen and _light_fuse(victim):
+		# A Powderkeg does not die when it is killed — it starts ticking. Same funnel,
+		# same frozen gate: a bomb frozen solid is defused, which is the one clean
+		# answer to it in the game and the reason the Stasis is worth holding.
 		return
 	_emit("death", {uid = victim.uid, cell = victim.cell,
 		killer_uid = killer_uid, frozen = frozen, overkill = overkill})

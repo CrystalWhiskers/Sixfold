@@ -840,6 +840,16 @@ const UNIT_TABLE := [
 		note = "Shoots from the back of the board, constantly, for almost nothing. The damage is not the point — the rate is: every shot is a fraction of the next bar, and every bar sends an enemy reeling. A disoriented unit wanders off and stops swinging entirely, so the Siren does not kill things, it takes them out of the fight for a moment and hands the moment to everyone else. Fragile, and worthless on its own.",
 	},
 	{
+		# A body priced to die: the health of a caster, a swing worth almost nothing,
+		# and legs a shade quicker than most so it can reach something worth standing
+		# next to. Everything it is for happens after it stops moving.
+		id = &"powderkeg", name = "Powderkeg", hp = 110.0, dmg = 7.0, spd = 0.7,
+		move = 0.40, range = "MELEE", sight = 4, type = "MELEE",
+		accent = Color(0.82, 0.58, 0.24),
+		ability = &"slow_match", mana = 0.0,
+		note = "A walking mistake waiting to happen, to whoever is nearest when it goes. Killing it is the easy part and also the problem: it lies there for a second and a half with the fuse burning, and then it takes a three-by-three square of board with it — yours, theirs, it does not read banners. Everything close enough to be hurt turns and runs the moment it starts ticking, which is most of what you are buying: it does not have to kill anything to break a line in half. Freeze it and the fuse never lights at all.",
+	},
+	{
 		id = &"wisp", name = "Wisp", hp = 38.0, dmg = 5.0, spd = 1.3,
 		move = 0.40, range = "MELEE", sight = 3, type = "MELEE",
 		accent = Color(0.70, 0.62, 0.86),
@@ -1035,6 +1045,21 @@ const ABILITY_TABLE := [
 		frenzy_pierce = 3,
 	},
 	{
+		id = &"slow_match", name = "Slow Match", kind = "DETONATE", cast_time = 0.0,
+		desc = "It has no bar and nothing to spend. Killing it lights the fuse instead: it lies where it fell for a second and a half, and then a three-by-three square of board goes up — friend, enemy, whatever was standing there. Everything within two tiles turns and runs the moment it starts ticking, and a unit with a wall at its back does not get out. Freezing it defuses it outright.",
+		# 1.5s is the window everything else hangs off. Shorter and nothing gets clear,
+		# which makes the flee a decoration; much longer and the board has rearranged
+		# itself so completely by the time it lands that the blast is decided by traffic
+		# rather than by where the unit chose to die.
+		fuse_seconds = 1.5,
+		# 7 damage a swing x 5.0 x tier is 35 at tier 1 and 210 at tier 6, before any
+		# buff, to every tile in the square. Measured, not guessed — see the numbers in
+		# the report. It reads high next to a swing because it is the only thing the
+		# unit ever does, and half the time some of it lands on your own units.
+		blast_damage_per_tier = 5.0,
+		blast_radius = 1, blast_gold_range = 3, flee_margin = 1,
+	},
+	{
 		id = &"overflow", name = "Overflow", kind = "MANA_AURA", cast_time = 0.4,
 		desc = "Floods the three-by-three around it. Allies standing inside gain extra mana every second, for the rest of the battle.",
 		mana_aura_radius = 1,
@@ -1175,6 +1200,10 @@ const BUFF_TABLE = [
 		unit = &"siren", stat_a = "ATTACK_SPEED",
 		disorient_bonus = Vector3(0.5, 1.0, 2.0),
 		b = Vector2(0.20, 0.0), s = Vector2(0.40, 0.0), g = Vector2(0.60, 0.0)},
+	{id = &"saltpetre", name = "Saltpetre", kind = "STAT", weight = 1.0,
+		unit = &"powderkeg", stat_a = "ATTACK_DAMAGE", stat_b = "MOVE_TIME",
+		two = true, blast_range_at_gold = 3,
+		b = Vector2(1.00, 0.25), s = Vector2(2.00, 0.50), g = Vector2(3.00, 1.00)},
 	{id = &"rapture", name = "Rapture", kind = "STAT", weight = 1.0,
 		unit = &"martyr", stat_a = "ATTACK_DAMAGE", stat_b = "ATTACK_SPEED",
 		two = true, frenzy_seconds_at_gold = 5.0,
@@ -1446,7 +1475,9 @@ func _make_abilities() -> Dictionary:
 				"splash_damage", "splash_radius", "pierce_targets", "pierce_damage_mult",
 				"rage_per_missing", "frenzy_threshold", "frenzy_decay",
 				"frenzy_seconds", "frenzy_damage", "frenzy_attack_speed",
-				"frenzy_move", "frenzy_pierce"]:
+				"frenzy_move", "frenzy_pierce",
+				"fuse_seconds", "blast_damage_per_tier", "blast_radius",
+				"blast_gold_range", "flee_margin"]:
 			if row.has(key):
 				a.set(key, row[key])
 		_save(a, "%s/%s.tres" % [ABILITY_DIR, row.id])
@@ -1624,6 +1655,7 @@ func _make_buffs() -> void:
 		b.host_power = row.get("host_power", Vector3.ZERO)
 		b.frenzy_seconds_at_gold = row.get("frenzy_seconds_at_gold", 0.0)
 		b.disorient_bonus = row.get("disorient_bonus", Vector3.ZERO)
+		b.blast_range_at_gold = row.get("blast_range_at_gold", 0)
 		_save(b, "%s/%s.tres" % [BUFF_DIR, row.id])
 	_write_buff_index()
 

@@ -345,6 +345,39 @@ func _apply(e: Dictionary) -> void:
 			var fev := _view.view_for(int(e.uid))
 			if fev != null:
 				fev.end_frenzy()
+		"fuse":
+			# The bomb is down and ticking. The cells come off the EVENT rather than
+			# being recomputed here: the gold pick changes the shape, and a warning
+			# square drawn at a different size from the blast that follows would be
+			# worse than no warning at all.
+			var fuv := _view.view_for(int(e.uid))
+			if fuv != null:
+				fuv.begin_fuse(float(e.seconds) / maxf(speed, 0.01))
+			# Held for the whole fuse, so the ground you must not be standing on is
+			# marked for exactly as long as that is true.
+			_view.flash_cells(_cells_of(e), Color(1.00, 0.52, 0.16, 0.30),
+				maxf(float(e.seconds), 0.4))
+			_view.spawn_label(_at(int(e.uid), e.cell), "FUSE LIT",
+				Color(1.00, 0.68, 0.28))
+		"detonate":
+			var dtv := _view.view_for(int(e.uid))
+			if dtv != null:
+				dtv.end_fuse()
+			_view.flash_cells(_cells_of(e), Color(1.00, 0.78, 0.36, 0.72), 0.45)
+			_view.spawn_label(_view.cell_to_pos(e.cell), "BOOM",
+				Color(1.00, 0.84, 0.44))
+		"flee":
+			var flv := _view.view_for(int(e.uid))
+			if flv != null:
+				# Away from the bomb, so the mark can point the way the unit is going.
+				var cell_now: Vector2i = e.cell
+				var bomb_at: Vector2i = e.get("from", cell_now)
+				flv.begin_fleeing(float(e.seconds) / maxf(speed, 0.01),
+					Vector2(cell_now - bomb_at))
+		"flee_end":
+			var fnv := _view.view_for(int(e.uid))
+			if fnv != null:
+				fnv.end_fleeing()
 		"cleanse":
 			# Names what came off rather than saying "CLEANSE": a Seraph lifting a
 			# freeze and a Seraph lifting a poison are different moments and the
@@ -455,6 +488,17 @@ func _apply(e: Dictionary) -> void:
 func _board(cell: Vector2i) -> Vector2:
 	## A cell as a board-space point: the middle of the tile, measured in tiles.
 	return Vector2(cell.x + 0.5, cell.y + 0.5)
+
+
+func _cells_of(e: Dictionary) -> Array:
+	## The blast footprint an event carries, or just the tile it happened on.
+	##
+	## Events cross the simulation/view line as plain dictionaries, so the array comes
+	## back untyped and has to be taken as Array rather than Array[Vector2i] — assigning
+	## it to a typed local is a runtime error, not a compile one, which is the worst
+	## kind to discover in a replay.
+	var cells: Array = e.get("cells", [])
+	return cells if not cells.is_empty() else [e.cell]
 
 
 func _at(uid: int, fallback: Vector2i) -> Vector2:

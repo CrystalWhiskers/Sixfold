@@ -123,6 +123,22 @@ func frenzy_seconds_for(u: UnitInstance) -> float:
 	return secs
 
 
+func blast_range_for(u: UnitInstance) -> int:
+	# MAXed rather than summed, like frenzy_seconds_for and for the same reason: this
+	# one replaces a shape instead of adding to a number, and two picks cannot make the
+	# diamond more diamond. Zero means no pick has anything to say and the ability's own
+	# square stands.
+	var reach := 0
+	for p in picks:
+		var buff: BuffData = p.buff
+		if buff.blast_range_at_gold <= 0 or p.rarity != BuffData.Rarity.GOLD:
+			continue
+		if buff.kind != BuffData.Kind.STAT or not buff.applies_to(u):
+			continue
+		reach = maxi(reach, buff.blast_range_at_gold)
+	return reach
+
+
 func extra_raises_for(u: UnitInstance) -> int:
 	# Summed, not maxed, unlike the empowered cap: two picks that both feed the
 	# Vigil should both count. Nothing currently offers two, but the picker is

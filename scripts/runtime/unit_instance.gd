@@ -188,6 +188,27 @@ var disorient_immune_left: float = 0.0
 ## obvious version and it is wrong: the victim is not the unit with the ability.
 var disorient_immune_after: float = 0.0
 
+## The Powderkeg's fuse, and the panic around it.
+##
+## `fuse_left` is seconds between the killing blow and the blast. Like the Martyr's
+## window it is a unit standing at zero health that is not dead yet — but unlike the
+## Martyr it does nothing at all while it burns. It is a corpse with a clock in it.
+## `fuse_spent` makes it once per round, the same job frenzy_spent does.
+var fuse_left: float = 0.0
+var fuse_spent: bool = false
+
+## Running from a lit fuse. `flee_from` is the tile it is running away FROM, not a
+## tile it is running to — there is no destination, only a direction that increases
+## the distance, which is what makes a unit backed into a corner stay in the corner
+## and take it.
+##
+## Deliberately not folded into disorientation even though both are "moves without
+## fighting". A disoriented unit has no idea where it is going; this one knows exactly
+## where it is going and why. They also stack: a unit can be lost AND running, and the
+## fuse wins, because an explosion is more urgent than confusion.
+var flee_left: float = 0.0
+var flee_from: Vector2i = Vector2i(-1, -1)
+
 var taunt_left: float = 0.0
 var reflect_left: float = 0.0
 
@@ -555,16 +576,41 @@ func is_hidden() -> bool:
 	return stealth_left > 0.0 and is_alive()
 
 
+func is_untargetable() -> bool:
+	## Standing, but not something an enemy should pick to fight. Stealth, and a
+	## Powderkeg lying on its fuse.
+	##
+	## The fuse case was a bug in the first build: a lit keg counts as alive (so the
+	## round cannot end under a live bomb), and every targeting sweep reads is_alive(),
+	## so ranged units outside the scatter spent the whole fuse shooting a corpse that
+	## could not be hurt, and the unit that landed the killing blow stood over the body
+	## still swinging at it while the fuse burned down beside it.
+	return is_hidden() or is_fusing()
+
+
 func is_alive() -> bool:
 	# Zero health is normally death. A Martyr inside its window is the one exception,
 	# and it is checked HERE rather than at the dozen places that ask, because
 	# "standing" has to mean the same thing to the targeting, the counts and the win
 	# condition or the board and the scoreboard disagree.
-	return state != State.DEAD and (current_hp > 0.0 or frenzy_left > 0.0)
+	# A Powderkeg on its fuse is the second exception, and it counts as standing for
+	# the same reason the Martyr does: the win condition must not call the round over
+	# while a live bomb is still on the board, because that blast can still take the
+	# unit that would have won it.
+	return state != State.DEAD and (current_hp > 0.0
+		or frenzy_left > 0.0 or fuse_left > 0.0)
 
 
 func is_frenzied() -> bool:
 	return frenzy_left > 0.0
+
+
+func is_fusing() -> bool:
+	return fuse_left > 0.0
+
+
+func is_fleeing() -> bool:
+	return flee_left > 0.0
 
 
 func is_committed() -> bool:
@@ -592,7 +638,11 @@ func take_damage(amount: float) -> float:
 	# DEAD unit gets no turn in step() and fails is_alive() — the unit would still
 	# be on the board, still be a target, and do nothing at all until its clock ran
 	# out. The window is the one state where the health bar is not the authority.
-	if current_hp <= 0.0 and frenzy_left <= 0.0:
+	# A lit fuse keeps the body standing exactly as the Martyr's window does. Without
+	# this, one more swing at a Powderkeg already on its fuse would flip it to DEAD and
+	# the blast would never come — which is the opposite of the ability: hitting it
+	# again must not be how you defuse it.
+	if current_hp <= 0.0 and frenzy_left <= 0.0 and fuse_left <= 0.0:
 		state = State.DEAD
 		target = null
 	return amount
@@ -697,6 +747,11 @@ func heal(amount: float) -> void:
 	# mean all of them, and a rule enforced in six places is a rule with five
 	# chances to be forgotten when a seventh healer is written.
 	if amount <= 0.0 or not is_alive() or is_suppressed() or recovery_denied:
+		return
+	# A body on a fuse is not coming back. Healing it would only put health on a unit
+	# that is about to be removed by its own blast, and regen, lifesteal and the
+	# Engineer's repair all come through this door, so this is the one place to say so.
+	if is_fusing():
 		return
 	# A husk stays on one health for as long as it lives. Healing it is the most
 	# obvious way to break that promise, so it is refused here as well as being
@@ -858,6 +913,14 @@ func reset_for_battle() -> void:
 	gate_used = false
 	frenzy_left = 0.0
 	frenzy_spent = false
+	# The Powderkeg's fuse and the panic around it. Missed when the unit was first built,
+	# and it mattered: a round that ended while units were still running sent them
+	# running again at the next opening bell from a bomb that was not there, and a keg
+	# whose side won while it lay ticking came back into the next round already spent.
+	fuse_left = 0.0
+	fuse_spent = false
+	flee_left = 0.0
+	flee_from = Vector2i(-1, -1)
 	# The immunity goes with the round too. It is cleared by the STATUSES walk below for
 	# the disorientation itself, but the immunity is not a status — it is the absence of
 	# one — so it needs its own line here.

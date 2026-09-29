@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_wud4t"]
+
+[resource]
+script = ExtResource("1_wud4t")
+id = &"slow_match"
+display_name = "Slow Match"
+description = "It has no bar and nothing to spend. Killing it lights the fuse instead: it lies where it fell for a second and a half, and then a three-by-three square of board goes up — friend, enemy, whatever was standing there. Everything within two tiles turns and runs the moment it starts ticking, and a unit with a wall at its back does not get out. Freezing it defuses it outright."
+kind = 24
+cast_time = 0.0
+fuse_seconds = 1.5
+blast_damage_per_tier = 5.0
+blast_gold_range = 3

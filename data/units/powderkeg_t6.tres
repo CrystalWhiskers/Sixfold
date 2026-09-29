@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/abilities/slow_match.tres" id="1_ff7vm"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="2_xv5dg"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="3_w4q1k"]
+
+[resource]
+script = ExtResource("2_xv5dg")
+id = &"powderkeg"
+display_name = "Powderkeg VI"
+tier = 6
+max_hp = 3520.0
+attack_damage = 224.0
+attack_speed = 0.7
+move_time = 0.64
+ability = ExtResource("1_ff7vm")
+mana_per_attack = 0.0
+note = "A walking mistake waiting to happen, to whoever is nearest when it goes. Killing it is the easy part and also the problem: it lies there for a second and a half with the fuse burning, and then it takes a three-by-three square of board with it — yours, theirs, it does not read banners. Everything close enough to be hurt turns and runs the moment it starts ticking, which is most of what you are buying: it does not have to kill anything to break a line in half. Freeze it and the fuse never lights at all."
+sprite = ExtResource("3_w4q1k")
+accent = Color(0.82, 0.58, 0.24, 1)

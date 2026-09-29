@@ -11,14 +11,50 @@ extends SceneTree
 ## So the count itself is asserted. If it drops, something died quietly and the
 ## run says so. Raise this when you add tests — it is a ratchet, and the number
 ## only ever goes up.
-const MIN_CHECKS := 2555
+##
+## It is a backstop now, not the guard. It only works if somebody remembers to raise
+## it, and nobody did: it sat at 2555 while the suite grew past 2600, so when three
+## Powderkeg tests died in one sitting the run was still a hundred checks above the
+## floor and reported green. The ErrorWatch below is what actually catches it.
+const MIN_CHECKS := 2684
+
+## Counts runtime script errors while the suite runs, and fails the run if there are
+## any.
+##
+## A runtime error aborts the one test function it happens in and hands control back
+## to _initialize, which carries on to the next test — so the run completes, prints a
+## total, and that total is green. Godot does report the error, but only as a line in
+## the log that scrolls past; nothing in the suite ever sees it. A Logger registered
+## with the engine sees every error as it happens, which turns "scroll up and look for
+## SCRIPT ERROR" into a failure the run reports on its own.
+##
+## Only RUNTIME script errors are counted — the ones with a backtrace. Running this
+## file in --script mode also compiles the View-layer scripts, which reference
+## autoloads that do not exist outside the game and fail to compile; those errors
+## have no backtrace, predate this guard, and are not a test dying.
+class ErrorWatch extends Logger:
+	var count := 0
+	var first := ""
+
+	func _log_error(_function: String, file: String, line: int, code: String,
+			rationale: String, _editor_notify: bool, error_type: int,
+			script_backtraces: Array[ScriptBacktrace]) -> void:
+		if error_type != ERROR_TYPE_SCRIPT or script_backtraces.is_empty():
+			return
+		count += 1
+		if first.is_empty():
+			first = "%s (%s:%d)" % [rationale if not rationale.is_empty() else code,
+				file.get_file(), line]
+
 
 var _passed := 0
 var _failed := 0
 var _loadout: LoadoutData
+var _watch := ErrorWatch.new()
 
 
 func _initialize() -> void:
+	OS.add_logger(_watch)
 	_loadout = load("res://data/loadouts/starter.tres") as LoadoutData
 	if _loadout == null:
 		push_error("Run tools/generate_data.gd first.")
@@ -101,6 +137,12 @@ func _initialize() -> void:
 	_test_the_siren()
 	_test_a_reeling_unit_wanders()
 	_test_discord()
+	_test_the_powderkeg()
+	_test_powderkeg_shapes()
+	_test_saltpetre()
+	_test_fleeing()
+	_test_powderkeg_once()
+	_test_powderkeg_fixes()
 	_test_the_husk()
 	_test_the_grip_can_be_timed()
 	_test_a_stunned_unit_does_nothing()
@@ -183,6 +225,12 @@ func _initialize() -> void:
 		print("\n  FAIL  only %d checks ran, expected at least %d — a test almost"
 			% [ran, MIN_CHECKS])
 		print("        certainly died partway through. Scroll up for a SCRIPT ERROR.")
+	if _watch.count > 0:
+		_failed += 1
+		print("\n  FAIL  %d runtime script error(s) during the run — each one killed a"
+			% _watch.count)
+		print("        test partway through and skipped every check after it.")
+		print("        First: %s" % _watch.first)
 	print("\n%d passed, %d failed" % [_passed, _failed])
 	if _failed > 0:
 		print("FAILURES PRESENT")
@@ -973,8 +1021,14 @@ func _test_buff_data() -> void:
 	_section("Buff data")
 
 	var pool := _pool()
-	_check("every buff on disk loaded", pool.buffs.size() == 50,
-		"loaded %d, expected 50" % pool.buffs.size())
+	# Counted from the table that BUILDS them rather than pinned to a literal. The
+	# literal version failed the moment a buff was added, which taught nothing except
+	# that a buff had been added — what is worth asserting is that everything the
+	# builder emits is everything the pool finds, so a row that fails to load is
+	# caught and a row that is deliberately added is not.
+	var expected_buffs := DataBuilder.BUFF_TABLE.size()
+	_check("every buff on disk loaded", pool.buffs.size() == expected_buffs,
+		"loaded %d, the builder writes %d" % [pool.buffs.size(), expected_buffs])
 
 	var ids := {}
 	var missing: PackedStringArray = []
@@ -1700,8 +1754,17 @@ func _test_new_units() -> void:
 		roster != null and roster.is_valid())
 	if roster == null:
 		return
-	_check("thirty-two unit types are pickable", roster.units.size() == 32,
-		"%d in the roster" % roster.units.size())
+	# Derived, not pinned. The roster is every unit row that is not `hidden` — the
+	# hidden ones being things like the Sentry and the Wisp, which exist only because
+	# something else summons them and must never appear in a draw. Counting the table
+	# asserts exactly that rule, and keeps asserting it when a unit is added.
+	var pickable := 0
+	for row in DataBuilder.UNIT_TABLE:
+		if not row.get("hidden", false):
+			pickable += 1
+	_check("every unbidden unit type is pickable and no summon is",
+		roster.units.size() == pickable,
+		"%d in the roster, %d unhidden rows" % [roster.units.size(), pickable])
 	# Ids are file names, so a duplicate means one row quietly overwrites another
 	# and the roster is short without anything reporting it.
 	var seen_ids := {}
@@ -12369,3 +12432,448 @@ func _test_discord() -> void:
 			"%.2f against %.2f" % [rich, bare + 2.0])
 	_check("so a gold tier 6 reaches four seconds, past the unit's own ceiling",
 		true)
+
+
+func _keg_stage(tier: int, ring_tier := 2) -> Dictionary:
+	## A Powderkeg in open ground with a ring of bodies around it — one enemy and one
+	## friend inside the blast, one enemy just outside it, and a far-off spare a side so
+	## the round cannot end underneath the test.
+	##
+	## Both sides represented inside the square on purpose: "indiscriminate" is the whole
+	## claim, and a fixture with only enemies near it could not tell the difference
+	## between a bomb and an ordinary area attack.
+	BoardModel.reset_map()
+	var b := BoardModel.new()
+	var keg := UnitInstance.create(
+		BoardModel.at_tier(_must_find("powderkeg"), tier), BoardModel.TEAM_A)
+	b.force_place(keg, Vector2i(2, 4))
+	var foe := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), ring_tier), BoardModel.TEAM_B)
+	b.force_place(foe, Vector2i(3, 4))
+	var friend := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), ring_tier), BoardModel.TEAM_A)
+	b.force_place(friend, Vector2i(1, 4))
+	# Two frozen bodies, one a side, directly above and below it.
+	#
+	# They are frozen because the first version of this fixture could not test the
+	# blast at all: with a 1.5s fuse and open ground on every side, BOTH mobile units
+	# walked clear and the explosion hit nothing. That is the ability working, not a
+	# broken test — but it means the damage half needs victims that cannot run, and
+	# the scatter half needs victims that can. So the fixture has both.
+	var anvil_foe := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), ring_tier), BoardModel.TEAM_B)
+	b.force_place(anvil_foe, Vector2i(2, 3))
+	var anvil_friend := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), ring_tier), BoardModel.TEAM_A)
+	b.force_place(anvil_friend, Vector2i(2, 5))
+	# Three tiles out: outside the 3x3 and outside the diamond's arm is 3, so this one
+	# is the boundary the two shapes disagree about. Frozen too, so "not touched" means
+	# the blast missed it rather than that it walked away.
+	var far := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), ring_tier), BoardModel.TEAM_B)
+	b.force_place(far, Vector2i(2, 7))
+	b.force_place(UnitInstance.create(
+		BoardModel.at_tier(_must_find("spire"), 1), BoardModel.TEAM_A),
+		Vector2i(5, 0))
+	b.force_place(UnitInstance.create(
+		BoardModel.at_tier(_must_find("spire"), 1), BoardModel.TEAM_B),
+		Vector2i(5, 9))
+	var sim := CombatSim.new()
+	sim.crit_chance = 0.0
+	return {sim = sim, board = b, keg = keg, foe = foe, friend = friend, far = far,
+		anvil_foe = anvil_foe, anvil_friend = anvil_friend}
+
+
+func _test_the_powderkeg() -> void:
+	_section("The Powderkeg: killing it is the easy part")
+
+	var keg := _must_find("powderkeg")
+	var ab: AbilityData = keg.ability
+	_check("Slow Match is a DETONATE", ab != null
+		and ab.kind == AbilityData.Kind.DETONATE)
+	if ab == null:
+		return
+	# It has no bar. A bomb with a cast is a bomb the player can be surprised by
+	# twice, and the ability is supposed to be a consequence of dying and nothing else.
+	_check("it has nothing to spend and no bar to fill",
+		is_equal_approx(keg.mana_per_attack, 0.0),
+		"%.1f a swing" % keg.mana_per_attack)
+	_check("the fuse is a second and a half",
+		is_equal_approx(ab.fuse_seconds, 1.5), "%.2fs" % ab.fuse_seconds)
+	_check("the blast is a 3x3", ab.blast_radius == 1, "radius %d" % ab.blast_radius)
+	_check("and the card says it hits both sides",
+		ab.describe().to_lower().contains("friend")
+		and ab.describe().to_lower().contains("enem"), ab.describe())
+
+	var stage := _keg_stage(3)
+	var sim: CombatSim = stage.sim
+	var bomb: UnitInstance = stage.keg
+	sim.setup(stage.board, 4141)
+	_hold_still([stage.anvil_foe, stage.anvil_friend, stage.far])
+	# Killed outright rather than fought down, so the test is about the fuse and not
+	# about how long a Warden takes to chew through 110 health.
+	sim._damage(bomb, 99999.0, stage.foe, true, false)
+	_check("killing it does not remove it from the board",
+		stage.board.unit_at(Vector2i(2, 4)) == bomb)
+	_check("it is standing on an empty health bar",
+		bomb.is_alive() and bomb.current_hp <= 0.0,
+		"alive %s, hp %.1f" % [bomb.is_alive(), bomb.current_hp])
+	_check("and the fuse is lit", bomb.is_fusing(),
+		"%.2fs left" % bomb.fuse_left)
+	_check("everything close enough is running", stage.foe.is_fleeing()
+		and stage.friend.is_fleeing(),
+		"foe %s, friend %s" % [stage.foe.is_fleeing(), stage.friend.is_fleeing()])
+	_check("its own side runs from it too, which is the whole cost",
+		stage.friend.is_fleeing())
+	_check("and something three tiles out does not", not stage.far.is_fleeing())
+
+	# Hitting a lit fuse must not defuse it. This is the bug the guard in take_damage
+	# exists for, and without it the counterplay to the ability would be "hit it again".
+	sim._damage(bomb, 99999.0, stage.foe, true, false)
+	_check("hitting it again does not put it out", bomb.is_fusing() and bomb.is_alive(),
+		"fusing %s, alive %s" % [bomb.is_fusing(), bomb.is_alive()])
+
+	# Explicitly typed, all three: stage is a Dictionary, so stage.foe is a Variant and
+	# stage.foe.current_hp is a Variant too — and `:=` off a Variant is a parse error
+	# that takes the whole file with it.
+	# effective_hp, not current_hp: a Warden opens the round behind a bulwark shield
+	# bigger than most units' whole bar, so a 420-point blast can land in full and
+	# leave the health bar untouched. Measuring the bar alone said "nothing happened"
+	# when what happened was the shield doing its job.
+	var foe_hp: float = stage.anvil_foe.effective_hp()
+	var friend_hp: float = stage.anvil_friend.effective_hp()
+	var far_hp: float = stage.far.effective_hp()
+	var went_off := -1
+	for i in 40:
+		sim.step()
+		for e in sim.events:
+			if e.kind == "detonate" and int(e.get("uid", -1)) == bomb.uid and went_off < 0:
+				went_off = i
+	_check("it goes off on its own, without anything touching it", went_off >= 0,
+		"never detonated")
+	if went_off < 0:
+		return
+	# 1.5s of fuse at a 0.1s tick is fifteen ticks. Allowed a tick either way because
+	# the fuse is ticked after the unit loop, not before it.
+	_check("after about fifteen ticks, which is the fuse", absi(went_off - 14) <= 1,
+		"tick %d" % went_off)
+	# Read off the EVENTS, not off the health bars. The first version of these three
+	# compared current_hp before and after, and all three passed a sabotage that made
+	# the blast skip its own side — because forty ticks is long enough for the far
+	# Warden to walk over and hit the ally itself. "Its health went down" is not the
+	# claim; "this blast hit it" is.
+	var blasted := {}
+	for e in sim.events:
+		if e.kind == "damage" and int(e.get("source_uid", -1)) == bomb.uid:
+			blasted[int(e.uid)] = true
+	_check("the enemy that could not run was hurt by the blast",
+		blasted.has(int(stage.anvil_foe.uid)),
+		"hit %d units, that enemy not among them" % blasted.size())
+	_check("and so was its own ally, by the same blast",
+		blasted.has(int(stage.anvil_friend.uid)),
+		"hit %d units, that ally not among them" % blasted.size())
+	_check("the one three tiles out was not touched by it",
+		not blasted.has(int(stage.far.uid)), "it was caught anyway")
+	_check("and both of the caught ones are measurably worse off",
+		stage.anvil_foe.effective_hp() < foe_hp
+		and stage.anvil_friend.effective_hp() < friend_hp,
+		"enemy %.1f from %.1f, ally %.1f from %.1f" % [
+			stage.anvil_foe.effective_hp(), foe_hp,
+			stage.anvil_friend.effective_hp(), friend_hp])
+	_check("while the one outside it is untouched",
+		is_equal_approx(stage.far.effective_hp(), far_hp),
+		"%.1f from %.1f" % [stage.far.effective_hp(), far_hp])
+	# And the other half of the same event: the two that COULD run are clear of the
+	# square by the time it lands. The bomb is a threat you can answer by moving, and
+	# this is the check that says the answer works.
+	_check("the two that could run were out of the square when it went off",
+		not blasted.has(int(stage.foe.uid))
+		and not blasted.has(int(stage.friend.uid)),
+		"one of them was caught anyway")
+	_check("and afterwards the bomb is actually dead and off the board",
+		not bomb.is_alive() and stage.board.unit_at(Vector2i(2, 4)) != bomb)
+
+
+func _test_powderkeg_shapes() -> void:
+	_section("The Powderkeg: a square, and the diamond a gold pick buys")
+
+	var sim := CombatSim.new()
+	BoardModel.reset_map()
+	sim.board = BoardModel.new()
+	var centre := Vector2i(2, 4)
+
+	var square := sim.blast_cells(centre, 1, 0)
+	_check("the plain blast is nine tiles", square.size() == 9,
+		"%d tiles" % square.size())
+	_check("and it keeps its corners", square.has(centre + Vector2i(1, 1))
+		and square.has(centre + Vector2i(-1, -1)))
+
+	# Long range is three, and the gold pick is specified as a diamond "like long
+	# range" — so each arm reaches three and the sum of the two axis distances is what
+	# is measured, which is the same rule the board uses for range.
+	var diamond := sim.blast_cells(centre, 1, 3)
+	_check("the gold blast reaches three tiles along each arm",
+		diamond.has(centre + Vector2i(0, 3)) and diamond.has(centre + Vector2i(3, 0)),
+		"%d tiles" % diamond.size())
+	_check("and it has no corners — two out on both axes is outside it",
+		not diamond.has(centre + Vector2i(2, 2)))
+	_check("it is bigger than the square it replaces", diamond.size() > square.size(),
+		"%d against %d" % [diamond.size(), square.size()])
+	for cell in diamond:
+		if not sim.board.in_bounds(cell):
+			_check("no blast cell is off the board", false, "%s" % cell)
+			return
+	_check("no blast cell is off the board", true)
+
+
+func _test_saltpetre() -> void:
+	_section("Saltpetre: the Powderkeg's buff")
+
+	var pool := _pool()
+	var buff := pool.by_id(&"saltpetre")
+	_check("Saltpetre is on disk", buff != null)
+	if buff == null:
+		return
+	_check("it belongs to the Powderkeg", buff.unit_id == &"powderkeg")
+	_check("it is an attack and movement buff",
+		buff.stat_a == StatModifier.Stat.ATTACK_DAMAGE
+		and buff.stat_b == StatModifier.Stat.MOVE_TIME and buff.uses_second_stat,
+		"%d / %d" % [buff.stat_a, buff.stat_b])
+	_check("100, 200 and 300 percent attack, as asked",
+		is_equal_approx(buff.bronze.x, 1.00) and is_equal_approx(buff.silver.x, 2.00)
+		and is_equal_approx(buff.gold.x, 3.00),
+		"%.2f / %.2f / %.2f" % [buff.bronze.x, buff.silver.x, buff.gold.x])
+	_check("and 25, 50 and 100 percent movement",
+		is_equal_approx(buff.bronze.y, 0.25) and is_equal_approx(buff.silver.y, 0.50)
+		and is_equal_approx(buff.gold.y, 1.00),
+		"%.2f / %.2f / %.2f" % [buff.bronze.y, buff.silver.y, buff.gold.y])
+	for r in [BuffData.Rarity.BRONZE, BuffData.Rarity.SILVER, BuffData.Rarity.GOLD]:
+		_check("the %s card names the diamond" % BuffData.rarity_name(r),
+			buff.describe(r).to_lower().contains("diamond"), buff.describe(r))
+
+	# The rider has to reach the simulation, and only at gold.
+	var ab: AbilityData = _must_find("powderkeg").ability
+	var keg := UnitInstance.create(
+		BoardModel.at_tier(_must_find("powderkeg"), 3), BoardModel.TEAM_A)
+	var sim := CombatSim.new()
+	_check("with no buff there is no diamond", sim.blast_range_of(keg, ab) == 0,
+		"%d" % sim.blast_range_of(keg, ab))
+	for r in [BuffData.Rarity.BRONZE, BuffData.Rarity.SILVER]:
+		var lesser := TeamBuffs.new()
+		lesser.add(buff, r)
+		sim.team_buffs[BoardModel.TEAM_A] = lesser
+		_check("a %s pick does not widen it either" % BuffData.rarity_name(r),
+			sim.blast_range_of(keg, ab) == 0, "%d" % sim.blast_range_of(keg, ab))
+	var tb := TeamBuffs.new()
+	tb.add(buff, BuffData.Rarity.GOLD)
+	sim.team_buffs[BoardModel.TEAM_A] = tb
+	_check("and a gold pick reaches three", sim.blast_range_of(keg, ab) == 3,
+		"%d" % sim.blast_range_of(keg, ab))
+	# It must not follow the buff onto somebody else's bomb, or onto a unit that is
+	# not a Powderkeg at all.
+	var other := UnitInstance.create(
+		BoardModel.at_tier(_must_find("powderkeg"), 3), BoardModel.TEAM_B)
+	_check("the other side's bomb is unaffected by it",
+		sim.blast_range_of(other, ab) == 0, "%d" % sim.blast_range_of(other, ab))
+
+	# Attack damage feeds the blast, so the buff sharpens the explosion as well as the
+	# swing. That is deliberate and worth pinning: it is why the gold pick is as big as
+	# it is, and the figure is the one the balance pass was run against.
+	var plain := CombatSim.new()
+	var bare := plain.blast_damage_of(keg, ab)
+	plain.team_buffs[BoardModel.TEAM_A] = tb
+	keg.apply_modifiers(buff.modifiers_for(BuffData.Rarity.GOLD))
+	var rich := plain.blast_damage_of(keg, ab)
+	_check("gold Saltpetre quadruples the blast, because attack feeds it",
+		is_equal_approx(rich, bare * 4.0), "%.1f against %.1f" % [rich, bare * 4.0])
+
+
+func _square_gap(a: Vector2i, b: Vector2i) -> int:
+	return maxi(absi(a.x - b.x), absi(a.y - b.y))
+
+
+func _hold_still(units: Array[UnitInstance]) -> void:
+	## Freezes a set of units solid so a fixture can have victims that cannot run.
+	## Must be called AFTER sim.setup(), which resets every status on the board.
+	for u in units:
+		u.frozen_left = 600.0
+
+
+func _test_fleeing() -> void:
+	_section("A fleeing unit runs, and a cornered one does not get out")
+
+	var stage := _keg_stage(3)
+	var sim: CombatSim = stage.sim
+	var runner: UnitInstance = stage.foe
+	sim.setup(stage.board, 909)
+	var bomb := Vector2i(2, 4)
+	runner.flee_left = 4.0
+	runner.flee_from = bomb
+	var gap_before := _square_gap(runner.cell, bomb)
+	var swung := 0
+	for i in 40:
+		sim.step()
+	for e in sim.events:
+		if e.kind == "attack" and int(e.get("uid", -1)) == runner.uid:
+			swung += 1
+	_check("it puts distance between itself and the fuse",
+		_square_gap(runner.cell, bomb) > gap_before,
+		"%d rings out, was %d" % [_square_gap(runner.cell, bomb), gap_before])
+	# The check that matters, and the one the first version of this missed. Running
+	# has to mean leaving the BLAST, not raising some other measure of distance: a
+	# unit that stepped from (3,4) to (3,3) got further away by the board's Manhattan
+	# reckoning and was still standing in the 3x3 when it went off.
+	_check("and that means it is out of the square, not merely further off",
+		_square_gap(runner.cell, bomb) > 1,
+		"still %d ring(s) out" % _square_gap(runner.cell, bomb))
+	_check("and swings at nothing while it runs", swung == 0, "%d swings" % swung)
+
+	# The FIRST step, in isolation, which is where the metric shows.
+	#
+	# From (3, 4) beside a bomb on (2, 4) there are three ways to go, and two of them —
+	# (3, 3) and (3, 5) — get further away by the board's Manhattan reckoning while
+	# staying inside the 3x3. Only (4, 4) actually leaves the blast. Given four seconds
+	# a unit escapes either way, so a test that only watched the end state could not
+	# tell a correct first step from a wasted one; this watches the step itself.
+	var solo := _keg_stage(3)
+	var sim3: CombatSim = solo.sim
+	var single: UnitInstance = solo.foe
+	sim3.setup(solo.board, 606)
+	single.flee_left = 4.0
+	single.flee_from = Vector2i(2, 4)
+	var first := single.cell
+	for i in 30:
+		sim3.step()
+		if single.cell != first:
+			break
+	_check("the first step it takes is the one that leaves the blast",
+		_square_gap(single.cell, Vector2i(2, 4)) > 1,
+		"stepped to %s, still in the square" % single.cell)
+
+	# Cornered. A unit with the board edge behind it and bodies either side has nowhere
+	# to go, and must simply stand there and take it — a bomb everything always escapes
+	# is a shove, not a threat.
+	BoardModel.reset_map()
+	var b := BoardModel.new()
+	var trapped := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 2), BoardModel.TEAM_B)
+	b.force_place(trapped, Vector2i(0, 0))
+	# The blockers are frozen solid. The first version of this fixture left them free
+	# and it failed: they walked off to fight, the corner opened up behind them and the
+	# "trapped" unit strolled out to (2, 0). Freezing them is what makes the box a box,
+	# and it uses ordinary roster units rather than reaching for the rooted Sentry,
+	# which is hidden and so is not in the roster the tests draw from.
+	var walls: Array[UnitInstance] = []
+	for corner in [Vector2i(1, 0), Vector2i(0, 1)]:
+		var wall := UnitInstance.create(
+			BoardModel.at_tier(_must_find("warden"), 2), BoardModel.TEAM_B)
+		b.force_place(wall, corner)
+		walls.append(wall)
+	b.force_place(UnitInstance.create(
+		BoardModel.at_tier(_must_find("spire"), 1), BoardModel.TEAM_A),
+		Vector2i(5, 9))
+	var sim2 := CombatSim.new()
+	sim2.setup(b, 55)
+	# AFTER setup, always. setup() calls reset_for_battle() on every unit, which wipes
+	# every status on the board — so a freeze planted before it silently does nothing,
+	# and the "trapped" unit strolls out past two blockers that were never frozen.
+	_hold_still(walls)
+	trapped.flee_left = 3.0
+	trapped.flee_from = Vector2i(0, 0)
+	for i in 20:
+		sim2.step()
+	_check("a unit with nowhere to run stays where it is",
+		trapped.cell == Vector2i(0, 0), "%s" % trapped.cell)
+
+
+func _test_powderkeg_once() -> void:
+	_section("The Powderkeg: one fuse a round, and a freeze defuses it")
+
+	# Once per round. Without fuse_spent every blow that landed on the ticking body
+	# would relight it and the bomb would never go off at all.
+	var stage := _keg_stage(3)
+	var sim: CombatSim = stage.sim
+	var bomb: UnitInstance = stage.keg
+	sim.setup(stage.board, 31)
+	sim._damage(bomb, 99999.0, stage.foe, true, false)
+	_check("the first killing blow lights it", bomb.is_fusing())
+	var blasts := 0
+	for i in 60:
+		sim.step()
+	for e in sim.events:
+		if e.kind == "detonate" and int(e.get("uid", -1)) == bomb.uid:
+			blasts += 1
+	_check("and it goes off exactly once", blasts == 1, "%d blasts" % blasts)
+
+	# Frozen solid is the clean answer to it, the same way it is for the Martyr's
+	# window: dying frozen means nothing you would have done on death happens.
+	var iced := _keg_stage(3)
+	var sim2: CombatSim = iced.sim
+	var frozen: UnitInstance = iced.keg
+	sim2.setup(iced.board, 32)
+	frozen.frozen_left = 5.0
+	sim2._damage(frozen, 99999.0, iced.foe, true, false)
+	_check("a bomb killed frozen never lights", not frozen.is_fusing(),
+		"%.2fs on the fuse" % frozen.fuse_left)
+	_check("it just dies, like anything else killed frozen", not frozen.is_alive())
+	var iced_blasts := 0
+	for i in 40:
+		sim2.step()
+	for e in sim2.events:
+		if e.kind == "detonate":
+			iced_blasts += 1
+	_check("and nothing goes off", iced_blasts == 0, "%d blasts" % iced_blasts)
+
+
+func _test_powderkeg_fixes() -> void:
+	_section("The Powderkeg: what the first build got wrong")
+
+	# 1. The round reset. A round that ends mid-panic must not carry the panic over.
+	var keg := UnitInstance.create(
+		BoardModel.at_tier(_must_find("powderkeg"), 2), BoardModel.TEAM_A)
+	keg.fuse_left = 0.7
+	keg.fuse_spent = true
+	keg.flee_left = 1.1
+	keg.flee_from = Vector2i(3, 3)
+	keg.reset_for_battle()
+	_check("a new round clears a fuse still burning", not keg.is_fusing()
+		and not keg.fuse_spent, "%.2fs, spent %s" % [keg.fuse_left, keg.fuse_spent])
+	_check("and nobody starts the next round still running from the last one",
+		not keg.is_fleeing() and keg.flee_from == Vector2i(-1, -1),
+		"%.2fs from %s" % [keg.flee_left, keg.flee_from])
+
+	# 2. Nothing picks a lit corpse to fight.
+	var stage := _keg_stage(3)
+	var sim: CombatSim = stage.sim
+	var bomb: UnitInstance = stage.keg
+	sim.setup(stage.board, 2020)
+	sim._damage(bomb, 99999.0, stage.foe, true, false)
+	var picked := 0
+	for u in stage.board.all_units():
+		if u.team != bomb.team and u.is_alive() and sim._mark_for(u) == bomb:
+			picked += 1
+	_check("no enemy picks a lit keg as its target", picked == 0,
+		"%d of them still aimed at it" % picked)
+	var lit_at := sim.events.size()
+	for i in 14:
+		sim.step()
+	var swings := 0
+	for j in range(lit_at, sim.events.size()):
+		var e: Dictionary = sim.events[j]
+		if e.kind == "attack" and int(e.get("target_uid", -1)) == bomb.uid:
+			swings += 1
+	_check("and nothing swings at it while the fuse burns", swings == 0,
+		"%d swings at a corpse" % swings)
+
+	# 3. Nothing heals one either.
+	var second := _keg_stage(3)
+	var sim2: CombatSim = second.sim
+	var body: UnitInstance = second.keg
+	sim2.setup(second.board, 2121)
+	sim2._damage(body, 99999.0, second.foe, true, false)
+	body.heal(500.0)
+	_check("a lit keg cannot be healed back up", body.current_hp <= 0.0,
+		"%.1f health on a fuse" % body.current_hp)
+	var nurse: UnitInstance = second.anvil_friend
+	_check("and a healer beside it looks past it for someone worth saving",
+		sim2._worst_hurt_ally(nurse, 3) != body)

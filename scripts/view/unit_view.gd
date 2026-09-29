@@ -99,6 +99,24 @@ var reeling := false
 var reeling_secs := 0.0
 var reeling_t := 0.0
 
+## Fusing: dead, lying there, about to go off. The clock is the mark — a fuse that
+## looked the same at 1.5 seconds and at 0.1 would tell you there is danger without
+## telling you the one thing you need, which is how long you have.
+var fusing := false
+var fuse_secs := 0.0
+var fuse_total := 0.0
+var fuse_t := 0.0
+
+## Running from one. Quieter than the rest on purpose: half the board can be fleeing at
+## once, and a loud mark on each of them would bury the bomb that caused it.
+var fleeing := false
+var fleeing_secs := 0.0
+var fleeing_t := 0.0
+## Which way it is running, as a unit vector away from the bomb. The mark points this
+## way, so a glance at a scattering line shows where the danger is without looking for
+## the keg itself.
+var fleeing_dir := Vector2.DOWN
+
 ## Whether an Usurper is currently inside this unit.
 ##
 ## Event-driven, like every other condition here. The simulation flips the host's `team`
@@ -191,6 +209,21 @@ func _process(delta: float) -> void:
 		if reeling_secs <= 0.0:
 			end_reeling()
 		queue_redraw()
+	if fusing:
+		fuse_secs -= delta
+		# Accelerating: the blink rate is driven by how much is LEFT, so the mark gets
+		# more frantic as the moment approaches instead of ticking evenly.
+		var urgency: float = 1.0 - clampf(fuse_secs / maxf(fuse_total, 0.01), 0.0, 1.0)
+		fuse_t = fmod(fuse_t + delta * (6.0 + urgency * 18.0), TAU)
+		if fuse_secs <= 0.0:
+			end_fuse()
+		queue_redraw()
+	if fleeing:
+		fleeing_secs -= delta
+		fleeing_t = fmod(fleeing_t + delta * 7.0, TAU)
+		if fleeing_secs <= 0.0:
+			end_fleeing()
+		queue_redraw()
 	if possessed:
 		possessed_t = fmod(possessed_t + delta * 2.2, TAU)
 		queue_redraw()
@@ -269,6 +302,41 @@ func begin_frenzy(seconds: float) -> void:
 func end_frenzy() -> void:
 	frenzied = false
 	frenzy_secs = 0.0
+	queue_redraw()
+
+
+func begin_fuse(seconds: float) -> void:
+	## Lights it. `seconds` is already playback time, like every other mark here.
+	if seconds <= 0.0:
+		return
+	fusing = true
+	fuse_secs = seconds
+	# Kept so _process can work out how far through the fuse is. Without it the mark
+	# can only blink at a constant rate, and a constant blink says "danger" where an
+	# accelerating one says "danger, soon" — which is the actual information.
+	fuse_total = seconds
+	queue_redraw()
+
+
+func end_fuse() -> void:
+	fusing = false
+	fuse_secs = 0.0
+	queue_redraw()
+
+
+func begin_fleeing(seconds: float, away := Vector2.ZERO) -> void:
+	if seconds <= 0.0:
+		return
+	fleeing = true
+	fleeing_secs = seconds
+	if away.length() > 0.01:
+		fleeing_dir = away.normalized()
+	queue_redraw()
+
+
+func end_fleeing() -> void:
+	fleeing = false
+	fleeing_secs = 0.0
 	queue_redraw()
 
 
@@ -584,6 +652,27 @@ func _draw() -> void:
 			draw_line(dir * (half - 2.0), dir * (half + 5.0 + beat * 3.0),
 				Color(1.00, 0.46, 0.30, 0.9 * alpha), 2.5)
 
+	if fusing:
+		# A body on the floor with a clock in it. Two things have to read at a glance:
+		# that this tile is about to become lethal, and roughly how long you have.
+		var left: float = clampf(fuse_secs / maxf(fuse_total, 0.01), 0.0, 1.0)
+		var blink: float = 0.5 + 0.5 * sin(fuse_t)
+		draw_rect(body.grow(2.0 + blink * 3.0),
+			Color(1.00, 0.52, 0.16, (0.55 + 0.40 * blink) * alpha), false, 3.0)
+		draw_rect(body, Color(1.00, 0.44, 0.12, 0.28 * blink * alpha), true)
+		# The fuse itself: an arc that burns down anticlockwise from the top. This is
+		# the part that says HOW LONG, and it is drawn from the remaining fraction
+		# rather than from a pulse, so it cannot lie about the time left.
+		if left > 0.0:
+			draw_arc(Vector2.ZERO, half + 5.0, -PI * 0.5,
+				-PI * 0.5 + TAU * left, 24,
+				Color(1.00, 0.76, 0.34, 0.95 * alpha), 3.0)
+		# The spark at the burning end, so the eye lands on the clock rather than the
+		# body underneath it.
+		var tip: float = -PI * 0.5 + TAU * left
+		draw_circle(Vector2(cos(tip), sin(tip)) * (half + 5.0),
+			2.6 + blink * 1.6, Color(1.00, 0.92, 0.62, alpha))
+
 	if hidden_unit:
 		draw_rect(body.grow(3.0), Color(0.62, 0.52, 0.85, 0.75 * alpha), false, 2.0)
 	if reviving:
@@ -648,6 +737,29 @@ func _draw() -> void:
 			draw_circle(at, maxf(tile_size * 0.075, 3.5),
 				Color(0.08, 0.07, 0.04, 0.70 * alpha))
 			draw_circle(at, maxf(tile_size * 0.055, 2.5), swirl)
+
+	if fleeing:
+		# Running from a lit fuse. Across the BODY, beside the reeling motes and for the
+		# same reason: the first version drew these chevrons above the tile, where the
+		# health bar and its number are painted afterwards, and a screenshot showed a
+		# fleeing Warden with no mark on it at all.
+		#
+		# Two chevrons pointing AWAY from the bomb, sliding the way the unit is going.
+		# Direction is the information: a whole line with its arrows pointing out from
+		# one tile tells you where the keg is without having to find it.
+		var d := fleeing_dir
+		var side := Vector2(-d.y, d.x)
+		var slide: float = fmod(fleeing_t / TAU, 1.0) * tile_size * 0.10
+		var arm := tile_size * 0.13
+		for i in 2:
+			var tip := body.get_center() + d * (tile_size * (0.02 + 0.14 * float(i)) + slide)
+			var a := tip - d * arm + side * arm
+			var b := tip - d * arm - side * arm
+			var fade: float = (0.95 - 0.35 * float(i)) * alpha
+			draw_polyline(PackedVector2Array([a, tip, b]),
+				Color(0.08, 0.06, 0.03, 0.75 * fade), maxf(tile_size * 0.075, 4.0))
+			draw_polyline(PackedVector2Array([a, tip, b]),
+				Color(1.00, 0.84, 0.46, fade), maxf(tile_size * 0.04, 2.2))
 
 	if dying:
 		var k := body.grow(-body.size.x * 0.28)

@@ -26,6 +26,7 @@ enum Kind {
 	POSSESS,
 	FRENZY,
 	DISORIENT,
+	DETONATE,
 }
 
 @export var id: StringName = &""
@@ -387,6 +388,47 @@ enum Kind {
 ## immunity is the difference between a tempo tool and a disable.
 @export var disorient_immunity: float = 5.0
 
+@export_group("Detonate")
+## Seconds between the killing blow and the blast.
+##
+## The fuse is the entire ability. A bomb that goes off the instant it dies is a
+## damage number attached to a death — nobody makes a decision about it, on either
+## side. A bomb that ticks for a second and a half is a piece of ground that stops
+## being usable, and both armies have to answer it.
+##
+## It is also why the unit is worth killing CAREFULLY rather than killing fast, which
+## is the shape nothing else in the roster has.
+@export var fuse_seconds: float = 0.0
+
+## The blast, as a multiple of the unit's own attack damage times its tier — the same
+## shape as the Breaker's charge, and for the same reason: one AbilityData is shared by
+## all six tiers, so a flat figure here would leave a tier 6 detonating for exactly
+## what a tier 1 does. Off attack rather than a flat number so it rides every buff that
+## sharpens the unit.
+@export var blast_damage_per_tier: float = 0.0
+
+## The square half-width of the blast: 1 is the 3x3 the unit is specified to cover.
+##
+## Chebyshev, not Manhattan — a 3x3 includes its corners and the board's own
+## tile_distance() does not, so this shape is measured on its own terms rather than
+## borrowed from the movement rule.
+@export var blast_radius: int = 1
+
+## What a gold pick of the unit's own buff turns the square into: a DIAMOND of this
+## many tiles, measured the way range is, so it reaches further along the axes and
+## drops the corners entirely. Zero means no pick changes the shape.
+##
+## A different shape rather than a bigger square, because the interesting question the
+## bomb asks is "where is it safe to stand", and widening a square only ever answers
+## "further away". A diamond moves the safe ground to the corners instead.
+@export var blast_gold_range: int = 0
+
+## How far OUTSIDE the blast a unit still turns and runs. One tile of margin, so the
+## units that flee include some that were never going to be hit — they cannot measure
+## it any better than the player can, and a scatter that exactly traced the damage
+## would be a free map of the blast drawn for both sides.
+@export var flee_margin: int = 1
+
 @export_group("Mana aura")
 @export var mana_aura_radius: int = 1
 
@@ -527,6 +569,15 @@ func describe() -> String:
 				frenzy_decay * 100.0, frenzy_seconds,
 				roundi(frenzy_damage * 100.0), roundi(frenzy_attack_speed * 100.0),
 				roundi(frenzy_move * 100.0), frenzy_pierce]
+		Kind.DETONATE:
+			var shape := "a %dx%d square" % [
+				blast_radius * 2 + 1, blast_radius * 2 + 1]
+			var gold := ""
+			if blast_gold_range > 0:
+				gold = " A gold pick of its own buff trades the square for a diamond %d tiles across each arm." % blast_gold_range
+			return "Killing it does not finish it. It lies where it fell for %.1fs and then goes off, hitting %s for %.0fx its own attack per tier — friend and enemy alike, with no regard for whose side anything is on. Everything within %d tile(s) of the blast turns and runs the moment the fuse is lit.%s" % [
+				fuse_seconds, shape, blast_damage_per_tier,
+				blast_radius + flee_margin, gold]
 		Kind.ASCEND:
 			return "The first full bar changes it: %.1fx health, %.0f%% faster swings, %.0f%% faster on its feet. Every bar after that arms the next swing to kill outright, whatever it hits." % [
 				ascend_hp_mult,
