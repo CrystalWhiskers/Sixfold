@@ -340,9 +340,10 @@ func step() -> void:
 			# holds its line while everything else is free to move.
 			continue
 		if u.is_fusing():
-			# Dead, and not finished. It gets no turn at all — unlike the Martyr's
-			# window, which is a unit still fighting, this is a body on the floor with
-			# a clock in it. _tick_fuses() below is the only thing that touches it.
+			# Dead, and not finished. Not an ordinary turn — unlike the Martyr's
+			# window, which is a unit still fighting, this is a body with a clock in
+			# it that walks and does nothing else. _tick_fuses() below owns the clock.
+			_fuse_turn(u)
 			continue
 		match u.state:
 			UnitInstance.State.IDLE:
@@ -1008,10 +1009,13 @@ func _shot_from(u: UnitInstance, from: Vector2i, target: UnitInstance) -> bool:
 	return BoardModel.line_of_fire(from, target.cell, u.team)
 
 
-func _begin_move(u: UnitInstance) -> bool:
+func _begin_move(u: UnitInstance, may_dig := true) -> bool:
 	# Returns whether a step was actually taken. Every `false` here used to be a
 	# silently wasted tick — the caller returned regardless, so a unit that could
 	# not move also did not attack.
+	#
+	# `may_dig` false refuses a step into stone rather than swinging at it, for the
+	# one walker that must never enter an attack: a lit Powderkeg.
 	var next := _next_step(u)
 	if next == u.cell:
 		return false
@@ -1030,6 +1034,8 @@ func _begin_move(u: UnitInstance) -> bool:
 		# The route the field chose runs through stone, which only happens when
 		# going round is worse than digging — usually because there is no way
 		# round at all. Swing at it rather than step into it.
+		if not may_dig:
+			return false
 		return _hit_wall(u, next)
 	var from := u.cell
 	var dur := maxf(u.stat(StatModifier.Stat.MOVE_TIME) / pressure(), MIN_MOVE_TIME)
@@ -3397,7 +3403,8 @@ func _tick_frenzy() -> void:
 
 
 func fuse_seconds_of(u: UnitInstance, ab: AbilityData) -> float:
-	return maxf(ab.fuse_seconds, 0.0)
+	## Off the ability's per-tier table, so the fuse shortens as the keg climbs.
+	return maxf(ab.fuse_seconds_at(u.data.tier if u.data != null else 1), 0.0)
 
 
 func blast_damage_of(u: UnitInstance, ab: AbilityData) -> float:
@@ -3467,15 +3474,20 @@ func _light_fuse(u: UnitInstance) -> bool:
 	# Stop it charging or being carried: a bomb that goes off mid-run would resolve its
 	# blast from a tile nothing was told about.
 	u.stop_charging()
+	# It stays where it is for this tick only. From the next one it walks — see
+	# _fuse_turn — and the blast goes off on whatever tile it has reached.
 	var reach: int = maxi(ab.blast_radius, 0) + maxi(ab.flee_margin, 0)
 	var gold := blast_range_of(u, ab)
 	if gold > 0:
 		reach = gold + maxi(ab.flee_margin, 0)
-	_scatter(u, reach, secs)
+	# The fuse BEFORE the scatter, so by the time the view hears that something is
+	# running, the keg it is running from is already marked as burning and the
+	# runner's chevrons can lock on to it.
 	_emit("fuse", {
 		uid = u.uid, cell = u.cell, seconds = secs,
 		cells = blast_cells(u.cell, maxi(ab.blast_radius, 0), gold),
 	})
+	_scatter(u, reach, secs)
 	return true
 
 
@@ -3497,9 +3509,10 @@ func _scatter(bomb: UnitInstance, reach: int, secs: float) -> void:
 			continue
 		other.flee_left = secs
 		other.flee_from = bomb.cell
+		other.flee_bomb_uid = bomb.uid
 		_emit("flee", {
 			uid = other.uid, cell = other.cell,
-			from = bomb.cell, seconds = secs,
+			from = bomb.cell, seconds = secs, bomb_uid = bomb.uid,
 		})
 
 
@@ -3517,6 +3530,12 @@ func _flee_step(u: UnitInstance) -> void:
 	## fatal, and a unit that always found a way out would make the ability a shove
 	## rather than a threat.
 	u.target = null
+	# The keg walks while it burns, so the tile to run from is wherever it is NOW.
+	# Read live rather than pushed to every runner when the keg moves: the runner only
+	# needs it at the moment it steps, and one source of truth cannot fall out of step.
+	var bomb := _unit_by_uid(u.flee_bomb_uid) if u.flee_bomb_uid >= 0 else null
+	if bomb != null and bomb.is_fusing():
+		u.flee_from = bomb.cell
 	if not u.can_move_now():
 		return
 	var best := u.cell
@@ -3551,6 +3570,46 @@ func _flee_step(u: UnitInstance) -> void:
 	_emit("move", {uid = u.uid, from = from, to = best, duration = dur})
 
 
+func _fuse_turn(u: UnitInstance) -> void:
+	## A lit keg's turn: walk at the nearest enemy, and nothing else.
+	##
+	## It does not swing, cast, dig or flee — a bomb that kept fighting would make the
+	## fuse a second health bar. It walks at its own pace, buffs and all, so Saltpetre's
+	## speed carries the blast further. Held (frozen or stunned) it stands still, but
+	## a freeze only DEFUSES at the moment of death; one landing later just pins it.
+	if u.state == UnitInstance.State.MOVING:
+		_advance_timer(u)
+		return
+	if u.state != UnitInstance.State.IDLE:
+		# Nothing should put a lit keg into a swing or a cast, but if something does it
+		# is dropped rather than finished.
+		u.state = UnitInstance.State.IDLE
+		u.state_timer = 0.0
+	if not u.can_move_now():
+		return
+	var mark := board.nearest_enemy(u)
+	if mark == null:
+		return
+	var was := u.cell
+	u.target = mark
+	_begin_move(u, false)
+	# Cleared again straight away: a target on a lit keg reads as "fighting" to
+	# anything that asks, and it is not.
+	u.target = null
+	if u.cell != was:
+		_moved_fuse(u)
+
+
+func _moved_fuse(bomb: UnitInstance) -> void:
+	## Tells the view the warning square has moved with the keg. The runners need no
+	## event of their own — the view points them at the keg's own node.
+	var ab: AbilityData = bomb.data.ability
+	_emit("fuse_move", {
+		uid = bomb.uid, cell = bomb.cell,
+		cells = blast_cells(bomb.cell, maxi(ab.blast_radius, 0), blast_range_of(bomb, ab)),
+	})
+
+
 func _tick_fuses() -> void:
 	## Two clocks: the fuses burning down, and the panic they started.
 	##
@@ -3562,6 +3621,7 @@ func _tick_fuses() -> void:
 			u.flee_left = maxf(u.flee_left - TICK, 0.0)
 			if u.flee_left <= 0.0:
 				u.flee_from = Vector2i(-1, -1)
+				u.flee_bomb_uid = -1
 				_emit("flee_end", {uid = u.uid, cell = u.cell})
 	for u in _units:
 		if u.fuse_left <= 0.0:
@@ -3628,6 +3688,8 @@ func displace(u: UnitInstance, dir: Vector2i, tiles: int) -> int:
 		uid = u.uid, from = from, to = u.cell,
 		tiles = moved, duration = DISPLACE_TIME,
 	})
+	if u.is_fusing():
+		_moved_fuse(u)
 	return moved
 
 
@@ -4170,6 +4232,11 @@ func _finish(reason: String) -> void:
 
 func _emit(kind: String, payload: Dictionary) -> void:
 	payload["t"] = elapsed
+	# An "ability" event names the ability's own kind in `kind` too, and the event type
+	# below overwrites it. Kept under its own key first: without it the view read
+	# int("ability"), which is 0, and drew every ability in the game as a Haste.
+	if payload.has("kind") and not payload.has("ability_kind"):
+		payload["ability_kind"] = payload["kind"]
 	payload["kind"] = kind
 	events.append(payload)
 

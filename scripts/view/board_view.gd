@@ -49,6 +49,9 @@ var _aura_zones: Dictionary = {}
 var _floaters: Array[Dictionary] = []
 var _shots: Array[Dictionary] = []
 var _beams: Array[Dictionary] = []
+## The ability icons and shapes, on their own node so they draw ABOVE the units.
+## Made on first use — see effects().
+var _fx: AbilityFx = null
 var ghosts: Array[Dictionary] = []
 var _merge_cells: Array[Vector2i] = []
 var view_area := Rect2(0.0, 0.0, 504.0, 924.0)
@@ -255,6 +258,8 @@ func rebuild() -> void:
 	_floaters.clear()
 	_shots.clear()
 	_beams.clear()
+	if _fx != null:
+		_fx.clear()
 	if board == null:
 		return
 	for u in board.all_units():
@@ -405,11 +410,27 @@ func _draw_aura_zones() -> void:
 		draw_rect(box, COL_AURA_EDGE, false, 2.0)
 
 
-func flash_cells(cells: Array, color: Color, duration: float) -> void:
-	_flashes.append({cells = cells.duplicate(), color = color,
-		left = duration, total = maxf(duration, 0.01)})
+func effects() -> AbilityFx:
+	## The layer ability icons are drawn on. Kept in step with the tile size every
+	## time it is asked for, so a zoom between two casts cannot leave it drawing
+	## icons for a board of a different size.
+	if _fx == null or not is_instance_valid(_fx):
+		_fx = AbilityFx.new()
+		add_child(_fx)
+	_fx.tile_size = tile_size
+	return _fx
+
+
+func flash_cells(cells: Array, color: Color, duration: float) -> Dictionary:
+	## Returns the flash itself, so a caller whose marked ground MOVES — a lit
+	## Powderkeg walking — can repoint `cells` (or end it early with `left`) rather
+	## than leave a warning square on a tile the danger has already left.
+	var f := {cells = cells.duplicate(), color = color,
+		left = duration, total = maxf(duration, 0.01)}
+	_flashes.append(f)
 	set_process(true)
 	queue_redraw()
+	return f
 
 
 const COL_CRIT := Color(1.00, 0.84, 0.34)

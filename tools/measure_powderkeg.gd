@@ -58,7 +58,9 @@ func _keg(tier: int) -> UnitData:
 	var v := BoardModel.at_tier(_pick("powderkeg"), tier).duplicate() as UnitData
 	var ab := v.ability.duplicate() as AbilityData
 	if _fuse >= 0.0:
+		# The per-tier table wins over the flat figure, so an override has to clear it.
 		ab.fuse_seconds = _fuse
+		ab.fuse_seconds_by_tier = PackedFloat32Array()
 	if _blast >= 0.0:
 		ab.blast_damage_per_tier = _blast
 	if _flat >= 0.0:
@@ -148,9 +150,21 @@ func _initialize() -> void:
 	print("  fled    = units sent running per fuse lit")
 	print("\n               win      lit   blasts   caught    own      fled")
 
-	print("\n  As built: 1.5s fuse, x5.0 damage, 3x3.")
+	print("\n  As built: fuse 2.0s at T1 down to 0.75s at T6, walking while lit, x5.0, 3x3.")
 	for tier in [1, 2, 3, 4, 5, 6]:
 		print(_row("tier %d" % tier, _trial(tier, 0)))
+
+	# `-- ladder` stops here: the as-built ladder, and the walking keg on the old flat
+	# fuse beside it, which is the comparison a fuse retune wants. A few minutes rather
+	# than the whole file's fifteen.
+	if OS.get_cmdline_user_args().has("ladder"):
+		print("\n  Walking, but on the old flat 1.5s fuse at every tier.")
+		_fuse = 1.5
+		for tier in [1, 2, 3, 4, 5, 6]:
+			print(_row("tier %d" % tier, _trial(tier, 0)))
+		_fuse = -1.0
+		quit()
+		return
 
 	print("\n  Fuse length at tier 3. The question is whether anything is ever caught.")
 	for f in [0.3, 0.6, 0.9, 1.2, 1.5, 2.0]:

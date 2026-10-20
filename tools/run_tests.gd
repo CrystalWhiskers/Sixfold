@@ -16,7 +16,7 @@ extends SceneTree
 ## it, and nobody did: it sat at 2555 while the suite grew past 2600, so when three
 ## Powderkeg tests died in one sitting the run was still a hundred checks above the
 ## floor and reported green. The ErrorWatch below is what actually catches it.
-const MIN_CHECKS := 2684
+const MIN_CHECKS := 2748
 
 ## Counts runtime script errors while the suite runs, and fails the run if there are
 ## any.
@@ -143,6 +143,10 @@ func _initialize() -> void:
 	_test_fleeing()
 	_test_powderkeg_once()
 	_test_powderkeg_fixes()
+	_test_the_fuse_shortens_with_tier()
+	_test_a_lit_keg_walks()
+	_test_runners_track_a_walking_keg()
+	_test_every_ability_has_an_icon()
 	_test_the_husk()
 	_test_the_grip_can_be_timed()
 	_test_a_stunned_unit_does_nothing()
@@ -12877,3 +12881,326 @@ func _test_powderkeg_fixes() -> void:
 	var nurse: UnitInstance = second.anvil_friend
 	_check("and a healer beside it looks past it for someone worth saving",
 		sim2._worst_hurt_ally(nurse, 3) != body)
+
+
+func _ticks_to_blast(tier: int) -> int:
+	## Kills a keg of this tier in the standard fixture and counts the ticks until it
+	## goes off, or -1 if it never does.
+	var stage := _keg_stage(tier)
+	var sim: CombatSim = stage.sim
+	var bomb: UnitInstance = stage.keg
+	sim.setup(stage.board, 7000 + tier)
+	_hold_still([stage.anvil_foe, stage.anvil_friend, stage.far])
+	sim._damage(bomb, 99999.0, stage.foe, true, false)
+	for i in 60:
+		sim.step()
+		for e in sim.events:
+			if e.kind == "detonate" and int(e.get("uid", -1)) == bomb.uid:
+				return i
+	return -1
+
+
+func _test_the_fuse_shortens_with_tier() -> void:
+	_section("The Powderkeg: the fuse shortens as it climbs")
+
+	var keg := _must_find("powderkeg")
+	var ab: AbilityData = keg.ability
+	if ab == null:
+		return
+	# Off the DATA, not a constant in the sim: a quarter of a second a tier, with tier 3
+	# left on the 1.5s everything was first tuned around.
+	var want: Array[float] = [2.0, 1.75, 1.5, 1.25, 1.0, 0.75]
+	_check("the ability carries a fuse for every tier",
+		ab.fuse_seconds_by_tier.size() == 6, "%d entries" % ab.fuse_seconds_by_tier.size())
+	var sim := CombatSim.new()
+	var read := ""
+	var right := true
+	for tier in range(1, 7):
+		var u := UnitInstance.create(BoardModel.at_tier(keg, tier), BoardModel.TEAM_A)
+		var got := sim.fuse_seconds_of(u, ab)
+		read += " T%d %.2fs" % [tier, got]
+		if not is_equal_approx(got, want[tier - 1]):
+			right = false
+	_check("and the sim burns 2.0s at tier 1 down to 0.75s at tier 6", right, read)
+	_check("tier 3 is still the second and a half it was tuned at",
+		is_equal_approx(ab.fuse_seconds_at(3), 1.5), "%.2fs" % ab.fuse_seconds_at(3))
+	_check("a tier past the table takes the last entry, not an error",
+		is_equal_approx(ab.fuse_seconds_at(9), 0.75), "%.2fs" % ab.fuse_seconds_at(9))
+	_check("and the card says the fuse is per tier",
+		ab.describe().contains("tier 1") and ab.describe().contains("tier 6"),
+		ab.describe())
+
+	# And the clock in the fight itself, which is what the player sees. Same allowance
+	# as the tier 3 test: a tick either way, because fuses tick after the unit loop.
+	var t1 := _ticks_to_blast(1)
+	var t6 := _ticks_to_blast(6)
+	_check("a tier 1 keg takes about twenty ticks to go off", absi(t1 - 19) <= 1,
+		"tick %d" % t1)
+	_check("a tier 6 keg goes off in under eight", t6 >= 0 and absi(t6 - 6) <= 1,
+		"tick %d" % t6)
+
+
+func _walk_stage() -> Dictionary:
+	## A keg with open ground between it and the only enemy, so a lit keg has
+	## somewhere to walk. The enemy is frozen in place so the target holds still,
+	## a frozen friend is planted on the tile behind the keg so the blast can be
+	## shown to MISS where it died, and a loose friend stands beside it to run.
+	BoardModel.reset_map()
+	var b := BoardModel.new()
+	var keg := UnitInstance.create(
+		BoardModel.at_tier(_must_find("powderkeg"), 3), BoardModel.TEAM_A)
+	b.force_place(keg, Vector2i(2, 2))
+	var mark := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 2), BoardModel.TEAM_B)
+	b.force_place(mark, Vector2i(2, 9))
+	var behind := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 2), BoardModel.TEAM_A)
+	b.force_place(behind, Vector2i(2, 1))
+	var runner := UnitInstance.create(
+		BoardModel.at_tier(_must_find("warden"), 2), BoardModel.TEAM_A)
+	b.force_place(runner, Vector2i(1, 2))
+	b.force_place(UnitInstance.create(
+		BoardModel.at_tier(_must_find("spire"), 1), BoardModel.TEAM_A),
+		Vector2i(5, 0))
+	var sim := CombatSim.new()
+	sim.crit_chance = 0.0
+	return {sim = sim, board = b, keg = keg, mark = mark, behind = behind,
+		runner = runner}
+
+
+func _test_a_lit_keg_walks() -> void:
+	_section("The Powderkeg: a lit keg keeps walking, and goes off where it stands")
+
+	var stage := _walk_stage()
+	var sim: CombatSim = stage.sim
+	var bomb: UnitInstance = stage.keg
+	sim.setup(stage.board, 4242)
+	_hold_still([stage.mark, stage.behind])
+	var died_on := bomb.cell
+	sim._damage(bomb, 99999.0, stage.mark, true, false)
+	_check("the keg is lit", bomb.is_fusing())
+	var lit_at := sim.events.size()
+	var path: Array[Vector2i] = [bomb.cell]
+	var targetable := false
+	var healed := false
+	var blast_at := Vector2i(-1, -1)
+	var blast_cells: Array = []
+	var last_cell := bomb.cell
+	for i in 40:
+		sim.step()
+		if bomb.is_fusing():
+			if bomb.cell != path[path.size() - 1]:
+				path.append(bomb.cell)
+			if not bomb.is_untargetable():
+				targetable = true
+			bomb.heal(500.0)
+			if bomb.current_hp > 0.0:
+				healed = true
+			last_cell = bomb.cell
+		if blast_at.x < 0:
+			for j in range(lit_at, sim.events.size()):
+				var e: Dictionary = sim.events[j]
+				if e.kind == "detonate" and int(e.get("uid", -1)) == bomb.uid:
+					blast_at = e.cell
+					blast_cells = e.cells
+		if blast_at.x >= 0:
+			break
+	_check("it walks while the fuse burns", path.size() >= 3,
+		"path %s" % [path])
+	_check("toward the enemy it was fighting",
+		BoardModel.tile_distance(last_cell, stage.mark.cell)
+			< BoardModel.tile_distance(died_on, stage.mark.cell),
+		"from %s to %s" % [died_on, last_cell])
+	_check("and stays untargetable the whole way", not targetable)
+	_check("and unhealable the whole way", not healed)
+	var swung := 0
+	var moves := 0
+	var square_moved := false
+	for j in range(lit_at, sim.events.size()):
+		var e: Dictionary = sim.events[j]
+		if int(e.get("uid", -1)) != bomb.uid:
+			continue
+		if e.kind == "attack" or e.kind == "cast_start" or e.kind == "wall_hit":
+			swung += 1
+		if e.kind == "move":
+			moves += 1
+		if e.kind == "fuse_move" and e.cell != died_on:
+			var cells: Array = e.get("cells", [])
+			square_moved = cells.has(e.cell) and not cells.has(died_on + Vector2i(0, -1))
+	_check("it swings at nothing on the way", swung == 0, "%d swings" % swung)
+	_check("the view is told about every step", moves == path.size() - 1,
+		"%d moves for %d steps" % [moves, path.size() - 1])
+	_check("and the warning square goes with it", square_moved)
+	_check("it goes off", blast_at.x >= 0, "never detonated")
+	_check("on the tile it walked to, not the one it died on",
+		blast_at == last_cell and blast_at != died_on,
+		"blast at %s, died on %s, ended on %s" % [blast_at, died_on, last_cell])
+	_check("the blast square is centred on that tile",
+		blast_cells.has(blast_at) and blast_cells.size() == 9,
+		"%d cells" % blast_cells.size())
+	var hit_behind := false
+	for j in range(lit_at, sim.events.size()):
+		var e: Dictionary = sim.events[j]
+		if e.kind == "damage" and int(e.get("source_uid", -1)) == bomb.uid \
+				and int(e.uid) == stage.behind.uid:
+			hit_behind = true
+	_check("so the frozen ally it left behind is not caught", not hit_behind)
+
+	# Frozen solid it stands still. A freeze at the moment of death still defuses it
+	# outright, which _test_powderkeg_once covers; one landing after it is lit pins it.
+	var iced := _walk_stage()
+	var sim2: CombatSim = iced.sim
+	var pinned: UnitInstance = iced.keg
+	sim2.setup(iced.board, 4343)
+	_hold_still([iced.mark, iced.behind])
+	sim2._damage(pinned, 99999.0, iced.mark, true, false)
+	pinned.frozen_left = 5.0
+	var pinned_at := pinned.cell
+	for i in 10:
+		sim2.step()
+	_check("a lit keg that is frozen does not walk", pinned.cell == pinned_at,
+		"%s from %s" % [pinned.cell, pinned_at])
+
+
+func _test_runners_track_a_walking_keg() -> void:
+	_section("The Powderkeg: runners run from where the keg is, not where it fell")
+
+	var stage := _walk_stage()
+	var sim: CombatSim = stage.sim
+	var bomb: UnitInstance = stage.keg
+	var runner: UnitInstance = stage.runner
+	sim.setup(stage.board, 5151)
+	_hold_still([stage.mark, stage.behind])
+	sim._damage(bomb, 99999.0, stage.mark, true, false)
+	_check("the friend beside it runs", runner.is_fleeing())
+	var flee_event := {}
+	for e in sim.events:
+		if e.kind == "flee" and int(e.get("uid", -1)) == runner.uid:
+			flee_event = e
+	_check("and the flee event names the keg, so the view can follow it",
+		int(flee_event.get("bomb_uid", -1)) == bomb.uid)
+
+	# The step itself, in isolation. Move the lit keg by hand to the far side of the
+	# runner and let the runner take one step: it must go AWAY from where the keg is
+	# now, which is back TOWARD the tile it died on.
+	var died_on := bomb.cell
+	stage.board.move_unit(bomb, Vector2i(0, 2))
+	runner.state = UnitInstance.State.IDLE
+	sim._flee_step(runner)
+	_check("its idea of where the keg is follows the keg",
+		runner.flee_from == Vector2i(0, 2), "running from %s" % runner.flee_from)
+	_check("so it steps away from the keg, not from where it fell",
+		_square_gap(runner.cell, Vector2i(0, 2)) > 1,
+		"stepped to %s, keg on %s, fell on %s" % [runner.cell, bomb.cell, died_on])
+
+	# The whole fuse, in the sim. At some point the runner is aiming at a tile the keg
+	# walked to, not the one it fell on.
+	var again := _walk_stage()
+	var sim2: CombatSim = again.sim
+	var keg2: UnitInstance = again.keg
+	var run2: UnitInstance = again.runner
+	sim2.setup(again.board, 5252)
+	_hold_still([again.mark, again.behind])
+	var fell := keg2.cell
+	sim2._damage(keg2, 99999.0, again.mark, true, false)
+	var seen: Array[Vector2i] = []
+	var followed := false
+	for i in 14:
+		sim2.step()
+		if keg2.is_fusing():
+			seen.append(keg2.cell)
+			if run2.flee_from != fell and run2.flee_from == keg2.cell:
+				followed = true
+	_check("over a whole fuse the runner keeps re-aiming at the walking keg", followed,
+		"keg %s, runner from %s" % [seen, run2.flee_from])
+
+	# The chevrons. A UnitView told who it is running from re-aims every frame off the
+	# two nodes' positions, so it keeps pointing away from a keg that walks.
+	var keg_view := UnitView.new()
+	keg_view.unit = UnitInstance.create(_find("powderkeg"), BoardModel.TEAM_A)
+	keg_view.begin_fuse(2.0)
+	var run_view := UnitView.new()
+	run_view.unit = UnitInstance.create(_find("warden"), BoardModel.TEAM_A)
+	run_view.position = Vector2.ZERO
+	keg_view.position = Vector2(100, 0)
+	run_view.begin_fleeing(2.0, Vector2(-1, 0), keg_view)
+	_check("the chevrons start out pointing away from the keg",
+		run_view.fleeing_dir.is_equal_approx(Vector2(-1, 0)), "%s" % run_view.fleeing_dir)
+	keg_view.position = Vector2(0, 100)
+	run_view._process(0.016)
+	_check("and swing round when the keg walks", run_view.fleeing_dir.is_equal_approx(
+		Vector2(0, -1)), "%s" % run_view.fleeing_dir)
+	keg_view.end_fuse()
+	keg_view.position = Vector2(-100, 0)
+	run_view._process(0.016)
+	_check("then hold their last heading once it has gone off",
+		run_view.fleeing_dir.is_equal_approx(Vector2(0, -1)), "%s" % run_view.fleeing_dir)
+	keg_view.free()
+	run_view.free()
+
+
+func _test_every_ability_has_an_icon() -> void:
+	_section("Every ability has an icon of its own")
+
+	# Its OWN, by id, not the by-kind fallback: the fallback is there so a new ability
+	# shows something on day one, not so it can ship without one. Read off the units
+	# rather than the abilities folder, which can hold a file no unit uses any more.
+	var unlisted: Array[String] = []
+	var dir := DirAccess.open("res://data/units")
+	var counted := {}
+	for f in dir.get_files():
+		if not f.ends_with(".tres"):
+			continue
+		var d := load("res://data/units/" + f) as UnitData
+		if d == null or d.ability == null or counted.has(d.ability.id):
+			continue
+		counted[d.ability.id] = true
+		if not AbilityFx.GLYPHS.has(d.ability.id):
+			unlisted.append(String(d.ability.id))
+	var seen := counted.size()
+	_check("there are abilities on disk", seen >= 20, "%d" % seen)
+	_check("and every one of them has its own icon", unlisted.is_empty(),
+		", ".join(unlisted))
+
+	# Every icon named anywhere is one the layer can actually draw. An unknown name
+	# falls through to a plain star, which would pass every other check and still be
+	# the wrong picture.
+	var unknown: Array[String] = []
+	for id in AbilityFx.GLYPHS:
+		var shape := String(AbilityFx.GLYPHS[id][0])
+		if not AbilityFx.SHAPES.has(shape):
+			unknown.append("%s -> %s" % [id, shape])
+	for k in AbilityData.Kind.values():
+		var shape := AbilityFx.glyph_for(&"", k)
+		if not AbilityFx.SHAPES.has(shape) or not AbilityFx.KIND_GLYPHS.has(k):
+			unknown.append("kind %d -> %s" % [k, shape])
+	_check("every icon named is one that can be drawn, and every kind has a fallback",
+		unknown.is_empty(), ", ".join(unknown))
+	_check("the Warden's is a shield", AbilityFx.glyph_of(_must_find("warden").ability)
+		== "shield", AbilityFx.glyph_of(_must_find("warden").ability))
+	_check("and the Lancer's is a spear", AbilityFx.glyph_of(_must_find("lancer").ability)
+		== "spear", AbilityFx.glyph_of(_must_find("lancer").ability))
+	_check("two abilities of one kind can look different",
+		AbilityFx.glyph_for(&"cinder_lance", AbilityData.Kind.FOCUS_BURST)
+		!= AbilityFx.glyph_for(&"execute", AbilityData.Kind.FOCUS_BURST))
+
+	# The layer itself: an icon arrives, lives for its span, and goes.
+	var fx := AbilityFx.new()
+	fx.glyph("shield", Vector2(10, 10), Color.WHITE, 0.5)
+	fx.lance(Vector2.ZERO, Vector2(0, -100), Color.WHITE, 0.5)
+	_check("an icon and a spear are queued", fx.count() == 2, "%d" % fx.count())
+	fx._process(0.3)
+	_check("still there part way through", fx.count() == 2, "%d" % fx.count())
+	fx._process(0.3)
+	_check("and gone once their time is up", fx.count() == 0, "%d" % fx.count())
+	_check("the layer draws above the units", fx.z_index > 0, "z %d" % fx.z_index)
+	fx.free()
+
+	# The sim end of it: an ability event says which KIND of ability it was. It used to
+	# lose that to the event type, so the view drew every ability as a Haste.
+	var sim := CombatSim.new()
+	sim._emit("ability", {uid = 1, ability = &"impale", kind = AbilityData.Kind.PIERCE})
+	var sent: Dictionary = sim.events[0]
+	_check("an ability event keeps the ability's kind",
+		sent.kind == "ability" and int(sent.get("ability_kind", -1)) == AbilityData.Kind.PIERCE,
+		"%s" % sent)

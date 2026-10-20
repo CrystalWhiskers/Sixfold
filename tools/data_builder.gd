@@ -847,7 +847,7 @@ const UNIT_TABLE := [
 		move = 0.40, range = "MELEE", sight = 4, type = "MELEE",
 		accent = Color(0.82, 0.58, 0.24),
 		ability = &"slow_match", mana = 0.0,
-		note = "A walking mistake waiting to happen, to whoever is nearest when it goes. Killing it is the easy part and also the problem: it lies there for a second and a half with the fuse burning, and then it takes a three-by-three square of board with it — yours, theirs, it does not read banners. Everything close enough to be hurt turns and runs the moment it starts ticking, which is most of what you are buying: it does not have to kill anything to break a line in half. Freeze it and the fuse never lights at all.",
+		note = "A walking mistake waiting to happen, to whoever is nearest when it goes. Killing it is the easy part and also the problem: it gets back up with the fuse burning and keeps walking at you — longer at tier 1, barely a breath at tier 6 — and then it takes a three-by-three square of board with it — yours, theirs, it does not read banners. Everything close enough to be hurt turns and runs the moment it starts ticking, which is most of what you are buying: it does not have to kill anything to break a line in half. Freeze it and the fuse never lights at all.",
 	},
 	{
 		id = &"wisp", name = "Wisp", hp = 38.0, dmg = 5.0, spd = 1.3,
@@ -1046,12 +1046,18 @@ const ABILITY_TABLE := [
 	},
 	{
 		id = &"slow_match", name = "Slow Match", kind = "DETONATE", cast_time = 0.0,
-		desc = "It has no bar and nothing to spend. Killing it lights the fuse instead: it lies where it fell for a second and a half, and then a three-by-three square of board goes up — friend, enemy, whatever was standing there. Everything within two tiles turns and runs the moment it starts ticking, and a unit with a wall at its back does not get out. Freezing it defuses it outright.",
-		# 1.5s is the window everything else hangs off. Shorter and nothing gets clear,
-		# which makes the flee a decoration; much longer and the board has rearranged
-		# itself so completely by the time it lands that the blast is decided by traffic
-		# rather than by where the unit chose to die.
+		desc = "It has no bar and nothing to spend. Killing it lights the fuse instead: it keeps walking at the nearest enemy, untouchable, for two seconds at tier 1 down to three quarters of a second at tier 6, and then a three-by-three square of board goes up wherever it has got to — friend, enemy, whatever was standing there. Everything within two tiles turns and runs from it the moment it starts ticking, and a unit with a wall at its back does not get out. Freezing it defuses it outright.",
+		# 1.5s is the window everything else hangs off, and it is where tier 3 sits.
+		# Shorter and nothing gets clear, which makes the flee a decoration; much longer
+		# and the board has rearranged itself so completely by the time it lands that the
+		# blast is decided by traffic rather than by where the unit chose to die.
+		#
+		# Per tier, a quarter of a second apiece: the low tiers had too long a window to
+		# catch anything and the top two had a blast big enough not to need catching, so
+		# the fuse is the dial that moves both ends toward the middle. fuse_seconds stays
+		# as the fallback for anything that does not read the table.
 		fuse_seconds = 1.5,
+		fuse_seconds_by_tier = [2.0, 1.75, 1.5, 1.25, 1.0, 0.75],
 		# 7 damage a swing x 5.0 x tier is 35 at tier 1 and 210 at tier 6, before any
 		# buff, to every tile in the square. Measured, not guessed — see the numbers in
 		# the report. It reads high next to a swing because it is the only thing the
@@ -1480,6 +1486,10 @@ func _make_abilities() -> Dictionary:
 				"blast_gold_range", "flee_margin"]:
 			if row.has(key):
 				a.set(key, row[key])
+		# A plain array in the table, because a const table cannot hold a packed one;
+		# converted here so the resource carries the type its export declares.
+		if row.has("fuse_seconds_by_tier"):
+			a.fuse_seconds_by_tier = PackedFloat32Array(row.fuse_seconds_by_tier)
 		_save(a, "%s/%s.tres" % [ABILITY_DIR, row.id])
 		out[row.id] = a
 	return out

@@ -16,6 +16,6 @@ move_time = 0.64
 ability = ExtResource("1_vtcye")
 mana_per_attack = 0.0
 next_tier = ExtResource("2_fjg3q")
-note = "A walking mistake waiting to happen, to whoever is nearest when it goes. Killing it is the easy part and also the problem: it lies there for a second and a half with the fuse burning, and then it takes a three-by-three square of board with it — yours, theirs, it does not read banners. Everything close enough to be hurt turns and runs the moment it starts ticking, which is most of what you are buying: it does not have to kill anything to break a line in half. Freeze it and the fuse never lights at all."
+note = "A walking mistake waiting to happen, to whoever is nearest when it goes. Killing it is the easy part and also the problem: it gets back up with the fuse burning and keeps walking at you — longer at tier 1, barely a breath at tier 6 — and then it takes a three-by-three square of board with it — yours, theirs, it does not read banners. Everything close enough to be hurt turns and runs the moment it starts ticking, which is most of what you are buying: it does not have to kill anything to break a line in half. Freeze it and the fuse never lights at all."
 sprite = ExtResource("4_xftvm")
 accent = Color(0.82, 0.58, 0.24, 1)

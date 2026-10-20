@@ -4,7 +4,8 @@ A merge autobattler on a 6×11 board with a neutral centre row. Built for **Godo
 
 Open `project.godot` in Godot and press F5. You land on a **menu**: battle the
 computer, play local PvP on one screen, or edit both sides' loadouts. Placeholder
-coloured blocks instead of art, for now.
+coloured blocks instead of art, for now — the portraits are off by default; turn
+them on under Settings.
 
 Each prep phase your units are **summoned straight onto the board** — there's no
 tray to place them from. You rearrange by dragging: onto an empty tile to move,
@@ -718,6 +719,44 @@ in flight, so a unit killed mid-wind-up doesn't die with a ring around it.
 If you want the animation longer or shorter, `MIN_CAST_SHOW` sets the floor for
 openers and `AbilityData.cast_time` sets it for everything else — and `cast_time`
 is a **real simulation cost**, so lengthening it is a nerf, not a visual tweak.
+
+## Every ability shows what it did
+
+A label says *that* something happened. `AbilityFx` (`scripts/view/ability_fx.gd`)
+shows *what* and *to whom*: every ability has its own icon that pops over the unit
+when it fires — a shield over the Warden, a spear over the Lancer, a snowflake over
+the Stasis **and** over whoever it froze — and the abilities with a shape get the
+shape too:
+
+- **Impale** throws a spear from the Lancer through every unit it pierced and out
+  the far side, with a hit marked on each.
+- **Bulwark, Quickdraw, Retribution, War Horn, Overflow, Last Stand** send a ring
+  out from (or, for the taunt, in toward) the caster.
+- **Siphon** draws a tether from the victim *to* the Leech; **Benediction** from the
+  Seraph to the one it healed; **Usurpation** to the host.
+- **Shadowstep** leaves a streak from where the Assassin was to where it landed;
+  **Onslaught** shows its icon as the Breaker sets off and a burst where it hits.
+- Ground abilities (**Undermine, Emplace, Lament**, the summons) mark each tile.
+- The passives show on their own events: the Martyr's broken heart when the window
+  opens, the Powderkeg's bomb for the length of its fuse, the Revenant's wings as it
+  rises.
+
+The icons and colours live in one table, `AbilityFx.GLYPHS`, keyed by ability **id**
+(the Pyre's Cinder Lance and the Reaver's Execute share a kind and should not share
+a picture). An ability missing from it falls back to an icon for its kind, and
+`run_tests.gd` fails until it gets its own. The layer is its own node with a raised
+`z_index`, because `BoardView`'s drawing sits *under* the unit views.
+
+To look at all of them at once, run (with a window, not headless):
+
+```
+godot --path . --script res://tools/icon_gallery.gd    # writes user://icon_gallery.png
+```
+
+One fix rode along: `CombatSim._emit()` writes the event type into `kind`, which
+overwrote the ability kind every `"ability"` event carried in the same key — so the
+view read `int("ability")`, got 0, and drew every ability as a Haste. The kind is
+now kept as `ability_kind` and the view reads that.
 
 ---
 

@@ -31,8 +31,8 @@ const TIER_COLORS: Array[Color] = [
 ## happened when this was tried the other way round.
 ##
 ## GameSetup owns the SETTING and writes it down to here; this is where the
-## drawing reads it.
-static var portraits_on := true
+## drawing reads it. Off by default, matching GameSetup.portraits.
+static var portraits_on := false
 
 
 static func portrait_for(d: UnitData) -> Texture2D:
@@ -116,6 +116,10 @@ var fleeing_t := 0.0
 ## way, so a glance at a scattering line shows where the danger is without looking for
 ## the keg itself.
 var fleeing_dir := Vector2.DOWN
+## The keg it is running from, while that keg is still burning. A lit keg walks, so
+## the direction is re-read off both nodes every frame; once the keg has gone off (or
+## its node is gone) the last direction stands.
+var fleeing_from: UnitView = null
 
 ## Whether an Usurper is currently inside this unit.
 ##
@@ -221,6 +225,7 @@ func _process(delta: float) -> void:
 	if fleeing:
 		fleeing_secs -= delta
 		fleeing_t = fmod(fleeing_t + delta * 7.0, TAU)
+		_track_keg()
 		if fleeing_secs <= 0.0:
 			end_fleeing()
 		queue_redraw()
@@ -324,19 +329,35 @@ func end_fuse() -> void:
 	queue_redraw()
 
 
-func begin_fleeing(seconds: float, away := Vector2.ZERO) -> void:
+func begin_fleeing(seconds: float, away := Vector2.ZERO, from: UnitView = null) -> void:
 	if seconds <= 0.0:
 		return
 	fleeing = true
 	fleeing_secs = seconds
+	fleeing_from = from if from != self else null
 	if away.length() > 0.01:
 		fleeing_dir = away.normalized()
+	_track_keg()
 	queue_redraw()
+
+
+func _track_keg() -> void:
+	## Points the chevrons away from where the keg is NOW, positions and all, so a keg
+	## mid-stride and a runner mid-stride still read correctly against each other.
+	if fleeing_from == null:
+		return
+	if not is_instance_valid(fleeing_from) or not fleeing_from.fusing:
+		fleeing_from = null
+		return
+	var d := position - fleeing_from.position
+	if d.length() > 0.01:
+		fleeing_dir = d.normalized()
 
 
 func end_fleeing() -> void:
 	fleeing = false
 	fleeing_secs = 0.0
+	fleeing_from = null
 	queue_redraw()
 
 
@@ -653,7 +674,7 @@ func _draw() -> void:
 				Color(1.00, 0.46, 0.30, 0.9 * alpha), 2.5)
 
 	if fusing:
-		# A body on the floor with a clock in it. Two things have to read at a glance:
+		# A body with a clock in it, still walking. Two things have to read at a glance:
 		# that this tile is about to become lethal, and roughly how long you have.
 		var left: float = clampf(fuse_secs / maxf(fuse_total, 0.01), 0.0, 1.0)
 		var blink: float = 0.5 + 0.5 * sin(fuse_t)

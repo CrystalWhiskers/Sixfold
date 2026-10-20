@@ -41,6 +41,9 @@ var _hp: Dictionary = {}
 var _moves: Dictionary = {}
 var _lunges: Dictionary = {}
 var _flight: Dictionary = {}
+## Each lit keg's warning square, by keg uid. Held so a keg that walks on its fuse
+## drags its square with it — see "fuse_move".
+var _fuse_marks: Dictionary = {}
 var _deferred: Array[Dictionary] = []
 var _counts: Array[int] = [0, 0]
 
@@ -78,6 +81,7 @@ func play(view: BoardView, events: Array[Dictionary], units := {}) -> void:
 	_moves.clear()
 	_lunges.clear()
 	_flight.clear()
+	_fuse_marks.clear()
 	_deferred.clear()
 	_hold = 0.0
 	_counts = [0, 0]
@@ -250,6 +254,9 @@ func _apply(e: Dictionary) -> void:
 			var warn := float(e.get("per_tile", 0.0)) * float(lane.size())
 			_view.flash_cells(lane, Color(0.98, 0.62, 0.28, 0.42),
 				maxf(warn / maxf(speed, 0.01), 0.45))
+			var horns := _ability_of(int(e.uid))
+			if horns != null:
+				_icon_over(int(e.uid), e.from, horns.id, horns.kind, maxf(warn, 0.6))
 		"charge_step":
 			# One tile of the run. Linear on purpose: a charge has no wind-up and no
 			# settle, and easing each tile would make it look like it kept changing its
@@ -329,6 +336,20 @@ func _apply(e: Dictionary) -> void:
 				maxf(float(e.seconds), 0.4))
 			_view.spawn_label(_at(int(e.uid), e.cell), "NOTHING TO LOSE",
 				Color(1.00, 0.44, 0.34))
+			var martyr := _ability_of(int(e.uid))
+			if martyr != null:
+				_icon_over(int(e.uid), e.cell, martyr.id, martyr.kind,
+					maxf(float(e.seconds), 0.8), true)
+		"reflect":
+			# The Aegis sending a blow back: its icon over the Aegis, and the hit
+			# visibly travelling back the way it came.
+			var mirror := _ability_of(int(e.uid))
+			if mirror != null:
+				_icon_over(int(e.uid), e.cell, mirror.id, mirror.kind, 0.6)
+				var back_from := _at(int(e.uid), e.cell)
+				var back_to := _at(int(e.get("target_uid", -1)), e.cell)
+				_view.effects().streak(back_from, back_to,
+					AbilityFx.color_for(mirror.id), _fx_life(0.3))
 		"disorient":
 			var dzv := _view.view_for(int(e.uid))
 			if dzv != null:
@@ -355,25 +376,47 @@ func _apply(e: Dictionary) -> void:
 				fuv.begin_fuse(float(e.seconds) / maxf(speed, 0.01))
 			# Held for the whole fuse, so the ground you must not be standing on is
 			# marked for exactly as long as that is true.
-			_view.flash_cells(_cells_of(e), Color(1.00, 0.52, 0.16, 0.30),
-				maxf(float(e.seconds), 0.4))
+			var keg := _ability_of(int(e.uid))
+			if keg != null:
+				_icon_over(int(e.uid), e.cell, keg.id, keg.kind, float(e.seconds))
+			_fuse_marks[int(e.uid)] = _view.flash_cells(_cells_of(e),
+				Color(1.00, 0.52, 0.16, 0.30), maxf(float(e.seconds), 0.4))
 			_view.spawn_label(_at(int(e.uid), e.cell), "FUSE LIT",
 				Color(1.00, 0.68, 0.28))
+		"fuse_move":
+			# The keg walks while it burns, and the ground to stay off goes with it.
+			# Repointed rather than redrawn so the square keeps its own clock.
+			var mark: Dictionary = _fuse_marks.get(int(e.uid), {})
+			if not mark.is_empty():
+				mark.cells = _cells_of(e).duplicate()
+				_view.queue_redraw()
 		"detonate":
 			var dtv := _view.view_for(int(e.uid))
 			if dtv != null:
 				dtv.end_fuse()
+			# The warning is over the moment the real thing lands.
+			var spent: Dictionary = _fuse_marks.get(int(e.uid), {})
+			if not spent.is_empty():
+				spent.left = 0.0
+			_fuse_marks.erase(int(e.uid))
 			_view.flash_cells(_cells_of(e), Color(1.00, 0.78, 0.36, 0.72), 0.45)
+			_view.effects().ring(_view.cell_to_pos(e.cell), _view.tile_size * 0.3,
+				_view.tile_size * 1.6, Color(1.00, 0.70, 0.30), _fx_life(0.5))
+			_view.effects().impact(_view.cell_to_pos(e.cell), Color(1.00, 0.84, 0.44),
+				_fx_life(0.45))
 			_view.spawn_label(_view.cell_to_pos(e.cell), "BOOM",
 				Color(1.00, 0.84, 0.44))
 		"flee":
 			var flv := _view.view_for(int(e.uid))
 			if flv != null:
 				# Away from the bomb, so the mark can point the way the unit is going.
+				# Handed the keg's own node too: a lit keg walks, and the mark follows
+				# it frame by frame rather than pointing at the tile it died on.
 				var cell_now: Vector2i = e.cell
 				var bomb_at: Vector2i = e.get("from", cell_now)
 				flv.begin_fleeing(float(e.seconds) / maxf(speed, 0.01),
-					Vector2(cell_now - bomb_at))
+					Vector2(cell_now - bomb_at),
+					_view.view_for(int(e.get("bomb_uid", -1))))
 		"flee_end":
 			var fnv := _view.view_for(int(e.uid))
 			if fnv != null:
@@ -448,6 +491,8 @@ func _apply(e: Dictionary) -> void:
 			_view.spawn_label(_view.cell_to_pos(e.to), "THROUGH",
 				Color(0.62, 0.90, 0.94))
 		"blink":
+			_view.effects().streak(_view.cell_to_pos(e.from), _view.cell_to_pos(e.to),
+				AbilityFx.color_for(&"shadowstep"), _fx_life(0.35))
 			_pos[e.uid] = _board(e.to)
 			_moves.erase(e.uid)
 			_view.flash_cells([e.from, e.to], Color(0.55, 0.42, 0.78, 0.55), 0.4)
@@ -456,8 +501,11 @@ func _apply(e: Dictionary) -> void:
 		"summon":
 			_summon(e)
 		"respawn_start":
+			_icon_at_revive(e, 1.2)
 			_schedule_revive(e)
 		"respawn":
+			_view.effects().ring(_view.cell_to_pos(e.cell), _view.tile_size * 0.2,
+				_view.tile_size * 0.8, AbilityFx.color_for(&"second_wind"), _fx_life(0.6))
 			_respawn(e)
 		"mana":
 			var mv := _view.view_for(e.uid)
@@ -583,7 +631,8 @@ func _schedule_death(e: Dictionary) -> void:
 
 func _show_ability(e: Dictionary) -> void:
 	var at := _at(int(e.uid), e.cell)
-	match int(e.kind):
+	_ability_fx(e)
+	match int(e.get("ability_kind", -1)):
 		AbilityData.Kind.HASTE:
 			_view.spawn_label(at, "CAST", Color(0.98, 0.85, 0.42))
 		AbilityData.Kind.SHIELD:
@@ -928,3 +977,143 @@ func _place_views() -> void:
 			var amount: float = maxf(l.left, 0.0) / LUNGE_TIME
 			p += l.dir * ATTACK_LUNGE * _view.tile_size * amount
 		v.position = p
+
+
+# --- ability icons and shapes -------------------------------------------------------
+#
+# What each ability looked like, on top of the labels and flashed tiles above. A label
+# says THAT something happened; these say what and to whom — a shield over the Warden
+# that raised it, a spear running through every unit the Lancer pierced. The icons and
+# their colours live in AbilityFx so that one table answers "what does this ability
+# look like" for every caller.
+
+func _fx_life(sim_seconds: float) -> float:
+	## Playback seconds for a span of simulation time, so effects keep pace at 2x.
+	return sim_seconds / maxf(speed, 0.01)
+
+
+func _icon_over(uid: int, cell: Vector2i, id: StringName, kind: int,
+		life := AbilityFx.GLYPH_LIFE, big := false) -> void:
+	## The ability's own icon, popped over a unit and riding along with it if it moves.
+	var fx := _view.effects()
+	fx.glyph(AbilityFx.glyph_for(id, kind), _at(uid, cell), AbilityFx.color_for(id),
+		_fx_life(life), _view.view_for(uid), big)
+
+
+func _icon_at(cell: Vector2i, id: StringName, kind: int,
+		life := AbilityFx.GLYPH_LIFE) -> void:
+	## The same icon, on a tile rather than a unit — for ground that was struck,
+	## raised or built on.
+	_view.effects().glyph(AbilityFx.glyph_for(id, kind), _view.cell_to_pos(cell),
+		AbilityFx.color_for(id), _fx_life(life))
+
+
+func _ability_fx(e: Dictionary) -> void:
+	## Every resolved ability gets its icon over the caster, and the ones with a shape
+	## get the shape. Wasted casts get neither: their label already says nothing
+	## happened, and an icon would say the opposite.
+	if bool(e.get("wasted", false)):
+		return
+	var fx := _view.effects()
+	var uid := int(e.uid)
+	var id: StringName = e.get("ability", &"")
+	var kind := int(e.get("ability_kind", -1))
+	var col := AbilityFx.color_for(id)
+	var at := _at(uid, e.cell)
+	var target_uid := int(e.get("target_uid", -1))
+	var has_target := e.has("target_cell")
+	var target_at := Vector2.ZERO
+	if has_target:
+		target_at = _at(target_uid, e.target_cell) if target_uid >= 0 \
+			else _view.cell_to_pos(e.target_cell)
+	var cells: Array = e.get("cells", [])
+	# The charge put its icon up when it set off; on the hit it gets the impact only.
+	if kind != AbilityData.Kind.CHARGE:
+		_icon_over(uid, e.cell, id, kind, AbilityFx.GLYPH_LIFE,
+			kind == AbilityData.Kind.ASCEND and not bool(e.get("armed", false)))
+	match kind:
+		AbilityData.Kind.SHIELD:
+			# The shield goes up around the unit, not just over its head.
+			fx.ring(at, _view.tile_size * 0.25, _view.tile_size * 0.7, col, _fx_life(0.5))
+		AbilityData.Kind.HASTE:
+			fx.ring(at, _view.tile_size * 0.2, _view.tile_size * 0.55, col, _fx_life(0.35))
+		AbilityData.Kind.PIERCE:
+			# The spear, thrown through every unit it hit, furthest last. Aimed at the
+			# furthest victim rather than the first so the line it draws is the line
+			# the damage took — that is what "pierces through two" has to look like.
+			var far := target_at
+			var best := -1.0
+			for c in cells:
+				var p := _view.cell_to_pos(c)
+				if p.distance_to(at) > best:
+					best = p.distance_to(at)
+					far = p
+			if best >= 0.0 or has_target:
+				fx.lance(at, far, col, _fx_life(0.5))
+			for c in cells:
+				fx.impact(_view.cell_to_pos(c), col, _fx_life(0.35))
+		AbilityData.Kind.DOT, AbilityData.Kind.FREEZE, AbilityData.Kind.DISORIENT:
+			# Cast AT somebody: the icon goes on the victim as well, so you can see who
+			# is now poisoned, frozen or lost without matching up a tile flash.
+			if has_target:
+				if target_uid >= 0:
+					_icon_over(target_uid, e.target_cell, id, kind, 1.2)
+				else:
+					_icon_at(e.target_cell, id, kind, 1.2)
+		AbilityData.Kind.FOCUS_BURST, AbilityData.Kind.BLINK_STRIKE:
+			if has_target:
+				_icon_at(e.target_cell, id, kind)
+				fx.impact(target_at, col, _fx_life(0.4))
+		AbilityData.Kind.SPEED_AURA, AbilityData.Kind.MANA_AURA:
+			var reach := float(int(e.get("radius", 1))) + 0.5
+			fx.ring(at, _view.tile_size * 0.3, _view.tile_size * reach, col, _fx_life(0.7))
+		AbilityData.Kind.TAUNT:
+			var pull := float(int(e.get("radius", 1))) + 0.5
+			fx.ring(at, _view.tile_size * pull, _view.tile_size * 0.4, col, _fx_life(0.6))
+		AbilityData.Kind.REFLECT:
+			fx.ring(at, _view.tile_size * 0.3, _view.tile_size * 0.65, col, _fx_life(0.5))
+		AbilityData.Kind.BURST_HEAL:
+			if has_target:
+				fx.tether(at, target_at, col, _fx_life(0.6), _view.view_for(uid))
+				for c in cells:
+					_icon_at(c, id, kind, 0.8)
+		AbilityData.Kind.DRAIN:
+			# From the victim to the drinker: the direction is the whole ability.
+			if has_target:
+				fx.tether(target_at, at, col, _fx_life(1.0), null, _view.view_for(uid))
+				_icon_at(e.target_cell, id, kind)
+		AbilityData.Kind.POSSESS:
+			if has_target:
+				fx.tether(at, target_at, col, _fx_life(0.5))
+				_icon_at(e.target_cell, id, kind, 1.2)
+		AbilityData.Kind.SUMMON, AbilityData.Kind.RAISE, AbilityData.Kind.SAP, \
+				AbilityData.Kind.BUILD:
+			# Ground that something happened to: each tile gets the icon.
+			for c in cells:
+				_icon_at(c, id, kind, 0.8)
+		AbilityData.Kind.SHELL:
+			if has_target:
+				_icon_at(e.target_cell, id, kind, 0.9)
+		AbilityData.Kind.CHARGE:
+			if has_target:
+				fx.impact(target_at, col, _fx_life(0.45))
+		AbilityData.Kind.ASCEND:
+			if not bool(e.get("armed", false)):
+				fx.ring(at, _view.tile_size * 0.3, _view.tile_size * 0.9, col, _fx_life(0.7))
+
+
+func _ability_of(uid: int) -> AbilityData:
+	var u: UnitInstance = _units.get(uid, null)
+	if u == null or u.data == null:
+		return null
+	return u.data.ability
+
+
+func _icon_at_revive(e: Dictionary, life: float) -> void:
+	## The revive's icon over the body that is about to get up. Whatever brought it
+	## back, it is drawn as a revive, so a unit rising always reads the same way.
+	var own := _ability_of(int(e.uid))
+	var id: StringName = &"second_wind"
+	if own != null and own.kind == AbilityData.Kind.REVIVE:
+		id = own.id
+	_icon_at(e.cell, id, AbilityData.Kind.REVIVE, life)

@@ -192,7 +192,8 @@ var disorient_immune_after: float = 0.0
 ##
 ## `fuse_left` is seconds between the killing blow and the blast. Like the Martyr's
 ## window it is a unit standing at zero health that is not dead yet — but unlike the
-## Martyr it does nothing at all while it burns. It is a corpse with a clock in it.
+## Martyr it cannot fight while it burns. It walks at the nearest enemy and does nothing
+## else: a corpse with a clock in it, on its feet.
 ## `fuse_spent` makes it once per round, the same job frenzy_spent does.
 var fuse_left: float = 0.0
 var fuse_spent: bool = false
@@ -208,6 +209,10 @@ var fuse_spent: bool = false
 ## fuse wins, because an explosion is more urgent than confusion.
 var flee_left: float = 0.0
 var flee_from: Vector2i = Vector2i(-1, -1)
+## Which keg it is running from. A lit keg keeps walking, so `flee_from` is refreshed
+## off this keg's tile before every step; once the keg is gone the last tile stands,
+## and the unit carries on running from where the blast was.
+var flee_bomb_uid: int = -1
 
 var taunt_left: float = 0.0
 var reflect_left: float = 0.0
@@ -921,6 +926,7 @@ func reset_for_battle() -> void:
 	fuse_spent = false
 	flee_left = 0.0
 	flee_from = Vector2i(-1, -1)
+	flee_bomb_uid = -1
 	# The immunity goes with the round too. It is cleared by the STATUSES walk below for
 	# the disorientation itself, but the immunity is not a status — it is the absence of
 	# one — so it needs its own line here.

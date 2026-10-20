@@ -400,6 +400,16 @@ enum Kind {
 ## is the shape nothing else in the roster has.
 @export var fuse_seconds: float = 0.0
 
+## The fuse per tier, tier 1 first. Empty means every tier uses `fuse_seconds`.
+##
+## Shorter as the tier climbs. A long fuse is a weak bomb — the board has time to walk
+## clear — and a short one is a strong bomb, so the ladder buys a fuse that leaves less
+## room to get out rather than only a bigger number. It is a table rather than a slope
+## because one AbilityData serves all six tiers and the curve is a tuning decision, not
+## a formula anyone needs to derive. A tier past the end of the table takes the last
+## entry.
+@export var fuse_seconds_by_tier: PackedFloat32Array = PackedFloat32Array()
+
 ## The blast, as a multiple of the unit's own attack damage times its tier — the same
 ## shape as the Breaker's charge, and for the same reason: one AbilityData is shared by
 ## all six tiers, so a flat figure here would leave a tier 6 detonating for exactly
@@ -472,6 +482,14 @@ enum Kind {
 ## the last few seconds are spent hitting the whole front rank rather than one
 ## unlucky unit.
 @export var frenzy_pierce: int = 1
+
+
+func fuse_seconds_at(tier: int) -> float:
+	## The fuse a unit of this tier burns. The table when there is one, clamped at
+	## both ends, and the flat figure when there is not.
+	if fuse_seconds_by_tier.is_empty():
+		return fuse_seconds
+	return fuse_seconds_by_tier[clampi(tier - 1, 0, fuse_seconds_by_tier.size() - 1)]
 
 
 func describe() -> String:
@@ -575,8 +593,13 @@ func describe() -> String:
 			var gold := ""
 			if blast_gold_range > 0:
 				gold = " A gold pick of its own buff trades the square for a diamond %d tiles across each arm." % blast_gold_range
-			return "Killing it does not finish it. It lies where it fell for %.1fs and then goes off, hitting %s for %.0fx its own attack per tier — friend and enemy alike, with no regard for whose side anything is on. Everything within %d tile(s) of the blast turns and runs the moment the fuse is lit.%s" % [
-				fuse_seconds, shape, blast_damage_per_tier,
+			var fuse := "%.1fs" % fuse_seconds
+			if not fuse_seconds_by_tier.is_empty():
+				fuse = "%.2fs at tier 1, falling to %.2fs at tier %d," % [
+					fuse_seconds_at(1), fuse_seconds_at(fuse_seconds_by_tier.size()),
+					fuse_seconds_by_tier.size()]
+			return "Killing it does not finish it. The fuse burns for %s while it keeps walking at the nearest enemy, untouchable, and then it goes off where it stands, hitting %s for %.0fx its own attack per tier — friend and enemy alike, with no regard for whose side anything is on. Everything within %d tile(s) of it turns and runs the moment the fuse is lit, away from wherever it has got to.%s" % [
+				fuse, shape, blast_damage_per_tier,
 				blast_radius + flee_margin, gold]
 		Kind.ASCEND:
 			return "The first full bar changes it: %.1fx health, %.0f%% faster swings, %.0f%% faster on its feet. Every bar after that arms the next swing to kill outright, whatever it hits." % [

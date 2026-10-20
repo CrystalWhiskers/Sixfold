@@ -242,9 +242,17 @@ func _check_portrait_toggle() -> void:
 	if b == null:
 		return
 	var started_on := GameSetup.portraits
+	# Read BEFORE anything sets it. The old check here set the switch on and then
+	# reported that it was "on by default", which could never fail.
+	_menu._settings._refresh_portraits()
+	_check("portraits are off by default: units start as coloured blocks",
+		not started_on and not UnitView.portraits_on,
+		"setting %s, view flag %s" % [started_on, UnitView.portraits_on])
+	_check("and the button says so",
+		not b.button_pressed and b.text == "Coloured blocks", "reads '%s'" % b.text)
 	GameSetup.portraits = true
 	_menu._settings._refresh_portraits()
-	_check("portraits are on by default and the button says so",
+	_check("switched on, the button says Portraits",
 		GameSetup.portraits and b.button_pressed and b.text == "Portraits",
 		"reads '%s'" % b.text)
 
