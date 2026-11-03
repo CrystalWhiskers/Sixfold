@@ -1,1 +1,16 @@
+# Godot's import cache; it rebuilds when you open the project
 .godot/
+
+# Exports go on the GitHub Releases page, not in the repo
+build/
+builds/
+export/
+*.exe
+*.pck
+
+# Zip backups of the code (the code is already in git)
+*.zip
+
+# Windows junk
+Thumbs.db
+desktop.ini
