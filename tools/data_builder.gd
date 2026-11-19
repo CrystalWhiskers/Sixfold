@@ -842,7 +842,9 @@ const UNIT_TABLE := [
 	{
 		# A second healer that is NOT a second Seraph: no bar, no burst, no cleanse.
 		# A steady trickle from the middle of the line, and a reason to leave it alone.
-		id = &"hospitaller", name = "Hospitaller", hp = 130.0, dmg = 9.0, spd = 0.9,
+		# 162.5 is 130 x 1.25, measured: the heal size barely moves its win rate, its
+		# body does. At 130 it sat 31-37% at tiers 1-4 against a 49.5% baseline.
+		id = &"hospitaller", name = "Hospitaller", hp = 162.5, dmg = 9.0, spd = 0.9,
 		move = 0.50, range = "MEDIUM", sight = 4, type = "RANGED",
 		accent = Color(0.84, 0.74, 0.60),
 		ability = &"triage", mana = 0.0,

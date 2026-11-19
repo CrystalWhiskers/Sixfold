@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/abilities/triage.tres" id="1_ouc3k"]
+[ext_resource type="Resource" path="res://data/units/hospitaller_t4.tres" id="2_tmr7j"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_mho6u"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="4_dakdi"]
+
+[resource]
+script = ExtResource("3_mho6u")
+id = &"hospitaller"
+display_name = "Hospitaller III"
+tier = 3
+max_hp = 650.0
+attack_damage = 36.0
+attack_speed = 0.9
+move_time = 0.8
+attack_range = 2
+attack_type = 1
+ability = ExtResource("1_ouc3k")
+mana_per_attack = 0.0
+next_tier = ExtResource("2_tmr7j")
+note = "Stands a couple of tiles behind the front and keeps it standing: every second it mends whichever ally nearby is hurt worst — never itself — for a small slice of their health. There is no bar and nothing to cleanse with; the Seraph is still the only answer to poison. Step next to it, though, and it drops the bandages: while anything is adjacent it stops mending and hits that thing for four times its ordinary swing, and only goes back to work once nothing is."
+sprite = ExtResource("4_dakdi")
+accent = Color(0.84, 0.74, 0.6, 1)

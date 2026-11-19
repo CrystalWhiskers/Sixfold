@@ -11,7 +11,7 @@ extends SceneTree
 ## So the count itself is asserted. If it drops, something died quietly and the
 ## run says so. Raise this when you add tests — it is a ratchet, and the number
 ## only ever goes up.
-const MIN_CHECKS := 2555
+const MIN_CHECKS := 2577
 
 var _passed := 0
 var _failed := 0
@@ -973,8 +973,8 @@ func _test_buff_data() -> void:
 	_section("Buff data")
 
 	var pool := _pool()
-	_check("every buff on disk loaded", pool.buffs.size() == 50,
-		"loaded %d, expected 50" % pool.buffs.size())
+	_check("every buff on disk loaded", pool.buffs.size() == 51,
+		"loaded %d, expected 51" % pool.buffs.size())
 
 	var ids := {}
 	var missing: PackedStringArray = []
@@ -1700,7 +1700,7 @@ func _test_new_units() -> void:
 		roster != null and roster.is_valid())
 	if roster == null:
 		return
-	_check("thirty-two unit types are pickable", roster.units.size() == 32,
+	_check("thirty-three unit types are pickable", roster.units.size() == 33,
 		"%d in the roster" % roster.units.size())
 	# Ids are file names, so a duplicate means one row quietly overwrites another
 	# and the roster is short without anything reporting it.
@@ -1732,6 +1732,7 @@ func _test_new_units() -> void:
 	_test_herald()
 	_test_revenant()
 	_test_seraph()
+	_test_hospitaller()
 	_test_conjurer()
 
 
@@ -2064,6 +2065,263 @@ func _test_seraph() -> void:
 		chooser_sim._worst_hurt_ally(chooser, seraph.ability.heal_radius) == null)
 	_check("healing never overflows max health",
 		hurt.current_hp <= hurt.stat(StatModifier.Stat.MAX_HP) + 0.001)
+
+
+func _mend_events(sim: CombatSim) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for e in sim.events:
+		if e.kind == "heal" and bool(e.get("mend", false)):
+			out.append(e)
+	return out
+
+
+func _hospitaller_board(rarity := -1) -> Dictionary:
+	## The Hospitaller on (2,8), hurt at 10% itself, one ally in reach at 30%, one
+	## in reach at 60%, and the worst-hurt ally of all OUT of reach at 5%. The
+	## allies are rooted Spires and a wall of stone goes across row 6 once the sim
+	## is set up, so the Hospitaller cannot walk off towards the enemy and out of
+	## reach of its patients mid-test. The enemy is a Warden on the far side.
+	## Call BoardModel.clear_changes() when done with it.
+	var hosp_data := _find("hospitaller")
+	var spire := _find("spire")
+	var board := BoardModel.new()
+	var hosp := UnitInstance.create(hosp_data, BoardModel.TEAM_B)
+	board.place(hosp, Vector2i(2, 8))
+	var worst := UnitInstance.create(spire, BoardModel.TEAM_B)
+	var milder := UnitInstance.create(spire, BoardModel.TEAM_B)
+	var far := UnitInstance.create(spire, BoardModel.TEAM_B)
+	board.place(worst, Vector2i(3, 8))
+	board.place(milder, Vector2i(1, 8))
+	board.place(far, Vector2i(5, 10))
+	var allies: Array[UnitInstance] = [worst, milder, far]
+	var foe := UnitInstance.create(_find("warden"), BoardModel.TEAM_A)
+	board.place(foe, Vector2i(2, 0))
+	var sim := CombatSim.new()
+	if rarity >= 0:
+		var tb := TeamBuffs.new()
+		tb.add(_pool().by_id(&"sanctuary"), rarity as BuffData.Rarity)
+		tb.apply_to(hosp)
+		for u in allies:
+			tb.apply_to(u)
+		sim.team_buffs = {BoardModel.TEAM_B: tb}
+	sim.crit_chance = 0.0
+	sim.setup(board, 21)
+	for x in BoardModel.WIDTH:
+		BoardModel.raise_wall(Vector2i(x, 6), 100000.0)
+	hosp.current_hp = hosp.stat(StatModifier.Stat.MAX_HP) * 0.10
+	worst.current_hp = worst.stat(StatModifier.Stat.MAX_HP) * 0.30
+	milder.current_hp = milder.stat(StatModifier.Stat.MAX_HP) * 0.60
+	far.current_hp = far.stat(StatModifier.Stat.MAX_HP) * 0.05
+	return {sim = sim, board = board, hosp = hosp, worst = worst,
+		milder = milder, far = far, foe = foe}
+
+
+func _test_hospitaller() -> void:
+	_section("The Hospitaller: a steady mender that fights when cornered")
+	var hosp_data := _find("hospitaller")
+	_check("the Hospitaller is in the roster", hosp_data != null)
+	if hosp_data == null:
+		return
+	var ab: AbilityData = hosp_data.ability
+	_check("its ability is a passive mend with no bar to fill",
+		ab != null and ab.kind == AbilityData.Kind.MEND
+		and hosp_data.mana_per_attack <= 0.0 and hosp_data.mana_per_charge <= 0.0
+		and not hosp_data.casts_at_battle_start)
+	_check("it mends a small slice once a second, from three tiles",
+		is_equal_approx(ab.mend_interval, 1.0) and ab.heal_radius == 3
+		and ab.mend_percent > 0.0 and ab.mend_percent <= 0.10,
+		"%.2f every %.1fs within %d" % [ab.mend_percent, ab.mend_interval,
+			ab.heal_radius])
+	_check("it never cleanses — the Seraph stays the only cleanse",
+		not ab.cleanses)
+	_check("it fights from medium range and gives ground like a bow",
+		hosp_data.attack_range == UnitData.RangeBand.MEDIUM
+		and CombatSim.new().prefers_distance(UnitInstance.create(hosp_data,
+			BoardModel.TEAM_B)))
+	_check("its melee swing is well above its ordinary one",
+		ab.mend_melee_mult >= 3.0, "x%.1f" % ab.mend_melee_mult)
+
+	# --- The pulse: worst-hurt OTHER ally in reach, once a second.
+	var s := _hospitaller_board()
+	var sim: CombatSim = s.sim
+	var hosp: UnitInstance = s.hosp
+	var worst: UnitInstance = s.worst
+	var worst_before := worst.current_hp
+	var self_before := hosp.current_hp
+	for i in 9:
+		sim.step()
+	_check("nothing is mended before the first second is up",
+		_mend_events(sim).is_empty(),
+		"%d pulses in 0.9s" % _mend_events(sim).size())
+	sim.step()
+	var pulses := _mend_events(sim)
+	_check("one pulse lands at the one-second mark", pulses.size() == 1,
+		"%d pulses" % pulses.size())
+	_check("and it goes to the worst-hurt ally in reach",
+		pulses.size() == 1 and int(pulses[0].uid) == worst.uid,
+		"went to uid %s, wanted %d" % [
+			pulses[0].uid if not pulses.is_empty() else "nobody", worst.uid])
+	_check("not to itself, though it is hurt worse than any of them",
+		is_equal_approx(hosp.current_hp, self_before),
+		"%.1f -> %.1f" % [self_before, hosp.current_hp])
+	var far: UnitInstance = s.far
+	_check("and not to the dying ally out of reach",
+		is_equal_approx(far.current_hp, far.stat(StatModifier.Stat.MAX_HP) * 0.05))
+	var expect := worst.stat(StatModifier.Stat.MAX_HP) * CombatSim.mend_fraction(hosp, ab)
+	_check("the pulse is its tier-1 slice of the patient's max health",
+		is_equal_approx(worst.current_hp - worst_before, expect),
+		"healed %.2f, expected %.2f" % [worst.current_hp - worst_before, expect])
+	_check("the view is told where the pulse came from, for the beam",
+		pulses.size() == 1 and int(pulses[0].get("source_uid", -1)) == hosp.uid)
+	for i in 20:
+		sim.step()
+	_check("it keeps pulsing, about once a second",
+		_mend_events(sim).size() == 3,
+		"%d pulses in 3s" % _mend_events(sim).size())
+
+	_check("a tier-6 pulse is twice a tier-1's slice",
+		is_equal_approx(CombatSim.mend_fraction(UnitInstance.create(
+			_tier_of(hosp_data, 6), BoardModel.TEAM_B), ab), ab.mend_percent * 2.0))
+
+	# --- Melee mode: an enemy steps next to it.
+	# Its own board: a hurt Spire beside it to mend, and a Warden dropped onto the
+	# tile in front of it. Full health on the Hospitaller this time, so it lives.
+	var mboard := BoardModel.new()
+	var mh := UnitInstance.create(hosp_data, BoardModel.TEAM_B)
+	mboard.place(mh, Vector2i(2, 8))
+	var patient := UnitInstance.create(_find("spire"), BoardModel.TEAM_B)
+	mboard.place(patient, Vector2i(3, 8))
+	var foe := UnitInstance.create(_find("warden"), BoardModel.TEAM_A)
+	mboard.place(foe, Vector2i(2, 2))
+	mboard.move_unit(foe, Vector2i(2, 7))
+	var msim := CombatSim.new()
+	msim.crit_chance = 0.0
+	msim.setup(mboard, 5)
+	patient.current_hp = patient.stat(StatModifier.Stat.MAX_HP) * 0.30
+	var stood := mh.cell
+	for i in 25:
+		msim.step()
+	_check("with an enemy adjacent it does not mend at all",
+		_mend_events(msim).is_empty(),
+		"%d pulses while engaged" % _mend_events(msim).size())
+	_check("it knows it is engaged, and tells the view",
+		mh.mend_engaged and _has_event(msim, "mend_mode", mh.uid))
+	var heavy := 0
+	var heavy_ok := true
+	for e in msim.events:
+		if e.kind == "attack" and int(e.uid) == mh.uid:
+			if bool(e.get("heavy", false)):
+				heavy += 1
+				var want := mh.stat(StatModifier.Stat.ATTACK_DAMAGE) * ab.mend_melee_mult
+				heavy_ok = heavy_ok and is_equal_approx(float(e.amount), want) \
+					and int(e.target_uid) == foe.uid
+			else:
+				heavy_ok = false
+	_check("it swings at the adjacent enemy with the heavy hit",
+		heavy >= 1 and heavy_ok, "%d heavy swings" % heavy)
+	_check("and it holds its ground rather than backing off the blade",
+		mh.cell == stood, "moved %s -> %s" % [stood, mh.cell])
+
+	# --- And back to work once nothing is adjacent.
+	mboard.move_unit(foe, Vector2i(2, 1))
+	var cut := msim.events.size()
+	for i in 25:
+		msim.step()
+	var resumed := 0
+	var disengaged := false
+	for i in range(cut, msim.events.size()):
+		var e: Dictionary = msim.events[i]
+		if e.kind == "heal" and bool(e.get("mend", false)):
+			resumed += 1
+		if e.kind == "mend_mode" and int(e.uid) == mh.uid and not bool(e.engaged):
+			disengaged = true
+	_check("with nobody adjacent any more it drops out of melee mode",
+		disengaged and not mh.mend_engaged)
+	_check("and the mending resumes", resumed >= 1,
+		"%d pulses in 2.5s after the enemy left" % resumed)
+
+	# --- It holds back at mid range instead of walking into the blade. No new rule
+	# does this: it is the ordinary ranged kiting (stop at reach, give ground) on a
+	# Medium-range unit, and this pins it so a later change cannot quietly break it.
+	var wboard := BoardModel.new()
+	var walker := UnitInstance.create(hosp_data, BoardModel.TEAM_B)
+	wboard.place(walker, Vector2i(2, 8))
+	var brute := UnitInstance.create(_find("warden"), BoardModel.TEAM_A)
+	wboard.place(brute, Vector2i(2, 0))
+	var wsim := CombatSim.new()
+	wsim.crit_chance = 0.0
+	wsim.setup(wboard, 21)
+	for i in 150:
+		wsim.step()
+		if walker.mend_engaged:
+			break
+	var engaged_at := -1
+	for i in wsim.events.size():
+		var e: Dictionary = wsim.events[i]
+		if e.kind == "mend_mode" and int(e.uid) == walker.uid and bool(e.engaged):
+			engaged_at = i
+			break
+	var last_mover := -1
+	for i in range(engaged_at - 1, -1, -1):
+		var e: Dictionary = wsim.events[i]
+		if e.kind == "move" and (int(e.uid) == walker.uid or int(e.uid) == brute.uid):
+			last_mover = int(e.uid)
+			break
+	_check("when the lines meet, it was the enemy that closed the last tile",
+		engaged_at >= 0 and last_mover == brute.uid,
+		"engaged at event %d, last step by uid %d (Hospitaller %d)" % [
+			engaged_at, last_mover, walker.uid])
+
+	# --- Its buff, Sanctuary.
+	var pool := _pool()
+	var sanctuary := pool.by_id(&"sanctuary")
+	_check("Sanctuary is a live buff in the pool", sanctuary != null)
+	if sanctuary == null:
+		return
+	_check("it is offered only to a side fielding the Hospitaller",
+		BuffPool.in_pool_for(sanctuary, {&"hospitaller": true})
+		and not BuffPool.in_pool_for(sanctuary, {&"seraph": true}))
+	var levels := [[BuffData.Rarity.BRONZE, 0.25], [BuffData.Rarity.SILVER, 0.50],
+		[BuffData.Rarity.GOLD, 1.00]]
+	for lv in levels:
+		var r: BuffData.Rarity = lv[0]
+		var want: float = lv[1]
+		var tb := TeamBuffs.new()
+		tb.add(sanctuary, r)
+		var u := UnitInstance.create(hosp_data, BoardModel.TEAM_B)
+		tb.apply_to(u)
+		var other := UnitInstance.create(_find("seraph"), BoardModel.TEAM_B)
+		tb.apply_to(other)
+		_check("%s Sanctuary: +%d%% healing and +%d%% max health" % [
+				BuffData.rarity_name(r), roundi(want * 100.0), roundi(want * 100.0)],
+			is_equal_approx(u.stat(StatModifier.Stat.HEAL_POWER), 1.0 + want)
+			and is_equal_approx(u.stat(StatModifier.Stat.MAX_HP),
+				hosp_data.max_hp * (1.0 + want)),
+			"heal x%.2f, hp %.0f" % [u.stat(StatModifier.Stat.HEAL_POWER),
+				u.stat(StatModifier.Stat.MAX_HP)])
+		_check("%s Sanctuary leaves a Seraph alone" % BuffData.rarity_name(r),
+			is_equal_approx(other.stat(StatModifier.Stat.HEAL_POWER), 1.0)
+			and is_equal_approx(other.stat(StatModifier.Stat.MAX_HP),
+				_find("seraph").max_hp))
+
+	var g := _hospitaller_board(BuffData.Rarity.GOLD)
+	var gsim: CombatSim = g.sim
+	var gw: UnitInstance = g.worst
+	var gw_before := gw.current_hp
+	for i in 10:
+		gsim.step()
+	var gexpect := gw.stat(StatModifier.Stat.MAX_HP) * ab.mend_percent * 2.0
+	_check("and gold Sanctuary really doubles what a pulse puts back",
+		is_equal_approx(gw.current_hp - gw_before, gexpect),
+		"healed %.2f, expected %.2f" % [gw.current_hp - gw_before, gexpect])
+	BoardModel.clear_changes()
+
+
+func _tier_of(base: UnitData, tier: int) -> UnitData:
+	var d := base
+	while d != null and d.tier < tier:
+		d = d.next_tier
+	return d
 
 
 func _test_conjurer() -> void:

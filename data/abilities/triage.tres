@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_ted0a"]
+
+[resource]
+script = ExtResource("1_ted0a")
+id = &"triage"
+display_name = "Triage"
+kind = 24
+cast_time = 0.2
+mend_percent = 0.05
+mend_melee_mult = 4.0
