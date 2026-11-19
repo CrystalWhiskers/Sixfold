@@ -840,6 +840,15 @@ const UNIT_TABLE := [
 		note = "Shoots from the back of the board, constantly, for almost nothing. The damage is not the point — the rate is: every shot is a fraction of the next bar, and every bar sends an enemy reeling. A disoriented unit wanders off and stops swinging entirely, so the Siren does not kill things, it takes them out of the fight for a moment and hands the moment to everyone else. Fragile, and worthless on its own.",
 	},
 	{
+		# A second healer that is NOT a second Seraph: no bar, no burst, no cleanse.
+		# A steady trickle from the middle of the line, and a reason to leave it alone.
+		id = &"hospitaller", name = "Hospitaller", hp = 130.0, dmg = 9.0, spd = 0.9,
+		move = 0.50, range = "MEDIUM", sight = 4, type = "RANGED",
+		accent = Color(0.84, 0.74, 0.60),
+		ability = &"triage", mana = 0.0,
+		note = "Stands a couple of tiles behind the front and keeps it standing: every second it mends whichever ally nearby is hurt worst — never itself — for a small slice of their health. There is no bar and nothing to cleanse with; the Seraph is still the only answer to poison. Step next to it, though, and it drops the bandages: while anything is adjacent it stops mending and hits that thing for four times its ordinary swing, and only goes back to work once nothing is.",
+	},
+	{
 		id = &"wisp", name = "Wisp", hp = 38.0, dmg = 5.0, spd = 1.3,
 		move = 0.40, range = "MELEE", sight = 3, type = "MELEE",
 		accent = Color(0.70, 0.62, 0.86),
@@ -908,6 +917,12 @@ const ABILITY_TABLE := [
 		desc = "A heavy burst of healing on whoever nearby is hurt worst, and every debuff on them is lifted first — poison, and the freeze that goes with it. Bigger every tier. Cleansing before healing is what makes it an answer to a Vexer: a poisoned unit cannot be healed at all until the poison is off it.",
 		heal_percent = 0.45, heal_percent_per_tier = 0.20, heal_radius = 3,
 		cleanses = true,
+	},
+	{
+		id = &"triage", name = "Triage", kind = "MEND", cast_time = 0.2,
+		desc = "",
+		mend_percent = 0.05, heal_percent_per_tier = 0.20, heal_radius = 3,
+		mend_interval = 1.0, mend_melee_mult = 4.0,
 	},
 	{
 		id = &"call_wisp", name = "Call Wisp", kind = "SUMMON", cast_time = 0.5,
@@ -1104,6 +1119,9 @@ const BUFF_TABLE = [
 	{id = &"grace", name = "Grace", kind = "STAT", weight = 1.0,
 		unit = &"seraph", stat_a = "MAX_HP", stat_b = "HEAL_POWER", two = true,
 		b = Vector2(0.35, 0.10), s = Vector2(0.70, 0.20), g = Vector2(1.05, 0.3)},
+	{id = &"sanctuary", name = "Sanctuary", kind = "STAT", weight = 1.0,
+		unit = &"hospitaller", stat_a = "HEAL_POWER", stat_b = "MAX_HP", two = true,
+		b = Vector2(0.25, 0.25), s = Vector2(0.50, 0.50), g = Vector2(1.00, 1.00)},
 	{id = &"covenant", name = "Covenant", kind = "STAT", weight = 1.0,
 		unit = &"conjurer", also = [&"wisp"],
 		stat_a = "MAX_HP", stat_b = "ATTACK_DAMAGE", two = true,
@@ -1446,7 +1464,8 @@ func _make_abilities() -> Dictionary:
 				"splash_damage", "splash_radius", "pierce_targets", "pierce_damage_mult",
 				"rage_per_missing", "frenzy_threshold", "frenzy_decay",
 				"frenzy_seconds", "frenzy_damage", "frenzy_attack_speed",
-				"frenzy_move", "frenzy_pierce"]:
+				"frenzy_move", "frenzy_pierce",
+				"mend_percent", "mend_interval", "mend_melee_mult"]:
 			if row.has(key):
 				a.set(key, row[key])
 		_save(a, "%s/%s.tres" % [ABILITY_DIR, row.id])
