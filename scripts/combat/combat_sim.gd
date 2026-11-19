@@ -358,6 +358,7 @@ func step() -> void:
 	_tick_dry_spells()
 	_tick_dots()
 	_tick_frenzy()
+	_tick_mends()
 	_tick_regen()
 	_tick_pressure()
 	_tick_stealth()
@@ -549,6 +550,16 @@ func _decide(u: UnitInstance) -> void:
 		# Planted. It cannot move and it cannot swing while it holds — that is
 		# what it is paying for the damage reduction and everyone's attention.
 		return
+	if is_mender(u):
+		# The Hospitaller's melee mode. Anything standing next to it gets the
+		# heavy swing, and it holds its ground rather than giving ground: a healer
+		# that backs away from a blade only drags the blade onto its patients.
+		var foe := adjacent_enemy(u)
+		if foe != null:
+			if u.can_attack_now() and _has_shot(u, foe):
+				u.target = foe
+				_begin_attack(u)
+			return
 	if u.mana_full() and can_cast(u):
 		# Deliberately not gated on whether the cast can land, unless the ability
 		# asks to be. A Spire that fills its bar with no room for the host burns
@@ -1112,6 +1123,12 @@ func _begin_attack(u: UnitInstance) -> void:
 	u.dry_spell = 0.0
 	var victim := u.target
 	var dmg := u.stat(StatModifier.Stat.ATTACK_DAMAGE)
+	# Checked on the swing itself rather than off `mend_engaged`, which is only
+	# refreshed once a tick after every unit has moved.
+	var heavy := (is_mender(u) and victim != null
+		and BoardModel.tile_distance(u.cell, victim.cell) == 1)
+	if heavy:
+		dmg *= maxf(u.data.ability.mend_melee_mult, 1.0)
 	var cd := attack_interval(u)
 	_enter(u, UnitInstance.State.ATTACKING, cd)
 
@@ -1126,7 +1143,7 @@ func _begin_attack(u: UnitInstance) -> void:
 
 	_emit("attack", {
 		uid = u.uid, target_uid = victim.uid,
-		from = u.cell, to = victim.cell, amount = dmg,
+		from = u.cell, to = victim.cell, amount = dmg, heavy = heavy,
 	})
 
 	_damage(victim, dmg, u)
@@ -1296,7 +1313,7 @@ func _resolve_ability(u: UnitInstance) -> void:
 			_resolve_blink(u, ab, target)
 		AbilityData.Kind.SPEED_AURA:
 			_resolve_aura(u, ab)
-		AbilityData.Kind.REVIVE:
+		AbilityData.Kind.REVIVE, AbilityData.Kind.MEND:
 			_emit("ability", {uid = u.uid, ability = ab.id, kind = ab.kind,
 				cell = u.cell, wasted = true})
 		AbilityData.Kind.BURST_HEAL:
@@ -1453,11 +1470,21 @@ static func heal_fraction(u: UnitInstance, ab: AbilityData) -> float:
 		+ ab.heal_percent_per_tier * float(u.data.tier - 1))
 
 
-func _worst_hurt_ally(u: UnitInstance, radius: int) -> UnitInstance:
+func _worst_hurt_ally(u: UnitInstance, radius: int,
+		skip_self := false, healable_only := false) -> UnitInstance:
+	## The Seraph's chooser, and the Hospitaller's with two extra rules: it never
+	## picks itself, and it never spends a pulse on someone heal() would refuse —
+	## a poisoned ally, a husk — when somebody else nearby could use it. The
+	## Seraph keeps the poisoned ones, because its cleanse is what fixes them.
 	var best: UnitInstance = null
 	var worst := 2.0
 	for ally in board.units_in_range(u.cell, radius, u.team):
 		if not ally.is_alive():
+			continue
+		if skip_self and ally == u:
+			continue
+		if healable_only and (ally.is_suppressed() or ally.hp_locked
+				or ally.recovery_denied):
 			continue
 		var frac := ally.current_hp / maxf(ally.stat(StatModifier.Stat.MAX_HP), 1.0)
 		if frac >= 1.0:
@@ -2407,6 +2434,10 @@ func can_cast(u: UnitInstance) -> bool:
 		return true
 	if ab.requires_empowered and not u.empowered:
 		return false
+	if ab.kind == AbilityData.Kind.MEND:
+		# A passive with no bar. A Wellspring's pool can still push mana into it,
+		# and a full bar must not turn into a cast that does nothing.
+		return false
 	if ab.kind != AbilityData.Kind.SUMMON:
 		return true
 	if not ab.holds_when_capped:
@@ -2594,6 +2625,74 @@ func _tick_mana_auras() -> void:
 				continue
 			ally.gain_mana(gift)
 			_emit("mana", {uid = ally.uid, mana = ally.mana})
+
+
+static func is_mender(u: UnitInstance) -> bool:
+	return (u != null and u.data != null and u.data.ability != null
+		and u.data.ability.kind == AbilityData.Kind.MEND)
+
+
+func adjacent_enemy(u: UnitInstance) -> UnitInstance:
+	## An enemy within arm's length — one step, the same reach a melee swing has —
+	## or null. Stealthed units do not count: a Hospitaller cannot drop its work for
+	## something it cannot see. Lowest uid on a tie so a replay is exact.
+	var best: UnitInstance = null
+	for other in board.units_in_range(u.cell, 1, -1):
+		if other.team == u.team or not other.is_alive() or other.is_hidden():
+			continue
+		if BoardModel.tile_distance(u.cell, other.cell) != 1:
+			continue
+		if best == null or other.uid < best.uid:
+			best = other
+	return best
+
+
+static func mend_fraction(u: UnitInstance, ab: AbilityData) -> float:
+	## What one pulse heals, as a share of the PATIENT's max health. Scaled per
+	## tier exactly like heal_fraction, off the same per-tier field.
+	return ab.mend_percent * (1.0
+		+ ab.heal_percent_per_tier * float(u.data.tier - 1))
+
+
+func _tick_mends() -> void:
+	# Every tick rather than on the regen beat: the switch into melee mode has to
+	# land the moment something steps next to it, not up to a second later.
+	for u in _units:
+		if not u.is_alive() or u.is_riding() or not is_mender(u):
+			continue
+		var ab := u.data.ability
+		var engaged := adjacent_enemy(u) != null
+		if engaged != u.mend_engaged:
+			u.mend_engaged = engaged
+			_emit("mend_mode", {uid = u.uid, cell = u.cell, engaged = engaged})
+		if engaged:
+			# The clock stops while it fights. Stepping clear does not bank a pulse
+			# it earned with a blade in its hand.
+			u.mend_clock = 0.0
+			continue
+		if u.is_held() or u.is_disoriented():
+			continue
+		u.mend_clock += TICK
+		var every := maxf(ab.mend_interval, TICK)
+		if u.mend_clock + 0.0001 < every:
+			continue
+		u.mend_clock = maxf(u.mend_clock - every, 0.0)
+		_mend_pulse(u, ab)
+
+
+func _mend_pulse(u: UnitInstance, ab: AbilityData) -> void:
+	var patient := _worst_hurt_ally(u, ab.heal_radius, true, true)
+	if patient == null:
+		return
+	var before := patient.current_hp
+	patient.heal(patient.stat(StatModifier.Stat.MAX_HP) * mend_fraction(u, ab)
+		* u.stat(StatModifier.Stat.HEAL_POWER))
+	if patient.current_hp > before:
+		_emit("heal", {
+			uid = patient.uid, amount = patient.current_hp - before,
+			hp = patient.current_hp, cell = patient.cell,
+			mend = true, source_uid = u.uid, from = u.cell,
+		})
 
 
 func _tick_repairs() -> void:

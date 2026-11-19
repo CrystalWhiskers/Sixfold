@@ -99,6 +99,11 @@ var reeling := false
 var reeling_secs := 0.0
 var reeling_t := 0.0
 
+## The Hospitaller in melee mode: an enemy is next to it, the mending has stopped
+## and its swings are heavy. Event-driven ("mend_mode"), because during playback
+## `unit.mend_engaged` is the END-of-round value.
+var engaged := false
+
 ## Whether an Usurper is currently inside this unit.
 ##
 ## Event-driven, like every other condition here. The simulation flips the host's `team`
@@ -247,6 +252,11 @@ func begin_reeling(seconds: float) -> void:
 		return
 	reeling = true
 	reeling_secs = seconds
+	queue_redraw()
+
+
+func set_engaged(on: bool) -> void:
+	engaged = on
 	queue_redraw()
 
 
@@ -586,6 +596,17 @@ func _draw() -> void:
 
 	if hidden_unit:
 		draw_rect(body.grow(3.0), Color(0.62, 0.52, 0.85, 0.75 * alpha), false, 2.0)
+	if engaged and not dying:
+		# Crossed blades in the lower corner and a hot rim: "not healing right now,
+		# fighting". A corner mark rather than a ring, because rings already mean
+		# held, frenzied or reviving.
+		draw_rect(body.grow(1.5), Color(0.98, 0.58, 0.32, 0.85 * alpha), false, 2.5)
+		var c := Vector2(body.end.x - tile_size * 0.17, body.end.y - tile_size * 0.17)
+		var r := maxf(tile_size * 0.11, 5.0)
+		draw_circle(c, r + 2.0, Color(0.08, 0.06, 0.04, 0.80 * alpha))
+		var blade := Color(1.00, 0.70, 0.40, alpha)
+		draw_line(c + Vector2(-r, -r), c + Vector2(r, r), blade, 2.5)
+		draw_line(c + Vector2(r, -r), c + Vector2(-r, r), blade, 2.5)
 	if reviving:
 		var pulse := 0.5 + 0.5 * sin(revive_t)
 		draw_rect(body.grow(2.0 + pulse * 5.0),

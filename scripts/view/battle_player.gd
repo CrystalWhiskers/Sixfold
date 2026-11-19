@@ -12,6 +12,8 @@ const MELEE_REACH := 1.5
 
 const MIN_CAST_SHOW := 0.32
 const BEAM_COLOR := Color(0.72, 0.90, 1.0)
+const MEND_COLOR := Color(0.56, 0.95, 0.64)
+const RALLY_COLOR := Color(0.98, 0.58, 0.32)
 
 ## How long the Assassin is visibly wrapped in its cloak before it jumps. The
 ## simulation resolves the vanish and the strike in the same instant; this is the
@@ -159,6 +161,15 @@ func _apply(e: Dictionary) -> void:
 			}
 		"attack":
 			_begin_attack(e)
+			if bool(e.get("heavy", false)):
+				_view.flash_cells([e.to], Color(RALLY_COLOR, 0.45), 0.25)
+		"mend_mode":
+			# The Hospitaller dropping its work for a blade, and picking it back up.
+			var mmv := _view.view_for(int(e.uid))
+			if mmv != null:
+				mmv.set_engaged(bool(e.engaged))
+			if bool(e.engaged):
+				_view.spawn_label(_at(int(e.uid), e.cell), "TO ARMS", RALLY_COLOR)
 		"damage":
 			_schedule_damage(e)
 		"counts":
@@ -734,6 +745,13 @@ func _heal(e: Dictionary) -> void:
 	if v == null:
 		return
 	v.set_hp(float(e.hp), v.hp_max)
+	if bool(e.get("mend", false)):
+		# The Hospitaller's pulse: a short green thread from the healer to the
+		# patient, so a heal that arrives every second reads as coming from
+		# somewhere rather than as regeneration.
+		var src := int(e.get("source_uid", -1))
+		_view.spawn_beam(_at(src, e.get("from", e.cell)), _at(int(e.uid), e.cell),
+			MEND_COLOR, false, 0.36)
 	if float(e.amount) >= 1.0:
 		var at := _at(int(e.uid), e.cell)
 		_view.spawn_label(at, "+%d" % roundi(float(e.amount)), Color(0.45, 0.82, 0.48))

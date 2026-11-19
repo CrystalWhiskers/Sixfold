@@ -134,6 +134,13 @@ var dry_spell: float = 0.0
 ## step back, so the unit always gets a proper shot in between.
 var kite_hold: float = 0.0
 
+## The Hospitaller's passive (AbilityData.Kind.MEND). `mend_clock` counts up to the
+## next pulse; `mend_engaged` is whether an enemy is standing next to it, which is
+## what switches the pulse off and the heavy melee swing on. Battle state, wiped
+## at the round boundary like everything else here.
+var mend_clock: float = 0.0
+var mend_engaged: bool = false
+
 ## Whether this unit has already gone through a gate this round.
 ##
 ## Currently redundant, and kept deliberately. CombatSim.GATE_TRANSITS_PER_TEAM is
@@ -855,6 +862,8 @@ func reset_for_battle() -> void:
 	isolated = false
 	dry_spell = 0.0
 	kite_hold = 0.0
+	mend_clock = 0.0
+	mend_engaged = false
 	gate_used = false
 	frenzy_left = 0.0
 	frenzy_spent = false

@@ -39,6 +39,9 @@ static func ability_block(d: UnitData) -> String:
 static func charge_line(d: UnitData) -> String:
 	if d.ability == null:
 		return ""
+	if d.ability.kind == AbilityData.Kind.MEND:
+		# "Charges only from outside help" would be false: there is nothing to charge.
+		return "No bar to fill — it works on its own, all round."
 	var parts: PackedStringArray = []
 	if d.mana_per_attack > 0.0:
 		parts.append("%d mana per attack landed" % roundi(d.mana_per_attack))
