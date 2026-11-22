@@ -45,6 +45,11 @@ var _lunges: Dictionary = {}
 var _flight: Dictionary = {}
 var _deferred: Array[Dictionary] = []
 var _counts: Array[int] = [0, 0]
+## Units running from a lit Powderkeg: uid -> the keg's uid. Their chevrons are
+## re-aimed every frame off the live positions, because both ends are walking.
+var _fleeing: Dictionary = {}
+
+const FUSE_COLOR := Color(1.00, 0.52, 0.22)
 
 ## Seconds the event cursor is pinned for while something that takes TIME on
 ## screen but no time in the simulation finishes happening.
@@ -83,6 +88,7 @@ func play(view: BoardView, events: Array[Dictionary], units := {}) -> void:
 	_deferred.clear()
 	_hold = 0.0
 	_counts = [0, 0]
+	_fleeing.clear()
 	# Last round's zones are not this round's. Cleared here rather than at the end
 	# of playback, so the board still shows them during the round-end hold.
 	view.clear_aura_zones()
@@ -131,6 +137,7 @@ func _process(delta: float) -> void:
 	_advance_lunges(delta)
 	_advance_deferred()
 	_place_views()
+	_aim_chevrons()
 
 	if (_cursor >= _events.size() and _moves.is_empty() and _deferred.is_empty()
 			and _hold <= 0.0):
@@ -352,6 +359,39 @@ func _apply(e: Dictionary) -> void:
 			var dev := _view.view_for(int(e.uid))
 			if dev != null:
 				dev.end_reeling()
+		"fuse_lit":
+			# A Powderkeg did not die, it lit. Its footprint goes under it and walks
+			# with it; everything that was close enough gets its running chevrons.
+			var kuid := int(e.uid)
+			_view.add_fuse_mark(kuid, e.get("offsets", []))
+			_view.spawn_label(_at(kuid, e.cell), "FUSE LIT", FUSE_COLOR)
+			var kv := _view.view_for(kuid)
+			if kv != null:
+				kv.set_shield(0.0)
+				kv.set_mana(0.0)
+			for f in e.get("fleeing", []):
+				_fleeing[int(f)] = kuid
+		"fuse_blast":
+			var buid := int(e.uid)
+			_view.clear_fuse_mark(buid)
+			var reach := 1.5
+			var centre: Vector2i = e.cell
+			for c in e.get("cells", []):
+				var d := Vector2(c - centre)
+				reach = maxf(reach, maxf(absf(d.x), absf(d.y)) + 0.5)
+			_view.spawn_ring(_at(buid, e.cell), reach)
+			var blast: Array[Vector2i] = []
+			for c in e.get("cells", []):
+				blast.append(c)
+			_view.flash_cells(blast, Color(1.00, 0.60, 0.25, 0.60), 0.45)
+			_view.spawn_label(_at(buid, e.cell), "BOOM", FUSE_COLOR)
+			Audio.play_crit()
+			for f in _fleeing.keys():
+				if int(_fleeing[f]) == buid:
+					_fleeing.erase(f)
+					var fv2 := _view.view_for(int(f))
+					if fv2 != null:
+						fv2.set_flee_dir(Vector2.ZERO)
 		"frenzy_end":
 			var fev := _view.view_for(int(e.uid))
 			if fev != null:
@@ -889,6 +929,26 @@ func _advance_lunges(delta: float) -> void:
 			done.append(uid)
 	for uid in done:
 		_lunges.erase(uid)
+
+
+func _aim_chevrons() -> void:
+	## Points every fleeing unit's chevrons away from its keg, from where both of
+	## them are on screen right now.
+	for uid in _fleeing:
+		var v := _view.view_for(int(uid))
+		if v == null:
+			continue
+		var keg: int = _fleeing[uid]
+		if not _pos.has(uid) or not _pos.has(keg):
+			continue
+		var away: Vector2 = (_pos[uid] as Vector2) - (_pos[keg] as Vector2)
+		if away.length_squared() < 0.0001:
+			away = Vector2(0.0, -1.0)
+		v.set_flee_dir(away.normalized())
+
+
+func fleeing_count() -> int:
+	return _fleeing.size()
 
 
 func _place_views() -> void:

@@ -123,6 +123,21 @@ func frenzy_seconds_for(u: UnitInstance) -> float:
 	return secs
 
 
+func blast_diamond_for(u: UnitInstance) -> int:
+	# The Powderkeg's gold rider: the arm of the diamond its blast becomes, or 0 for
+	# the ordinary square. Maxed, like the frenzy window, because it replaces a shape
+	# rather than adding to one.
+	var arm := 0
+	for p in picks:
+		var buff: BuffData = p.buff
+		if buff.blast_diamond_at_gold <= 0 or p.rarity != BuffData.Rarity.GOLD:
+			continue
+		if buff.kind != BuffData.Kind.STAT or not buff.applies_to(u):
+			continue
+		arm = maxi(arm, buff.blast_diamond_at_gold)
+	return arm
+
+
 func extra_raises_for(u: UnitInstance) -> int:
 	# Summed, not maxed, unlike the empowered cap: two picks that both feed the
 	# Vigil should both count. Nothing currently offers two, but the picker is

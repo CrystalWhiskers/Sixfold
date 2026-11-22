@@ -167,6 +167,19 @@ var gate_used: bool = false
 var frenzy_left: float = 0.0
 var frenzy_spent: bool = false
 
+## The Powderkeg's lit fuse: seconds until it goes off. A lit keg is the Martyr's
+## window turned inside out. The Martyr at zero health is still ALIVE to everything
+## — it is targeted, counted, healed. The keg at zero health is still ON THE BOARD
+## but alive to nothing: is_alive() says no while this runs, and that one answer is
+## what keeps it out of every targeting sweep, every heal (heal() refuses the dead,
+## and _worst_hurt_ally skips them) and every count. The simulation drives its walk
+## itself — see CombatSim._keg_turn — and holds the round open until it blows.
+var fuse_left: float = 0.0
+
+## Set on a unit running from a lit keg: the keg's uid, or -1. Read against the
+## keg's CURRENT tile every step, because the keg keeps walking.
+var flee_from_uid: int = -1
+
 ## A charge in progress: how many tiles it still has in it, which way it is going, and
 ## how long until it reaches the next tile.
 ##
@@ -567,7 +580,18 @@ func is_alive() -> bool:
 	# and it is checked HERE rather than at the dozen places that ask, because
 	# "standing" has to mean the same thing to the targeting, the counts and the win
 	# condition or the board and the scoreboard disagree.
+	#
+	# A lit Powderkeg is the opposite exception: on the board, walking, and dead to
+	# everything that asks. Checked explicitly rather than left to the empty health
+	# bar, so nothing that ever tops a lit keg's health up can bring it back.
+	if is_lit():
+		return false
 	return state != State.DEAD and (current_hp > 0.0 or frenzy_left > 0.0)
+
+
+func is_lit() -> bool:
+	## A Powderkeg whose fuse is burning. Not alive (see is_alive), but not gone.
+	return fuse_left > 0.0 and state != State.DEAD
 
 
 func is_frenzied() -> bool:
@@ -867,6 +891,9 @@ func reset_for_battle() -> void:
 	gate_used = false
 	frenzy_left = 0.0
 	frenzy_spent = false
+	# A fuse cannot outlive its round, and neither can the panic it caused.
+	fuse_left = 0.0
+	flee_from_uid = -1
 	# The immunity goes with the round too. It is cleared by the STATUSES walk below for
 	# the disorientation itself, but the immunity is not a status — it is the absence of
 	# one — so it needs its own line here.

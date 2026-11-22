@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/abilities/slow_match.tres" id="1_jtqir"]
+[ext_resource type="Resource" path="res://data/units/powderkeg_t4.tres" id="2_7kcbc"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_smaol"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="4_7sysr"]
+
+[resource]
+script = ExtResource("3_smaol")
+id = &"powderkeg"
+display_name = "Powderkeg III"
+tier = 3
+max_hp = 880.0
+attack_damage = 39.0
+attack_speed = 0.9
+move_time = 0.77
+ability = ExtResource("1_jtqir")
+mana_per_attack = 0.0
+next_tier = ExtResource("2_7kcbc")
+note = "A barrel with legs and a short temper. It fights badly, and that is fine, because killing it is the mistake: it does not fall over, it lights. For a second or two it walks at the nearest enemy with the fuse fizzing — nothing can target it, hit it or heal it, and everything near it, yours included, scatters — and then it goes off over the 3x3 around wherever it got to. The bigger it is the shorter the fuse. Freeze it before it dies and it never lights at all."
+sprite = ExtResource("4_7sysr")
+accent = Color(0.72, 0.38, 0.22, 1)

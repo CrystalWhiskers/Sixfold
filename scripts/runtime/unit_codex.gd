@@ -42,6 +42,11 @@ static func charge_line(d: UnitData) -> String:
 	if d.ability.kind == AbilityData.Kind.MEND:
 		# "Charges only from outside help" would be false: there is nothing to charge.
 		return "No bar to fill — it works on its own, all round."
+	if d.ability.kind == AbilityData.Kind.FUSE:
+		# Same reason as the mender: a keg with no bar would otherwise read as one
+		# waiting on outside help, when what it is waiting for is to be killed.
+		return "No bar to fill — killing it is what sets it off. Fuse at this tier: %ss." % (
+			("%.2f" % d.ability.fuse_seconds_for(d.tier)).trim_suffix("0").trim_suffix(".0"))
 	var parts: PackedStringArray = []
 	if d.mana_per_attack > 0.0:
 		parts.append("%d mana per attack landed" % roundi(d.mana_per_attack))

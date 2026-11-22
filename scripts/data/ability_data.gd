@@ -28,6 +28,7 @@ enum Kind {
 	DISORIENT,
 	## Appended, never inserted: the .tres files store this as a number.
 	MEND,
+	FUSE,
 }
 
 @export var id: StringName = &""
@@ -403,6 +404,26 @@ enum Kind {
 ## the moment nothing is adjacent any more.
 @export var mend_melee_mult: float = 1.0
 
+@export_group("Fuse")
+## The Powderkeg's passive (Kind.FUSE). No bar: dying is the trigger. Instead of
+## falling over it lights a fuse that burns for this many seconds, read by TIER —
+## index 0 is tier 1. A list rather than a base and a step, because the ladder is
+## the design ("a tier 6 gives you under a second to get clear") and a formula
+## would make the reader do arithmetic to find out what the unit does. A tier past
+## the end of the list uses the last entry.
+@export var fuse_seconds_by_tier: Array[float] = []
+
+## The blast at the end of the fuse: this many times the keg's attack damage (buffs
+## included), times its tier, to everything inside `blast_radius` of the tile it is
+## standing on when the fuse runs out — BOTH sides. Chebyshev radius, so 1 is the
+## 3x3 around it.
+@export var blast_attack_multiple: float = 5.0
+@export var blast_radius: int = 1
+
+## Everything within this many tiles (Chebyshev) of the keg at the moment it lights
+## runs from it, friend and foe alike, until it goes off.
+@export var flee_radius: int = 2
+
 @export_group("Mana aura")
 @export var mana_aura_radius: int = 1
 
@@ -446,6 +467,14 @@ enum Kind {
 ## the last few seconds are spent hitting the whole front rank rather than one
 ## unlucky unit.
 @export var frenzy_pierce: int = 1
+
+
+func fuse_seconds_for(tier: int) -> float:
+	## The fuse for a keg of this tier. Past the end of the list, the last entry.
+	if fuse_seconds_by_tier.is_empty():
+		return 0.0
+	var i := clampi(tier - 1, 0, fuse_seconds_by_tier.size() - 1)
+	return maxf(fuse_seconds_by_tier[i], 0.0)
 
 
 func describe() -> String:
@@ -500,6 +529,13 @@ func describe() -> String:
 			return "No bar to fill. Every %.0fs it mends the worst-hurt ally within %d tiles for %.0f%% of their max health, +%d%% of that per tier. It never mends itself and lifts nothing. The moment an enemy steps next to it the mending stops, and it hits whatever is adjacent for %.0fx its ordinary swing until nothing is." % [
 				mend_interval, heal_radius, mend_percent * 100.0,
 				roundi(heal_percent_per_tier * 100.0), mend_melee_mult]
+		Kind.FUSE:
+			var secs: PackedStringArray = []
+			for s in fuse_seconds_by_tier:
+				secs.append(("%.2f" % s).trim_suffix("0").trim_suffix(".0"))
+			var side := blast_radius * 2 + 1
+			return "No bar to fill — dying is the trigger. When it would die it lights a fuse instead (%ss by tier) and walks at the nearest enemy, swinging at nothing and impossible to target, hit or heal. Everything within %d tiles runs from it, both sides. When the fuse runs out it goes off: %.0fx its attack damage, times its tier, to everything in the %dx%d around it — yours as well. Killed while frozen, it never lights at all." % [
+				"/".join(secs), flee_radius, blast_attack_multiple, side, side]
 		Kind.SUMMON:
 			if summon_random:
 				var tail := (" They stay with you for the rest of the match."

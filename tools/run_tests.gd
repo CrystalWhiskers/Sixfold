@@ -11,7 +11,7 @@ extends SceneTree
 ## So the count itself is asserted. If it drops, something died quietly and the
 ## run says so. Raise this when you add tests — it is a ratchet, and the number
 ## only ever goes up.
-const MIN_CHECKS := 2577
+const MIN_CHECKS := 2644
 
 var _passed := 0
 var _failed := 0
@@ -973,8 +973,8 @@ func _test_buff_data() -> void:
 	_section("Buff data")
 
 	var pool := _pool()
-	_check("every buff on disk loaded", pool.buffs.size() == 51,
-		"loaded %d, expected 51" % pool.buffs.size())
+	_check("every buff on disk loaded", pool.buffs.size() == 52,
+		"loaded %d, expected 52" % pool.buffs.size())
 
 	var ids := {}
 	var missing: PackedStringArray = []
@@ -1700,7 +1700,7 @@ func _test_new_units() -> void:
 		roster != null and roster.is_valid())
 	if roster == null:
 		return
-	_check("thirty-three unit types are pickable", roster.units.size() == 33,
+	_check("thirty-four unit types are pickable", roster.units.size() == 34,
 		"%d in the roster" % roster.units.size())
 	# Ids are file names, so a duplicate means one row quietly overwrites another
 	# and the roster is short without anything reporting it.
@@ -1733,6 +1733,7 @@ func _test_new_units() -> void:
 	_test_revenant()
 	_test_seraph()
 	_test_hospitaller()
+	_test_powderkeg()
 	_test_conjurer()
 
 
@@ -2314,6 +2315,486 @@ func _test_hospitaller() -> void:
 	_check("and gold Sanctuary really doubles what a pulse puts back",
 		is_equal_approx(gw.current_hp - gw_before, gexpect),
 		"healed %.2f, expected %.2f" % [gw.current_hp - gw_before, gexpect])
+	BoardModel.clear_changes()
+
+
+func _kind_events(sim: CombatSim, kind: String, uid := -1) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for e in sim.events:
+		if e.kind == kind and (uid < 0 or int(e.get("uid", -1)) == uid):
+			out.append(e)
+	return out
+
+
+func _keg_sim(board: BoardModel, tb: TeamBuffs = null, seed := 7) -> CombatSim:
+	## No crits, so every blast is exactly its figure. The buffs, if any, are the
+	## Powderkeg's side's (team B in every board below).
+	var sim := CombatSim.new()
+	sim.crit_chance = 0.0
+	if tb != null:
+		sim.team_buffs = {BoardModel.TEAM_B: tb}
+	sim.setup(board, seed)
+	return sim
+
+
+func _light(sim: CombatSim, keg: UnitInstance, killer: UnitInstance) -> void:
+	## Kills the keg the ordinary way: one blow through _damage, so it goes down
+	## the same funnel every death does.
+	sim._damage(keg, 1000000.0, killer)
+
+
+func _run_out(sim: CombatSim, limit := 200) -> void:
+	var n := 0
+	while not sim.is_finished() and n < limit:
+		sim.step()
+		n += 1
+
+
+func _test_powderkeg() -> void:
+	_section("The Powderkeg: worth more dead")
+	var keg_data := _find("powderkeg")
+	_check("the Powderkeg is in the roster", keg_data != null)
+	if keg_data == null:
+		return
+	var ab: AbilityData = keg_data.ability
+	_check("its ability is Slow Match, a passive with no bar to fill",
+		ab != null and ab.kind == AbilityData.Kind.FUSE and ab.id == &"slow_match"
+		and keg_data.mana_per_attack <= 0.0 and keg_data.mana_per_charge <= 0.0
+		and not keg_data.casts_at_battle_start)
+	if ab == null or ab.kind != AbilityData.Kind.FUSE:
+		return
+	var row := {}
+	for r in DataBuilder.UNIT_TABLE:
+		if r.id == &"powderkeg":
+			row = r
+	_check("its table row is a 110-health body with a 7-damage swing",
+		not row.is_empty() and is_equal_approx(row.hp, 110.0)
+		and is_equal_approx(row.dmg, 7.0))
+	# Tier-scaled like everything else, then bent by tier: twice the health through
+	# tier 3 tapering to none at tier 6, and a little more swing in the middle. Every
+	# tier file has to be what the row says, and the bend has to stop at the top,
+	# where the blast already scales with tier and did not need the help.
+	var built_ok := not row.is_empty()
+	var built: PackedStringArray = []
+	for t in range(1, 7):
+		var d := _tier_of(keg_data, t)
+		if d == null or row.is_empty():
+			built_ok = false
+			continue
+		var hp := snappedf(110.0 * pow(2.0, t - 1) * float(row.tier_hp[t - 1]), 1.0)
+		var dmg := snappedf(7.0 * pow(2.0, t - 1) * float(row.tier_dmg[t - 1]), 0.5)
+		built.append("T%d %.0f/%.1f" % [t, d.max_hp, d.attack_damage])
+		built_ok = built_ok and is_equal_approx(d.max_hp, hp) \
+			and is_equal_approx(d.attack_damage, dmg)
+	_check("every tier is the doubling bent by the row's per-tier figures",
+		built_ok, ", ".join(built))
+	_check("twice the health at tiers 1-3, and no bend at all at tier 6",
+		not row.is_empty() and is_equal_approx(keg_data.max_hp, 220.0)
+		and is_equal_approx(_tier_of(keg_data, 3).max_hp, 880.0)
+		and is_equal_approx(_tier_of(keg_data, 6).max_hp, 3520.0)
+		and is_equal_approx(_tier_of(keg_data, 6).attack_damage, 224.0),
+		", ".join(built))
+	var usual := snappedf(0.50 * DataBuilder.MOVE_SCALE, 0.01)
+	_check("a shade quicker on its feet than the usual stride",
+		keg_data.move_time < usual and keg_data.move_time >= usual * 0.9,
+		"%.2fs a tile against %.2fs" % [keg_data.move_time, usual])
+	var want_fuse := [2.0, 1.75, 1.5, 1.25, 1.0, 0.75]
+	var fuse_ok := ab.fuse_seconds_by_tier.size() == want_fuse.size()
+	var got: PackedStringArray = []
+	for t in range(1, 7):
+		got.append("%.2f" % ab.fuse_seconds_for(t))
+		fuse_ok = fuse_ok and is_equal_approx(ab.fuse_seconds_for(t), want_fuse[t - 1])
+	_check("the fuse is a per-tier list in the data: 2 / 1.75 / 1.5 / 1.25 / 1 / 0.75s",
+		fuse_ok, " / ".join(got))
+	_check("the blast is 5x attack over the 3x3, and the panic reaches two tiles",
+		is_equal_approx(ab.blast_attack_multiple, 5.0) and ab.blast_radius == 1
+		and ab.flee_radius == 2)
+	_check("the codex says there is no bar, and names its fuse",
+		UnitCodex.charge_line(keg_data).contains("No bar")
+		and UnitCodex.charge_line(keg_data).contains("2s")
+		and ab.describe().contains("2/1.75/1.5/1.25/1/0.75"),
+		UnitCodex.charge_line(keg_data))
+
+	# --- Dying lights it. A rooted, harmless Spire is the only enemy, far away.
+	BoardModel.reset_map()
+	var board := BoardModel.new()
+	var keg := UnitInstance.create(keg_data, BoardModel.TEAM_B)
+	board.force_place(keg, Vector2i(2, 7))
+	var foe := UnitInstance.create(_find("spire"), BoardModel.TEAM_A)
+	board.force_place(foe, Vector2i(2, 1))
+	var sim := _keg_sim(board)
+	var lit_at := keg.cell
+	_light(sim, keg, foe)
+	_check("a killing blow lights it instead of killing it",
+		keg.is_lit() and _kind_events(sim, "fuse_lit", keg.uid).size() == 1
+		and _kind_events(sim, "death", keg.uid).is_empty(),
+		"lit %s, %d deaths" % [keg.is_lit(), _kind_events(sim, "death", keg.uid).size()])
+	_check("its fuse is its tier's figure", is_equal_approx(keg.fuse_left, 2.0),
+		"%.2fs" % keg.fuse_left)
+	_check("it is still standing on its tile", board.unit_at(keg.cell) == keg)
+	_check("and dead to every sweep that asks",
+		not keg.is_alive() and board.nearest_enemy(foe) == null
+		and board.units_in_box(keg.cell, 3).is_empty()
+		and sim._choose_enemy(foe) == null)
+	# The gate is is_lit() inside is_alive(), not the empty health bar, so it has to
+	# hold with health put back on the barrel.
+	keg.current_hp = 25.0
+	_check("with health put back on it, it is still untargetable",
+		not keg.is_alive() and board.nearest_enemy(foe) == null
+		and board.units_in_box(keg.cell, 3).is_empty())
+	keg.heal(50.0)
+	_check("and heal() refuses it", is_equal_approx(keg.current_hp, 25.0),
+		"%.1f" % keg.current_hp)
+	sim._damage(keg, 500.0, foe)
+	_check("and nothing can hit it", is_equal_approx(keg.current_hp, 25.0),
+		"%.1f" % keg.current_hp)
+	keg.current_hp = 0.0
+	sim.step()
+	_check("its side has nobody left standing, and the round is not over",
+		sim.living_count(BoardModel.TEAM_B) == 0 and not sim.is_finished(),
+		"B %d, finished %s" % [sim.living_count(BoardModel.TEAM_B), sim.is_finished()])
+	_run_out(sim)
+	var blasts := _kind_events(sim, "fuse_blast", keg.uid)
+	var ends := _kind_events(sim, "end")
+	_check("it ends when the fuse does, and not a tick before",
+		sim.is_finished() and blasts.size() == 1 and ends.size() == 1
+		and float(ends[0].t) >= float(blasts[0].t)
+		and float(blasts[0].t) >= 1.9,
+		"%d blasts, end at %s" % [blasts.size(),
+			"-" if ends.is_empty() else str(ends[0].t)])
+	_check("and then it really is dead and gone",
+		keg.state == UnitInstance.State.DEAD and board.unit_at(keg.cell) != keg
+		and _kind_events(sim, "death", keg.uid).size() == 1)
+	if not blasts.is_empty():
+		var at: Vector2i = blasts[0].cell
+		_check("while lit it walked at the nearest enemy",
+			BoardModel.box_distance(at, foe.cell) < BoardModel.box_distance(lit_at, foe.cell),
+			"lit at %s, blew at %s, enemy at %s" % [lit_at, at, foe.cell])
+		_check("and went off on the tile it had walked to",
+			at != lit_at and at == keg.cell, "%s" % at)
+	_check("it never swung or cast while lit",
+		_kind_events(sim, "attack", keg.uid).is_empty()
+		and _kind_events(sim, "cast_start", keg.uid).is_empty())
+	var steps := _kind_events(sim, "move", keg.uid)
+	_check("it walks at its own stride",
+		not steps.is_empty() and is_equal_approx(float(steps[0].duration),
+			keg.stat(StatModifier.Stat.MOVE_TIME)),
+		"" if steps.is_empty() else "%.3fs" % float(steps[0].duration))
+
+	# --- It never digs: a solid row of breakable stone between it and the enemy.
+	var wboard := BoardModel.new()
+	var wkeg := UnitInstance.create(keg_data, BoardModel.TEAM_B)
+	wboard.force_place(wkeg, Vector2i(2, 7))
+	var wfoe := UnitInstance.create(_find("spire"), BoardModel.TEAM_A)
+	wboard.force_place(wfoe, Vector2i(2, 1))
+	var wsim := _keg_sim(wboard)
+	for x in BoardModel.WIDTH:
+		BoardModel.raise_wall(Vector2i(x, 5), 500.0)
+	_light(wsim, wkeg, wfoe)
+	_run_out(wsim)
+	var dug := 0
+	for e in wsim.events:
+		if e.kind == "wall_hit" and int(e.get("uid", -1)) == wkeg.uid:
+			dug += 1
+	_check("walled off, it waits at the stone rather than digging",
+		dug == 0 and BoardModel.is_wall(Vector2i(2, 5))
+		and is_equal_approx(BoardModel.wall_hp(Vector2i(2, 5)), 500.0),
+		"%d blows at the wall" % dug)
+	BoardModel.clear_changes()
+
+	# --- Frozen at the moment of death: defused.
+	var fboard := BoardModel.new()
+	var fkeg := UnitInstance.create(keg_data, BoardModel.TEAM_B)
+	fboard.force_place(fkeg, Vector2i(2, 7))
+	var ffoe := UnitInstance.create(_find("spire"), BoardModel.TEAM_A)
+	fboard.force_place(ffoe, Vector2i(2, 1))
+	var fsim := _keg_sim(fboard)
+	fkeg.frozen_left = 3.0
+	_light(fsim, fkeg, ffoe)
+	_run_out(fsim)
+	_check("killed while frozen, it is defused: it just dies",
+		not fkeg.is_lit() and _kind_events(fsim, "fuse_lit", fkeg.uid).is_empty()
+		and _kind_events(fsim, "fuse_blast", fkeg.uid).is_empty()
+		and _kind_events(fsim, "death", fkeg.uid).size() == 1)
+
+	# --- Frozen AFTER it lit, with an enemy far enough away to walk at: it stays put.
+	var zboard := BoardModel.new()
+	var zkeg := UnitInstance.create(keg_data, BoardModel.TEAM_B)
+	zboard.force_place(zkeg, Vector2i(2, 7))
+	var zfoe := UnitInstance.create(_find("spire"), BoardModel.TEAM_A)
+	zboard.force_place(zfoe, Vector2i(2, 1))
+	var zsim := _keg_sim(zboard)
+	_light(zsim, zkeg, zfoe)
+	zkeg.frozen_left = 5.0
+	_run_out(zsim)
+	var zb := _kind_events(zsim, "fuse_blast", zkeg.uid)
+	_check("frozen after lighting, it does not walk however far the enemy is",
+		_kind_events(zsim, "move", zkeg.uid).is_empty() and zb.size() == 1
+		and zb[0].cell == Vector2i(2, 7),
+		"%d steps" % _kind_events(zsim, "move", zkeg.uid).size())
+
+	# --- Frozen AFTER it lit: it stands still, and blows where it stands. Pinned
+	# like that, the blast's footprint can be checked tile by tile. Rooted Spires
+	# for victims, so nobody can run: one ally and one enemy inside the 3x3, one of
+	# each just outside it.
+	var pboard := BoardModel.new()
+	var pkeg := UnitInstance.create(keg_data, BoardModel.TEAM_B)
+	pboard.force_place(pkeg, Vector2i(2, 7))
+	var spire := _find("spire")
+	var in_ally := UnitInstance.create(spire, BoardModel.TEAM_B)
+	var in_foe := UnitInstance.create(spire, BoardModel.TEAM_A)
+	var out_ally := UnitInstance.create(spire, BoardModel.TEAM_B)
+	var out_foe := UnitInstance.create(spire, BoardModel.TEAM_A)
+	pboard.force_place(in_ally, Vector2i(1, 6))
+	pboard.force_place(in_foe, Vector2i(3, 8))
+	pboard.force_place(out_ally, Vector2i(4, 7))
+	pboard.force_place(out_foe, Vector2i(2, 9))
+	var psim := _keg_sim(pboard)
+	_light(psim, pkeg, in_foe)
+	pkeg.frozen_left = 5.0
+	var hp_before := {}
+	for u in [in_ally, in_foe, out_ally, out_foe]:
+		hp_before[u.uid] = u.current_hp
+	var expect := psim.blast_damage_of(pkeg)
+	_run_out(psim)
+	_check("frozen after lighting, it stands still and the fuse burns on",
+		_kind_events(psim, "move", pkeg.uid).is_empty()
+		and _kind_events(psim, "fuse_blast", pkeg.uid).size() == 1
+		and _kind_events(psim, "fuse_blast", pkeg.uid)[0].cell == Vector2i(2, 7))
+	_check("the blast is attack x 5 x tier",
+		is_equal_approx(expect, keg_data.attack_damage * 5.0 * 1.0),
+		"%.1f" % expect)
+	var lost := func(u: UnitInstance) -> float:
+		return float(hp_before[u.uid]) - u.current_hp
+	_check("it hits its own side inside the 3x3",
+		is_equal_approx(lost.call(in_ally), expect * in_ally.damage_taken_multiplier()),
+		"%.1f" % lost.call(in_ally))
+	_check("and the enemy inside it",
+		is_equal_approx(lost.call(in_foe), expect * in_foe.damage_taken_multiplier()),
+		"%.1f" % lost.call(in_foe))
+	_check("and nothing outside it, on either side",
+		is_zero_approx(lost.call(out_ally)) and is_zero_approx(lost.call(out_foe)),
+		"%.1f / %.1f" % [lost.call(out_ally), lost.call(out_foe)])
+
+	# --- The panic. Both sides within two tiles run; three tiles out does not.
+	var rboard := BoardModel.new()
+	var rkeg := UnitInstance.create(keg_data, BoardModel.TEAM_B)
+	rboard.force_place(rkeg, Vector2i(2, 7))
+	var lancer := _find("lancer")
+	var ally_near := UnitInstance.create(lancer, BoardModel.TEAM_B)
+	var foe_near := UnitInstance.create(lancer, BoardModel.TEAM_A)
+	var ally_far := UnitInstance.create(lancer, BoardModel.TEAM_B)
+	var foe_far := UnitInstance.create(_find("archer"), BoardModel.TEAM_A)
+	rboard.force_place(ally_near, Vector2i(3, 8))
+	rboard.force_place(foe_near, Vector2i(2, 5))
+	rboard.force_place(ally_far, Vector2i(5, 9))
+	rboard.force_place(foe_far, Vector2i(2, 1))
+	var rsim := _keg_sim(rboard)
+	_light(rsim, rkeg, foe_near)
+	_check("everything within two tiles runs from it, both sides",
+		ally_near.flee_from_uid == rkeg.uid and foe_near.flee_from_uid == rkeg.uid)
+	_check("and nothing three tiles out does",
+		ally_far.flee_from_uid == -1 and foe_far.flee_from_uid == -1)
+	var lit_events := _kind_events(rsim, "fuse_lit", rkeg.uid)
+	_check("the view is told who is running",
+		lit_events.size() == 1 and (lit_events[0].fleeing as Array).size() == 2)
+	rsim.step()
+	_check("the enemy beside it runs instead of closing in",
+		BoardModel.box_distance(foe_near.cell, Vector2i(2, 7)) > 2,
+		"at %s" % foe_near.cell)
+	_check("and so does its own side",
+		BoardModel.box_distance(ally_near.cell, Vector2i(2, 7)) > 1,
+		"at %s" % ally_near.cell)
+	# Directly, against a keg that has moved: the step is measured from where the
+	# keg is NOW. The runner lit just below it, the keg at (2,5) and the runner at
+	# (2,6). Measured from the lit tile the best step is further down, to (2,7). But
+	# the keg has since walked round to (2,8), BELOW the runner, so the right step is
+	# back up into the tile the keg left.
+	var dboard := BoardModel.new()
+	var dkeg := UnitInstance.create(keg_data, BoardModel.TEAM_B)
+	dboard.force_place(dkeg, Vector2i(2, 5))
+	var runner := UnitInstance.create(lancer, BoardModel.TEAM_A)
+	dboard.force_place(runner, Vector2i(2, 6))
+	var dsim := _keg_sim(dboard)
+	_light(dsim, dkeg, runner)
+	dboard.move_unit(dkeg, Vector2i(2, 8))
+	var before_d := BoardModel.box_distance(runner.cell, dkeg.cell)
+	var stepped: bool = dsim._flee(runner)
+	_check("each step takes it as far as it can get from the keg's CURRENT tile",
+		stepped and runner.cell == Vector2i(2, 5)
+		and BoardModel.box_distance(runner.cell, dkeg.cell) == before_d + 1,
+		"stepped to %s" % runner.cell)
+	_run_out(rsim)
+	_check("the panic ends with the blast",
+		ally_near.flee_from_uid == -1 and foe_near.flee_from_uid == -1)
+	_check("and a fleeing unit never made the keg swing",
+		_kind_events(rsim, "attack", rkeg.uid).is_empty())
+
+	# --- Unhealable by the Hospitaller's pulse, which hunts for the worst-hurt
+	# ally and would otherwise find a barrel on 1 health irresistible.
+	var hboard := BoardModel.new()
+	var medic := UnitInstance.create(_find("hospitaller"), BoardModel.TEAM_B)
+	var hkeg := UnitInstance.create(keg_data, BoardModel.TEAM_B)
+	var patient := UnitInstance.create(spire, BoardModel.TEAM_B)
+	hboard.force_place(medic, Vector2i(2, 8))
+	hboard.force_place(hkeg, Vector2i(3, 8))
+	hboard.force_place(patient, Vector2i(1, 8))
+	var hfoe := UnitInstance.create(spire, BoardModel.TEAM_A)
+	hboard.force_place(hfoe, Vector2i(2, 0))
+	var hsim := _keg_sim(hboard)
+	patient.current_hp = patient.stat(StatModifier.Stat.MAX_HP) * 0.5
+	_light(hsim, hkeg, hfoe)
+	hkeg.current_hp = 1.0
+	for i in 12:
+		hsim.step()
+	var to_keg := 0
+	var mends := 0
+	for e in _mend_events(hsim):
+		mends += 1
+		if int(e.uid) == hkeg.uid:
+			to_keg += 1
+	_check("the Hospitaller's pulse passes a lit keg over",
+		mends >= 1 and to_keg == 0 and is_equal_approx(hkeg.current_hp, 1.0),
+		"%d pulses, %d to the keg" % [mends, to_keg])
+	_check("and its worst-hurt pick skips it",
+		hsim._worst_hurt_ally(medic, 3, true, true) != hkeg)
+
+	# --- The round boundary.
+	var rk := UnitInstance.create(keg_data, BoardModel.TEAM_B)
+	rk.fuse_left = 1.0
+	rk.flee_from_uid = 42
+	rk.reset_for_battle()
+	_check("reset_for_battle clears the fuse and the panic",
+		is_zero_approx(rk.fuse_left) and rk.flee_from_uid == -1 and rk.is_alive())
+
+	# --- The clock. A fuse still burning when time is called gets to finish.
+	var cboard := BoardModel.new()
+	var ckeg := UnitInstance.create(keg_data, BoardModel.TEAM_B)
+	cboard.force_place(ckeg, Vector2i(2, 7))
+	var cfoe := UnitInstance.create(spire, BoardModel.TEAM_A)
+	cboard.force_place(cfoe, Vector2i(2, 1))
+	var csim := _keg_sim(cboard)
+	_light(csim, ckeg, cfoe)
+	csim.run(0.5)
+	_check("a fuse still lit when the time runs out is allowed to go off",
+		_kind_events(csim, "fuse_blast", ckeg.uid).size() == 1 and csim.is_finished())
+
+	_test_saltpetre(keg_data)
+	BoardModel.clear_changes()
+
+
+func _test_saltpetre(keg_data: UnitData) -> void:
+	var pool := _pool()
+	var salt := pool.by_id(&"saltpetre")
+	_check("Saltpetre is a live buff in the pool", salt != null)
+	if salt == null:
+		return
+	_check("it is offered only to a side fielding the Powderkeg",
+		BuffPool.in_pool_for(salt, {&"powderkeg": true})
+		and not BuffPool.in_pool_for(salt, {&"warden": true}))
+	var atk := [2.0, 3.0, 4.0]
+	var spd := [1.25, 1.5, 2.0]
+	for r in [BuffData.Rarity.BRONZE, BuffData.Rarity.SILVER, BuffData.Rarity.GOLD]:
+		var u := UnitInstance.create(keg_data, BoardModel.TEAM_B)
+		var tb := TeamBuffs.new()
+		tb.add(salt, r)
+		tb.apply_to(u)
+		var a: float = u.stat(StatModifier.Stat.ATTACK_DAMAGE) / keg_data.attack_damage
+		var s: float = keg_data.move_time / u.stat(StatModifier.Stat.MOVE_TIME)
+		_check("%s Saltpetre: +%d%% attack and +%d%% movement speed" % [
+			BuffData.rarity_name(r), roundi((atk[r] - 1.0) * 100.0),
+			roundi((spd[r] - 1.0) * 100.0)],
+			is_equal_approx(a, atk[r]) and is_equal_approx(s, spd[r]),
+			"x%.2f attack, x%.2f speed" % [a, s])
+		var ssim := CombatSim.new()
+		ssim.team_buffs = {BoardModel.TEAM_B: tb}
+		var offs := ssim.blast_offsets(u)
+		if r == BuffData.Rarity.GOLD:
+			_check("gold turns the blast into a diamond of arm 3",
+				offs.size() == 25 and offs.has(Vector2i(0, 3)) and offs.has(Vector2i(-3, 0))
+				and offs.has(Vector2i(1, 2)) and not offs.has(Vector2i(2, 2)),
+				"%d tiles" % offs.size())
+		else:
+			_check("%s leaves it the 3x3" % BuffData.rarity_name(r),
+				offs.size() == 9 and offs.has(Vector2i(1, 1)), "%d tiles" % offs.size())
+		_check("%s: the blast carries the extra attack" % BuffData.rarity_name(r),
+			is_equal_approx(ssim.blast_damage_of(u), keg_data.attack_damage * atk[r] * 5.0),
+			"%.1f" % ssim.blast_damage_of(u))
+	_check("the gold card says the blast becomes a diamond",
+		salt.describe(BuffData.Rarity.GOLD).contains("diamond")
+		and salt.describe(BuffData.Rarity.BRONZE).contains("At gold"),
+		salt.describe(BuffData.Rarity.GOLD))
+	_check("the diamond's arm is a number in the data, not the code",
+		salt.blast_diamond_at_gold == 3)
+
+	# The lit walk with the speed buff on: buff speed counts.
+	var tb2 := TeamBuffs.new()
+	tb2.add(salt, BuffData.Rarity.BRONZE)
+	var board := BoardModel.new()
+	var keg := UnitInstance.create(keg_data, BoardModel.TEAM_B)
+	board.force_place(keg, Vector2i(2, 7))
+	tb2.apply_to(keg)
+	var foe := UnitInstance.create(_find("spire"), BoardModel.TEAM_A)
+	board.force_place(foe, Vector2i(2, 1))
+	var sim := _keg_sim(board, tb2)
+	_light(sim, keg, foe)
+	sim.step()
+	var steps := _kind_events(sim, "move", keg.uid)
+	_check("lit, it walks at its buffed speed",
+		not steps.is_empty() and is_equal_approx(float(steps[0].duration),
+			keg_data.move_time / 1.25),
+		"" if steps.is_empty() else "%.3fs a tile" % float(steps[0].duration))
+
+	# Gold, for real: a diamond-shaped hole three tiles straight out. Pinned with a
+	# freeze so the footprint is exact. (2,7)+(0,3) is out of reach of the square
+	# and inside the diamond; (4,6) is outside both.
+	var tbg := TeamBuffs.new()
+	tbg.add(salt, BuffData.Rarity.GOLD)
+	var gboard := BoardModel.new()
+	var gkeg := UnitInstance.create(keg_data, BoardModel.TEAM_B)
+	gboard.force_place(gkeg, Vector2i(2, 4))
+	tbg.apply_to(gkeg)
+	var spire := _find("spire")
+	var tip := UnitInstance.create(spire, BoardModel.TEAM_A)
+	var near := UnitInstance.create(spire, BoardModel.TEAM_A)
+	var clear := UnitInstance.create(spire, BoardModel.TEAM_A)
+	gboard.force_place(tip, Vector2i(2, 7))
+	gboard.force_place(near, Vector2i(3, 5))
+	gboard.force_place(clear, Vector2i(4, 6))
+	var gsim := _keg_sim(gboard, tbg)
+	_light(gsim, gkeg, tip)
+	gkeg.frozen_left = 5.0
+	var tip_hp := tip.current_hp
+	var near_hp := near.current_hp
+	var clear_hp := clear.current_hp
+	_run_out(gsim)
+	_check("a gold blast reaches three tiles straight out",
+		tip.current_hp < tip_hp and near.current_hp < near_hp,
+		"%.0f -> %.0f, %.0f -> %.0f" % [tip_hp, tip.current_hp, near_hp, near.current_hp])
+	_check("and still misses the corner two-and-two away",
+		is_equal_approx(clear.current_hp, clear_hp))
+	var lit := _kind_events(gsim, "fuse_lit", gkeg.uid)
+	_check("and the view is handed the diamond to draw",
+		lit.size() == 1 and (lit[0].offsets as Array).size() == 25 and bool(lit[0].diamond))
+
+	# Rider-only buffs are real buffs. The live check used to look only at the
+	# bronze/silver/gold triples, so a buff whose whole effect was a gold-only
+	# scalar loaded, sat on disk and was never offered.
+	var rider := BuffData.new()
+	rider.id = &"test_blast_rider"
+	rider.unit_id = &"powderkeg"
+	rider.blast_diamond_at_gold = 3
+	_check("a buff made only of the blast rider still counts as live",
+		BuffPool.new()._is_live(rider))
+	var reel := BuffData.new()
+	reel.id = &"test_reel_rider"
+	reel.disorient_bonus = Vector3(1.0, 2.0, 3.0)
+	_check("and so does one made only of extra disorientation",
+		BuffPool.new()._is_live(reel))
+	var empty := BuffData.new()
+	empty.id = &"test_nothing"
+	_check("while one with nothing in it at all still does not",
+		not BuffPool.new()._is_live(empty))
 	BoardModel.clear_changes()
 
 
@@ -11582,6 +12063,22 @@ func _test_portraits_are_wired() -> void:
 
 func _test_audio_files_are_present() -> void:
 	_section("Audio")
+	# The web build only wires up buses that are in the layout it starts with; a bus
+	# added from script afterwards is silent in a browser. See audio.gd.
+	var layout := load("res://default_bus_layout.tres") as AudioBusLayout
+	var audio_script: GDScript = load("res://autoload/audio.gd")
+	var consts := audio_script.get_script_constant_map()
+	var listed := {}
+	if layout != null:
+		for i in range(1, 16):
+			var key := "bus/%d/name" % i
+			if layout.get(key) != null:
+				listed[String(layout.get(key))] = String(layout.get("bus/%d/send" % i))
+	for c in ["MUSIC_BUS", "SFX_BUS", "VOICE_BUS"]:
+		var bus_name := String(consts.get(c, ""))
+		_check("the %s bus is in default_bus_layout.tres and feeds Master, so the web build plays it" % bus_name,
+			listed.get(bus_name, "") == "Master",
+			"layout has %s" % [listed])
 	_check("the menu theme exists",
 		ResourceLoader.exists("res://assets/music/menu_theme.ogg"))
 	# The battle playlist is found by counting upward from battle_1.ogg, so the

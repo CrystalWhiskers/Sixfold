@@ -104,6 +104,18 @@ var reeling_t := 0.0
 ## `unit.mend_engaged` is the END-of-round value.
 var engaged := false
 
+## Running from a lit Powderkeg: the direction away from the keg's CURRENT tile, or
+## zero when not fleeing. Set by BattlePlayer every frame off the views' live
+## positions rather than off the model, which during playback is end-of-round state.
+var flee_dir := Vector2.ZERO
+
+
+func set_flee_dir(dir: Vector2) -> void:
+	if dir.is_equal_approx(flee_dir):
+		return
+	flee_dir = dir
+	queue_redraw()
+
 ## Whether an Usurper is currently inside this unit.
 ##
 ## Event-driven, like every other condition here. The simulation flips the host's `team`
@@ -669,6 +681,22 @@ func _draw() -> void:
 			draw_circle(at, maxf(tile_size * 0.075, 3.5),
 				Color(0.08, 0.07, 0.04, 0.70 * alpha))
 			draw_circle(at, maxf(tile_size * 0.055, 2.5), swirl)
+
+	if flee_dir != Vector2.ZERO and not dying:
+		# Running from a lit keg: two chevrons on the body, stacked one behind the
+		# other and pointing AWAY from the keg's current tile, which BattlePlayer
+		# re-aims every frame as the keg walks. Drawn on the body, late, for the same
+		# reason the reeling motes are — up top is where the bar and the numbers go.
+		var fwd := flee_dir.normalized()
+		var side := Vector2(-fwd.y, fwd.x)
+		var arm := tile_size * 0.16
+		var ink := Color(1.00, 0.62, 0.26, 0.95 * alpha)
+		for i in 2:
+			var tip := body.get_center() + fwd * (tile_size * (0.04 + 0.17 * float(i)))
+			var back := tip - fwd * arm
+			for p in [back + side * arm, back - side * arm]:
+				draw_line(p, tip, Color(0.06, 0.04, 0.02, 0.75 * alpha), 6.0)
+				draw_line(p, tip, ink, 3.0)
 
 	if dying:
 		var k := body.grow(-body.size.x * 0.28)

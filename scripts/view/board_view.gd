@@ -384,7 +384,12 @@ func clear_aura_zone(uid: int) -> void:
 
 
 func clear_aura_zones() -> void:
+	## Everything persistent that belongs to the last battle. The fuse marks and blast
+	## rings go with the aura zones: a battle cut short with a keg still lit must not
+	## leave its footprint on the next board.
 	_aura_zones.clear()
+	_fuse_marks.clear()
+	_rings.clear()
 	queue_redraw()
 
 
@@ -403,6 +408,75 @@ func _draw_aura_zones() -> void:
 			- Vector2(span, span) * 0.5, Vector2(span, span))
 		draw_rect(box, COL_AURA_FILL, true)
 		draw_rect(box, COL_AURA_EDGE, false, 2.0)
+
+
+## A lit Powderkeg's footprint: the ground its blast will cover, carried under the
+## keg as it walks. Keyed by uid like the aura zones and for the same reason — it
+## lives from the "fuse_lit" event to the "fuse_blast" one and has to follow the
+## unit VIEW's live position, not a cell.
+var _fuse_marks: Dictionary = {}
+
+## Blast rings: one expanding circle per explosion, counted down like the flashes.
+var _rings: Array[Dictionary] = []
+
+const COL_FUSE := Color(1.00, 0.42, 0.18)
+const COL_RING := Color(1.00, 0.70, 0.30)
+
+
+func add_fuse_mark(uid: int, offsets: Array) -> void:
+	var offs: Array[Vector2i] = []
+	for o in offsets:
+		offs.append(o)
+	_fuse_marks[uid] = {offsets = offs, t = 0.0}
+	set_process(true)
+	queue_redraw()
+
+
+func clear_fuse_mark(uid: int) -> void:
+	if _fuse_marks.erase(uid):
+		queue_redraw()
+
+
+func has_fuse_mark(uid: int) -> bool:
+	return _fuse_marks.has(uid)
+
+
+func spawn_ring(world: Vector2, reach_tiles: float, life := 0.55) -> void:
+	_rings.append({pos = world, reach = maxf(reach_tiles, 0.5) * tile_size,
+		left = life, total = maxf(life, 0.01)})
+	set_process(true)
+	queue_redraw()
+
+
+func ring_count() -> int:
+	return _rings.size()
+
+
+func _draw_fuse_marks() -> void:
+	for uid in _fuse_marks:
+		var m: Dictionary = _fuse_marks[uid]
+		var v: UnitView = _views.get(uid, null)
+		if v == null or not is_instance_valid(v):
+			continue
+		# v.position is the middle of the keg's tile, so each offset's tile has its
+		# top-left corner half a tile up and left of the offset's own centre.
+		var beat := 0.5 + 0.5 * sin(float(m.t) * 10.0)
+		var fill := Color(COL_FUSE, 0.14 + 0.16 * beat)
+		var edge := Color(COL_FUSE, 0.55 + 0.40 * beat)
+		for o in m.offsets:
+			var r := Rect2(v.position + (Vector2(o) - Vector2(0.5, 0.5)) * tile_size,
+				Vector2(tile_size, tile_size))
+			draw_rect(r, fill, true)
+			draw_rect(r.grow(-1.5), edge, false, 2.0)
+
+
+func _draw_rings() -> void:
+	for r in _rings:
+		var t: float = 1.0 - clampf(r.left / r.total, 0.0, 1.0)
+		var radius: float = lerpf(r.reach * 0.25, r.reach, sqrt(t))
+		var a := 1.0 - t
+		draw_arc(r.pos, radius, 0.0, TAU, 48, Color(COL_RING, 0.95 * a), 6.0 * a + 2.0)
+		draw_arc(r.pos, radius * 0.82, 0.0, TAU, 40, Color(1, 1, 1, 0.45 * a), 2.0)
 
 
 func flash_cells(cells: Array, color: Color, duration: float) -> void:
@@ -517,6 +591,17 @@ func _process(delta: float) -> void:
 	# A zone follows a unit that is still walking, so as long as one exists the
 	# view has to keep redrawing even when nothing else is animating.
 	busy = busy or not _aura_zones.is_empty()
+	# The fuse marks pulse and follow a walking keg; the rings grow and fade.
+	for uid in _fuse_marks:
+		_fuse_marks[uid].t = float(_fuse_marks[uid].t) + delta
+	busy = busy or not _fuse_marks.is_empty()
+	i = _rings.size() - 1
+	while i >= 0:
+		_rings[i].left -= delta
+		if _rings[i].left <= 0.0:
+			_rings.remove_at(i)
+		i -= 1
+	busy = busy or not _rings.is_empty()
 
 	if not busy:
 		set_process(false)
@@ -723,6 +808,7 @@ func _draw() -> void:
 				_draw_gate(r)
 
 	_draw_aura_zones()
+	_draw_fuse_marks()
 
 	if _drag_uid >= 0 and board != null:
 		for c in board.deploy_cells(player_team):
@@ -761,6 +847,7 @@ func _draw() -> void:
 
 	_draw_shots()
 	_draw_beams()
+	_draw_rings()
 	_draw_floaters()
 
 	if _drag_uid >= 0:

@@ -166,6 +166,7 @@ func _process(_delta: float) -> void:
 			_check_merge_all_button()
 			_check_the_assassin_cloaks_before_it_jumps()
 			_check_possession_reaches_the_view()
+			_check_the_powderkeg_reaches_the_view()
 			var asked: int = _main.music_checks - _music_checks_at_start
 			_check("the boss rule was asked at every round start",
 				asked >= _rounds_played and asked > 0,
@@ -1700,3 +1701,88 @@ func _check_merge_all_button() -> void:
 	for row in evicted:
 		board.force_place(row.unit, row.cell)
 	MatchState.phase = was_phase
+
+
+func _check_the_powderkeg_reaches_the_view() -> void:
+	# A real simulation, played back for real: a Powderkeg killed in the middle of
+	# a little crowd. The view has to put the warning footprint under it the moment
+	# it lights, aim every runner's chevrons away from it, and swap the footprint for
+	# a blast ring when it goes off.
+	var view := BoardView.new()
+	add_child(view)
+	view.fit_to(Rect2(Vector2.ZERO, Vector2(900, 700)))
+	BoardModel.reset_map()
+	var model := BoardModel.new()
+	var keg := UnitInstance.create(
+		load("res://data/units/powderkeg_t1.tres") as UnitData, BoardModel.TEAM_B)
+	var ally := UnitInstance.create(
+		load("res://data/units/lancer_t1.tres") as UnitData, BoardModel.TEAM_B)
+	var foe := UnitInstance.create(
+		load("res://data/units/lancer_t1.tres") as UnitData, BoardModel.TEAM_A)
+	var far := UnitInstance.create(
+		load("res://data/units/spire_t1.tres") as UnitData, BoardModel.TEAM_A)
+	model.force_place(keg, Vector2i(2, 7))
+	model.force_place(ally, Vector2i(3, 8))
+	model.force_place(foe, Vector2i(2, 5))
+	model.force_place(far, Vector2i(2, 0))
+	var sim := CombatSim.new()
+	sim.crit_chance = 0.0
+	sim.setup(model, 3)
+	sim._damage(keg, 1000000.0, foe)
+	for i in 40:
+		sim.step()
+	view.bind(model)
+	var units := {}
+	for u in [keg, ally, foe, far]:
+		view.ensure_view(u)
+		units[u.uid] = u
+	var player := BattlePlayer.new()
+	add_child(player)
+	player.play(view, sim.events, units)
+	var lit_t := -1.0
+	var blast_t := -1.0
+	for e in sim.events:
+		if e.kind == "fuse_lit" and lit_t < 0.0:
+			lit_t = float(e.t)
+		elif e.kind == "fuse_blast" and blast_t < 0.0:
+			blast_t = float(e.t)
+	_check("the sim lit the keg and then blew it", lit_t >= 0.0 and blast_t > lit_t,
+		"lit at %.1f, blast at %.1f" % [lit_t, blast_t])
+	player._process(0.05)
+	_check("a lit keg gets its warning footprint under it",
+		view.has_fuse_mark(keg.uid))
+	_check("and the units near it are marked as running",
+		player.fleeing_count() == 2, "%d running" % player.fleeing_count())
+	var fv := view.view_for(foe.uid)
+	var kv := view.view_for(keg.uid)
+	var away := Vector2.ZERO
+	if fv != null and kv != null:
+		away = (fv.position - kv.position).normalized()
+	_check("with chevrons pointing away from the keg",
+		fv != null and fv.flee_dir != Vector2.ZERO and fv.flee_dir.dot(away) > 0.9,
+		"chevrons %s, away %s" % ["-" if fv == null else str(fv.flee_dir), away])
+	# Halfway through the fuse the keg has walked; the chevrons must have followed.
+	var mid := 0.0
+	while mid < (blast_t - lit_t) * 0.6:
+		player._process(0.05)
+		mid += 0.05
+	if fv != null and kv != null and is_instance_valid(fv) and is_instance_valid(kv):
+		away = (fv.position - kv.position).normalized()
+	_check("and re-aimed as the keg walks",
+		fv != null and is_instance_valid(fv) and fv.flee_dir.dot(away) > 0.9)
+	_check("the footprint is still there until it goes off",
+		view.has_fuse_mark(keg.uid))
+	var waited := 0.0
+	while waited < 2.0 and view.has_fuse_mark(keg.uid):
+		player._process(0.05)
+		waited += 0.05
+	_check("the footprint vanishes on the blast", not view.has_fuse_mark(keg.uid))
+	_check("and a ring goes out from it", view.ring_count() >= 1,
+		"%d rings" % view.ring_count())
+	_check("and nobody is still running from a keg that is gone",
+		player.fleeing_count() == 0 and (fv == null or not is_instance_valid(fv)
+			or fv.flee_dir == Vector2.ZERO))
+	player.stop()
+	player.queue_free()
+	view.queue_free()
+	BoardModel.clear_changes()

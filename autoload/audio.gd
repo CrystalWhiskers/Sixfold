@@ -178,11 +178,16 @@ var enabled := true
 ## the swings, the death lines — went straight to Master, so there was exactly one fader
 ## and it moved all of them together.
 ##
-## Created at RUNTIME rather than in a default_bus_layout.tres. A bus layout is a
-## resource that has to be kept in step with the names this file uses, and if it goes
-## missing or is edited in the Godot audio panel, every one of these lookups quietly
-## returns -1 and the sliders do nothing with no error anywhere. Building them here means
-## the names are declared once, in the file that uses them.
+## Declared in default_bus_layout.tres AND ensured at runtime by _ensure_buses().
+##
+## The layout file is not optional. The web build plays sound through the browser's
+## own audio graph ("sample" playback), and that graph is built from the bus layout
+## the engine starts with — a bus added from script afterwards exists in AudioServer
+## but is never wired to the speakers, so every sound routed through it was silent on
+## the web while the desktop build was fine. _ensure_buses() stays as the safety net
+## for the opposite failure: if the layout is deleted or a bus renamed in the audio
+## panel, the lookups would otherwise return -1 and the sliders would do nothing.
+## A test checks the layout names match these constants.
 const MUSIC_BUS := "Music"
 const SFX_BUS := "Effects"
 const VOICE_BUS := "Voice"

@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_q38wx"]
+
+[resource]
+script = ExtResource("1_q38wx")
+id = &"saltpetre"
+display_name = "Saltpetre"
+unit_id = &"powderkeg"
+blast_diamond_at_gold = 3
+bronze = Vector2(1, 0.25)
+silver = Vector2(2, 0.5)
+gold = Vector2(3, 1)
+stat_b = 3
+uses_second_stat = true

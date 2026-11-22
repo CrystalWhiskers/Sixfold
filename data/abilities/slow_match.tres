@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_wud4t"]
+
+[resource]
+script = ExtResource("1_wud4t")
+id = &"slow_match"
+display_name = "Slow Match"
+kind = 25
+cast_time = 0.0
+fuse_seconds_by_tier = Array[float]([2.0, 1.75, 1.5, 1.25, 1.0, 0.75])

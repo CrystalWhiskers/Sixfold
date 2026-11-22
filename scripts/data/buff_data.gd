@@ -91,6 +91,13 @@ const RARITY_COLORS := [
 ## additive, TeamBuffs.frenzy_seconds_for is the only place that has to change.
 @export var frenzy_seconds_at_gold: float = 0.0
 
+## Gold only, like frenzy_seconds_at_gold: the Powderkeg's blast stops being the 3x3
+## square and becomes a DIAMOND of this arm — every tile within this many steps,
+## counted the four-way walking way (|dx| + |dy|). 3 is 25 tiles against the
+## square's 9, and it reaches three tiles straight out where the square reaches one.
+## Zero means the buff does not touch the blast.
+@export var blast_diamond_at_gold: int = 0
+
 ## Movement speed handed to whatever an Usurper is wearing, bronze/silver/gold.
 ## 0.75 is +75%, written the way a player reads it — the MOVE_TIME inversion is
 ## applied when it is used, by signed_percent().
@@ -381,6 +388,11 @@ func describe(r: Rarity) -> String:
 				line += ("  At gold it stays standing at zero health for %ss instead."
 					% secs) if r == Rarity.GOLD else \
 					("  At gold it also stays standing at zero health for %ss." % secs)
+			if blast_diamond_at_gold > 0:
+				line += ("  At gold its blast is a diamond reaching %d tiles out instead of the 3x3."
+					% blast_diamond_at_gold) if r == Rarity.GOLD else \
+					("  At gold its blast also grows into a diamond reaching %d tiles out."
+					% blast_diamond_at_gold)
 			var plate := shield_on_hit_at(r)
 			if plate > 0.0:
 				line += "  Every hit it takes also adds %s of its max health to its shield." % _bare(plate)
