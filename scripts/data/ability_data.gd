@@ -26,7 +26,9 @@ enum Kind {
 	POSSESS,
 	FRENZY,
 	DISORIENT,
+	## Appended, never inserted: the .tres files store this as a number.
 	DETONATE,
+	MEND,
 }
 
 @export var id: StringName = &""
@@ -439,6 +441,20 @@ enum Kind {
 ## would be a free map of the blast drawn for both sides.
 @export var flee_margin: int = 1
 
+@export_group("Mend")
+## A passive, not a cast: the Hospitaller has no mana bar to fill. Every
+## `mend_interval` seconds it heals the worst-hurt OTHER ally within
+## `heal_radius` for this fraction of that ally's max health, scaled per tier the
+## same way the Seraph's burst is (`heal_percent_per_tier` is reused for that).
+## It never cleanses — the Seraph stays the only cleanse in the game.
+@export var mend_percent: float = 0.0
+@export var mend_interval: float = 1.0
+
+## While ANY enemy is on an adjacent tile the mending stops, and every swing it
+## takes at that enemy is worth this many of its ordinary ones. The pulse resumes
+## the moment nothing is adjacent any more.
+@export var mend_melee_mult: float = 1.0
+
 @export_group("Mana aura")
 @export var mana_aura_radius: int = 1
 
@@ -540,6 +556,10 @@ func describe() -> String:
 			return "Heals the worst-hurt ally within %d tiles for %d%% of their max health, +%d%% of that per tier." % [
 				heal_radius, roundi(heal_percent * 100.0),
 				roundi(heal_percent_per_tier * 100.0)]
+		Kind.MEND:
+			return "No bar to fill. Every %.0fs it mends the worst-hurt ally within %d tiles for %.0f%% of their max health, +%d%% of that per tier. It never mends itself and lifts nothing. The moment an enemy steps next to it the mending stops, and it hits whatever is adjacent for %.0fx its ordinary swing until nothing is." % [
+				mend_interval, heal_radius, mend_percent * 100.0,
+				roundi(heal_percent_per_tier * 100.0), mend_melee_mult]
 		Kind.SUMMON:
 			if summon_random:
 				var tail := (" They stay with you for the rest of the match."

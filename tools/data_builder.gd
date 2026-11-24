@@ -850,6 +850,17 @@ const UNIT_TABLE := [
 		note = "A walking mistake waiting to happen, to whoever is nearest when it goes. Killing it is the easy part and also the problem: it gets back up with the fuse burning and keeps walking at you — longer at tier 1, barely a breath at tier 6 — and then it takes a three-by-three square of board with it — yours, theirs, it does not read banners. Everything close enough to be hurt turns and runs the moment it starts ticking, which is most of what you are buying: it does not have to kill anything to break a line in half. Freeze it and the fuse never lights at all.",
 	},
 	{
+		# A second healer that is NOT a second Seraph: no bar, no burst, no cleanse.
+		# A steady trickle from the middle of the line, and a reason to leave it alone.
+		# 162.5 is 130 x 1.25, measured: the heal size barely moves its win rate, its
+		# body does. At 130 it sat 31-37% at tiers 1-4 against a 49.5% baseline.
+		id = &"hospitaller", name = "Hospitaller", hp = 162.5, dmg = 9.0, spd = 0.9,
+		move = 0.50, range = "MEDIUM", sight = 4, type = "RANGED",
+		accent = Color(0.84, 0.74, 0.60),
+		ability = &"triage", mana = 0.0,
+		note = "Stands a couple of tiles behind the front and keeps it standing: every second it mends whichever ally nearby is hurt worst — never itself — for a small slice of their health. There is no bar and nothing to cleanse with; the Seraph is still the only answer to poison. Step next to it, though, and it drops the bandages: while anything is adjacent it stops mending and hits that thing for four times its ordinary swing, and only goes back to work once nothing is.",
+	},
+	{
 		id = &"wisp", name = "Wisp", hp = 38.0, dmg = 5.0, spd = 1.3,
 		move = 0.40, range = "MELEE", sight = 3, type = "MELEE",
 		accent = Color(0.70, 0.62, 0.86),
@@ -918,6 +929,12 @@ const ABILITY_TABLE := [
 		desc = "A heavy burst of healing on whoever nearby is hurt worst, and every debuff on them is lifted first — poison, and the freeze that goes with it. Bigger every tier. Cleansing before healing is what makes it an answer to a Vexer: a poisoned unit cannot be healed at all until the poison is off it.",
 		heal_percent = 0.45, heal_percent_per_tier = 0.20, heal_radius = 3,
 		cleanses = true,
+	},
+	{
+		id = &"triage", name = "Triage", kind = "MEND", cast_time = 0.2,
+		desc = "",
+		mend_percent = 0.05, heal_percent_per_tier = 0.20, heal_radius = 3,
+		mend_interval = 1.0, mend_melee_mult = 4.0,
 	},
 	{
 		id = &"call_wisp", name = "Call Wisp", kind = "SUMMON", cast_time = 0.5,
@@ -1135,6 +1152,9 @@ const BUFF_TABLE = [
 	{id = &"grace", name = "Grace", kind = "STAT", weight = 1.0,
 		unit = &"seraph", stat_a = "MAX_HP", stat_b = "HEAL_POWER", two = true,
 		b = Vector2(0.35, 0.10), s = Vector2(0.70, 0.20), g = Vector2(1.05, 0.3)},
+	{id = &"sanctuary", name = "Sanctuary", kind = "STAT", weight = 1.0,
+		unit = &"hospitaller", stat_a = "HEAL_POWER", stat_b = "MAX_HP", two = true,
+		b = Vector2(0.25, 0.25), s = Vector2(0.50, 0.50), g = Vector2(1.00, 1.00)},
 	{id = &"covenant", name = "Covenant", kind = "STAT", weight = 1.0,
 		unit = &"conjurer", also = [&"wisp"],
 		stat_a = "MAX_HP", stat_b = "ATTACK_DAMAGE", two = true,
@@ -1483,7 +1503,8 @@ func _make_abilities() -> Dictionary:
 				"frenzy_seconds", "frenzy_damage", "frenzy_attack_speed",
 				"frenzy_move", "frenzy_pierce",
 				"fuse_seconds", "blast_damage_per_tier", "blast_radius",
-				"blast_gold_range", "flee_margin"]:
+				"blast_gold_range", "flee_margin",
+				"mend_percent", "mend_interval", "mend_melee_mult"]:
 			if row.has(key):
 				a.set(key, row[key])
 		# A plain array in the table, because a const table cannot hold a packed one;

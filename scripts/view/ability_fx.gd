@@ -51,6 +51,7 @@ const GLYPHS := {
 	&"vertigo": ["spiral", Color(0.92, 0.86, 0.50)],
 	&"martyrdom": ["heart", Color(1.00, 0.32, 0.30)],
 	&"slow_match": ["bomb", Color(1.00, 0.62, 0.22)],
+	&"triage": ["plus", Color(0.96, 0.86, 0.62)],
 	&"overflow": ["mana", Color(0.46, 0.72, 1.00)],
 }
 
@@ -82,6 +83,7 @@ const KIND_GLYPHS := {
 	AbilityData.Kind.FRENZY: "heart",
 	AbilityData.Kind.DISORIENT: "spiral",
 	AbilityData.Kind.DETONATE: "bomb",
+	AbilityData.Kind.MEND: "plus",
 }
 
 ## Every shape _draw_shape knows how to draw. The tests hold the tables above to it.
