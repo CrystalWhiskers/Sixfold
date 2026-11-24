@@ -3617,3 +3617,12 @@ and a red aura; Crimson Finale is near-black and largest, a five-point crown, bu
 eyes, flames circling her and a fan of six blades behind. Each change flashes, pops and
 throws two rings of fire. Her own small health bar sits under her, since the crown
 takes the space above.
+
+**Counters and results.** `BossStats` (scripts/runtime/boss_stats.gd) is fed every
+event as the screen plays it, so its numbers move with what you see, not with the
+simulation running ahead. The HUD shows "Dealt · Lost" top right; at the end a results
+panel lists the outcome and time, boss health left, phase reached, damage dealt (to
+the boss and to her summons), damage taken, units sent and lost, summons killed,
+crystal breaks, retreats she finished, waves, Supply spent, recruits and upgrade
+levels, and the top three unit types by damage (`boss_main.result_rows`). "See the
+field" closes it.

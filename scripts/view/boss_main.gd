@@ -68,6 +68,10 @@ var _stance_need := 0.0
 var _stance_taken := 0.0
 ## crystal uid -> playback time it will stand again.
 var _rebuild_at: Dictionary = {}
+## The running tally: the counter on the HUD and, at the end, the results screen.
+var stats := BossStats.new()
+var _counter: Label = null
+var _results: Control = null
 
 
 func _ready() -> void:
@@ -172,6 +176,13 @@ func _build_ui() -> void:
 	root.add_child(_crystal_line)
 	_clock_line = _label(Vector2(24, 86), 14, Color(0.95, 0.88, 0.60))
 	root.add_child(_clock_line)
+	# The two numbers you watch: what the army has dealt, and what it has lost.
+	# Right-aligned on the title row, where the boss's name leaves room.
+	_counter = _label(Vector2(24, 12), 15, Color(0.98, 0.92, 0.80))
+	_counter.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_counter.add_theme_constant_override("outline_size", 4)
+	_counter.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+	root.add_child(_counter)
 
 	_panel = BarracksPanel.new()
 	_panel.position = BARRACKS_AREA.position
@@ -234,6 +245,7 @@ func _on_fight() -> void:
 	_player.live = true
 	_player.play(_view, sim.events, units)
 	_status.text = "Hold the field. The Barracks stays open: Supply keeps coming in."
+	_counter.text = counter_text()
 
 
 func _process(delta: float) -> void:
@@ -265,7 +277,14 @@ func _process(delta: float) -> void:
 			roundi(minf(_stance_taken, _stance_need)), roundi(_stance_need)]
 
 
+func counter_text() -> String:
+	return "Dealt %s   ·   Lost %d" % [BossStats.short(stats.dealt), stats.lost]
+
+
 func _on_event(e: Dictionary) -> void:
+	stats.record(e, units)
+	if _counter != null and (e.kind == "damage" or e.kind == "death"):
+		_counter.text = counter_text()
 	match e.kind:
 		"boss_start":
 			_boss_uid = int(e.uid)
@@ -376,6 +395,115 @@ func _on_finished(_winner: int) -> void:
 		_status.text = "Time is up after %s — %s holds the field." % [
 			clock, boss_data.display_name]
 	_again_btn.visible = true
+	_show_results(won, clock)
+
+
+func result_rows(won: bool, clock: String) -> Array:
+	## The results screen, as [label, value] rows — kept apart from the drawing so a
+	## test can read exactly what the player is shown.
+	var full := maxf(fight.boss.stat(StatModifier.Stat.MAX_HP), 1.0)
+	var left := maxf(fight.boss.current_hp, 0.0) if fight.boss.is_alive() else 0.0
+	var levels := 0
+	for t in barracks.types:
+		levels += barracks.level_of(t.id)
+	var rows := [
+		["Result", ("Victory in %s" % clock) if won else ("Defeat after %s" % clock)],
+		["Boss health left", "%d%%" % roundi(left / full * 100.0)],
+		["Phase reached", "%d of %d — %s" % [stats.phase_reached + 1, boss_data.phases.size(),
+			boss_data.phases[mini(stats.phase_reached, boss_data.phases.size() - 1)].display_name]],
+		["Damage dealt", "%s" % BossStats.short(stats.dealt)],
+		["   to the boss", "%s" % BossStats.short(stats.to_boss)],
+		["   to her summons", "%s" % BossStats.short(stats.to_summons)],
+		["Damage taken", "%s" % BossStats.short(stats.taken)],
+		["Units sent", "%d" % stats.deployed],
+		["Units lost", "%d" % stats.lost],
+		["Summons killed", "%d" % stats.summons_killed],
+		["Crystals broken", "%d" % stats.crystals_broken],
+		["Retreats she finished", "%d" % stats.retreats],
+		["Waves", "%d" % _waves],
+		["Supply spent", "%d" % roundi(barracks.spent)],
+		["Recruits / upgrade levels", "%d / %d" % [barracks.recruits, levels]],
+	]
+	var top := stats.top_dealers(3)
+	for i in top.size():
+		rows.append(["Top damage #%d" % (i + 1), "%s — %s" % [top[i][0],
+			BossStats.short(float(top[i][1]))]])
+	return rows
+
+
+func _show_results(won: bool, clock: String) -> void:
+	## A panel over the field with the whole fight in numbers, and the way out.
+	if _results != null:
+		_results.queue_free()
+	var layer := CanvasLayer.new()
+	layer.layer = 5
+	add_child(layer)
+	var shade := ColorRect.new()
+	shade.color = Color(0.02, 0.02, 0.04, 0.78)
+	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	shade.mouse_filter = Control.MOUSE_FILTER_STOP
+	layer.add_child(shade)
+	_results = shade
+
+	var panel := PanelContainer.new()
+	var box := StyleBoxFlat.new()
+	box.bg_color = Color(0.10, 0.07, 0.07, 0.97)
+	box.border_color = Color(0.85, 0.30, 0.25) if not won else Color(0.55, 0.85, 0.55)
+	box.set_border_width_all(3)
+	box.set_corner_radius_all(12)
+	box.set_content_margin_all(22)
+	panel.add_theme_stylebox_override("panel", box)
+	panel.position = Vector2(70, 150)
+	panel.custom_minimum_size = Vector2(580, 0)
+	shade.add_child(panel)
+
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 6)
+	panel.add_child(column)
+	var title := Label.new()
+	title.text = "VICTORY" if won else "DEFEAT"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 40)
+	title.add_theme_color_override("font_color",
+		Color(0.70, 0.95, 0.70) if won else Color(1.0, 0.45, 0.40))
+	column.add_child(title)
+	var sub := Label.new()
+	sub.text = "%s — %s" % [boss_data.display_name, boss_data.title]
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sub.add_theme_font_size_override("font_size", 15)
+	sub.add_theme_color_override("font_color", Color(0.80, 0.72, 0.66))
+	column.add_child(sub)
+	column.add_child(HSeparator.new())
+
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 24)
+	grid.add_theme_constant_override("v_separation", 5)
+	column.add_child(grid)
+	for row in result_rows(won, clock):
+		var k := Label.new()
+		k.text = String(row[0])
+		k.add_theme_font_size_override("font_size", 16)
+		k.add_theme_color_override("font_color", Color(0.72, 0.76, 0.84))
+		k.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		grid.add_child(k)
+		var v := Label.new()
+		v.text = String(row[1])
+		v.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		v.add_theme_font_size_override("font_size", 16)
+		v.add_theme_color_override("font_color", Color(0.98, 0.94, 0.86))
+		grid.add_child(v)
+
+	column.add_child(HSeparator.new())
+	var buttons := HBoxContainer.new()
+	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
+	buttons.add_theme_constant_override("separation", 14)
+	column.add_child(buttons)
+	buttons.add_child(_button("Again", _on_again))
+	buttons.add_child(_button("Menu", _on_menu))
+	var look := _button("See the field", func(): _results.visible = false)
+	look.custom_minimum_size = Vector2(170, 54)
+	buttons.add_child(look)
 
 
 func _cycle_speed() -> void:

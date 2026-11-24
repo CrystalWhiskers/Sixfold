@@ -123,6 +123,25 @@ func _ready() -> void:
 	_check("a move was named as it was marked", saw_mark)
 	_check("and the banner says how it ended", scn._banner.visible
 		and (scn._banner.text == "VICTORY" or scn._banner.text == "DEFEAT"), scn._banner.text)
+	# The counters and the results screen.
+	var st: BossStats = scn.stats
+	_check("the HUD counts damage dealt and units lost",
+		scn._counter.text.begins_with("Dealt") and scn._counter.text.contains("Lost")
+		and st.dealt > 0.0 and st.to_boss > 0.0, scn._counter.text)
+	_check("and its totals add up: boss plus summons is everything dealt",
+		absf(st.to_boss + st.to_summons - st.dealt) < 0.5,
+		"%.0f + %.0f vs %.0f" % [st.to_boss, st.to_summons, st.dealt])
+	_check("units sent outnumber units lost", st.deployed >= st.lost and st.deployed > 0,
+		"%d sent, %d lost" % [st.deployed, st.lost])
+	_check("a results screen comes up at the end",
+		scn._results != null and scn._results.visible)
+	var rows: Array = scn.result_rows(scn.result == BoardModel.TEAM_B, "1:00")
+	var keys := rows.map(func(r): return r[0])
+	_check("with the fight's numbers on it",
+		keys.has("Damage dealt") and keys.has("Units lost") and keys.has("Summons killed")
+		and keys.has("Phase reached") and keys.has("Top damage #1"), "%s" % [keys])
+	print("  (dealt %s, %d sent, %d lost, %d summons killed)" % [BossStats.short(st.dealt),
+		st.deployed, st.lost, st.summons_killed])
 	var down := 0
 	for i in 3:
 		if not scn.fight.crystals[i].is_alive():
