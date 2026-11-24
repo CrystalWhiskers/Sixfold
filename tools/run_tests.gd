@@ -14584,11 +14584,17 @@ func _test_boss_enrage(data: BossData) -> void:
 		if u.team == bf3.player_team() and u.is_ranged():
 			archer = u
 	_check("and a ranged hit is cut by her ranged resistance",
-		archer != null and is_equal_approx(bf3.shape_boss_damage(100.0, archer), 100.0 * (1.0 - data.ranged_resist)))
+		archer != null and is_equal_approx(bf3.shape_boss_damage(100.0, archer), 100.0 * (1.0 - data.phases[0].ranged_resist)))
 	var gunner := UnitInstance.create(load("res://data/units/culverin_t1.tres") as UnitData, bf3.player_team())
 	_check("and a long-range hit even more",
-		is_equal_approx(bf3.shape_boss_damage(100.0, gunner), 100.0 * (1.0 - data.long_range_resist)),
+		is_equal_approx(bf3.shape_boss_damage(100.0, gunner), 100.0 * (1.0 - data.phases[0].long_range_resist)),
 		"%.0f" % bf3.shape_boss_damage(100.0, gunner))
+	bf3.phase = 3
+	_check("and her ranged resistance climbs with every phase",
+		bf3.shape_boss_damage(100.0, gunner) < 100.0 * (1.0 - data.phases[0].long_range_resist) - 1.0
+		and data.phases[3].ranged_resist > data.phases[0].ranged_resist,
+		"%.0f in phase 4" % bf3.shape_boss_damage(100.0, gunner))
+	bf3.phase = 0
 	_check("the results screen counts every tier of a unit as one",
 		BossStats.base_name("Vexer IV") == "Vexer" and BossStats.base_name("Warden") == "Warden")
 	BoardModel.reset_map()

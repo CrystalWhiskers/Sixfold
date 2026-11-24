@@ -426,6 +426,10 @@ func _initialize() -> void:
 	for i in b.phases.size():
 		b.phases[i].attack_bonus = bonus[i][0]
 		b.phases[i].surround_cooldown = whirl_every[i]
+		# Ranged resistance climbs with every phase: 30/40/50/60%, and 45/55/65/75%
+		# against long range.
+		b.phases[i].ranged_resist = [0.30, 0.40, 0.50, 0.60][i]
+		b.phases[i].long_range_resist = [0.45, 0.55, 0.65, 0.75][i]
 		b.phases[i].regen = bonus[i][1]
 	# No blow takes more than 1.2% of her health; ranged hits are cut by 30%; every
 	# fallen unit of the army makes her 0.2% stronger.

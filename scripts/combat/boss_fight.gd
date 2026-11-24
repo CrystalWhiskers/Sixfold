@@ -121,9 +121,11 @@ func shape_boss_damage(amount: float, source: UnitInstance) -> float:
 	var out := amount
 	if source != null and source.is_ranged():
 		var reach := UnitData.band_tiles(source.stat_int(StatModifier.Stat.ATTACK_RANGE))
-		var resist := data.ranged_resist
+		var p := _phase()
+		var resist := p.ranged_resist if p != null and p.ranged_resist > 0.0 else data.ranged_resist
 		if reach >= data.long_range_tiles:
-			resist = maxf(resist, data.long_range_resist)
+			var far := p.long_range_resist if p != null and p.long_range_resist > 0.0 else data.long_range_resist
+			resist = maxf(resist, far)
 		out *= 1.0 - clampf(resist, 0.0, 0.95)
 	return minf(out, max_hit())
 

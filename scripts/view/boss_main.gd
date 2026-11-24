@@ -689,4 +689,4 @@ func boss_stats_text() -> String:
 	var cap := fight.max_hit()
 	return "Boss  ATK %d (x%.2f)  ·  SPD x%.2f  ·  Regen %d/s  ·  Steal %d%%  ·  Hit cap %s  ·  Ranged -%d%%" % [
 		roundi(atk), atk / base, spd, roundi(regen), roundi(steal * 100.0),
-		"none" if is_inf(cap) else str(roundi(cap)), roundi(boss_data.ranged_resist * 100.0)]
+		"none" if is_inf(cap) else str(roundi(cap)), roundi((p.ranged_resist if p.ranged_resist > 0.0 else boss_data.ranged_resist) * 100.0)]

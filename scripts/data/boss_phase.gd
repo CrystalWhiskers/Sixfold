@@ -40,6 +40,10 @@ extends Resource
 ## Seconds between her surround attacks in this phase (0: the boss's own value), so
 ## the big crowd-clearers come rarely early on and more often as the fight goes.
 @export var surround_cooldown: float = 0.0
+## Her resistance to ranged hits in this phase, and to long-range ones (0: the boss's
+## own values). It climbs every phase, so bows matter early and less later.
+@export var ranged_resist: float = 0.0
+@export var long_range_resist: float = 0.0
 
 @export var moves: Array[BossMove] = []
 
