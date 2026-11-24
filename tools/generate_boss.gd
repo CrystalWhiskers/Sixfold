@@ -275,7 +275,7 @@ func _initialize() -> void:
 	b.display_name = "The Vermilion Arbiter"
 	b.title = "Keeper of Every Blade"
 	b.note = "A duellist in lacquered red who has outlived every weapon she was handed and kept them all. She starts with one blade and a spear, picks up a second blade when she is hurt, and fights hardest at the end."
-	b.max_hp = 60000.0
+	b.max_hp = 100000.0
 	b.attack_damage = 100.0
 	b.attack_speed = 0.9
 	b.move_time = 0.9
