@@ -1518,6 +1518,11 @@ func _check_double_click_merges() -> void:
 			0 if chosen == null else BoardModel.tile_distance(chosen.cell, here),
 			nearest_gap])
 
+	# Without the match's buffs for the gesture itself. A Windfall or a Promotion picked
+	# earlier in the match rolls on this merge like any other — an extra unit, a
+	# tier skipped — and the checks below are about the gesture, not the dice.
+	var saved_buffs: Dictionary = board.team_buffs
+	board.team_buffs = {}
 	_main._on_cell_double_clicked(here)
 	var landed := board.unit_at(here)
 	# On the tile you POINTED AT. You said where you wanted the bigger unit; putting it
@@ -1529,8 +1534,10 @@ func _check_double_click_merges() -> void:
 		"%d against %d" % [board.all_units().size(), before - 1])
 
 	# A lone unit has nothing to merge with, and has to say so rather than do nothing.
+	# A tier 6, because nothing merges past the top: a tier 1 could still find a
+	# "twin" in a wild-merging unit, or in any unit at all after a Wild Merge pick.
 	var lonely := UnitInstance.create(
-		load("res://data/units/reaver_t1.tres"), team)
+		load("res://data/units/reaver_t6.tres"), team)
 	var free_spot := Vector2i(-1, -1)
 	for c in spots:
 		if board.is_empty(c):
@@ -1546,6 +1553,7 @@ func _check_double_click_merges() -> void:
 			_main._status.text.to_lower().contains("nothing to merge"),
 			_main._status.text)
 		board.remove(lonely)
+	board.team_buffs = saved_buffs
 
 	if board.unit_at(here) != null:
 		board.remove(board.unit_at(here))

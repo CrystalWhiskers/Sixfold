@@ -14,3 +14,7 @@ export/
 # Windows junk
 Thumbs.db
 desktop.ini
+
+# Boss defence music: commercial tracks (Library of Ruina), for personal use on this
+# machine only. Nothing in that folder is committed and nothing is exported.
+audio/boss/

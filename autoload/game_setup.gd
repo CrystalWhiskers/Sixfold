@@ -118,8 +118,10 @@ var boss_in_pool := false
 ## the coloured plate and its initial — the look the game has for the units that
 ## have no art yet, applied to all of them.
 ##
-## On by default: a unit with art should show it unless you say otherwise.
-var portraits := true:
+## Off by default: the board starts as coloured blocks, which read faster at a
+## glance, and the Settings switch puts the art on for anyone who wants it. Not
+## saved to disk, so every start begins on blocks.
+var portraits := false:
 	set(value):
 		portraits = value
 		# Written down to the view layer, which is where the drawing reads it.

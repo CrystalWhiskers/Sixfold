@@ -65,6 +65,16 @@ var zoom := 1.0
 ## the positions while this is set, and puts every unit somewhere itself, every
 ## frame.
 var playback := false
+
+## The smallest a fitted tile may be. MIN_TILE for every ordinary board; the boss
+## field lowers it so the whole battlefield is on screen at once.
+var min_tile := MIN_TILE
+
+## Optional ground zones, for the boss field: a Callable taking a cell and returning
+## a zone number (or -1 for none). Each zone gets a tint from `zone_colors` and a
+## border where it meets a different one. Unset on every ordinary board.
+var zone_of: Callable = Callable()
+var zone_colors: Array[Color] = []
 var _fit_tile := MIN_TILE
 var _dying: Array[UnitView] = []
 
@@ -117,7 +127,7 @@ func fit_to(area: Rect2) -> void:
 	# on purpose, and you pan around it instead.
 	view_area = area
 	_fit_tile = maxf(floorf(minf(area.size.x / float(BoardModel.WIDTH),
-		area.size.y / float(BoardModel.HEIGHT))), MIN_TILE)
+		area.size.y / float(BoardModel.HEIGHT))), min_tile)
 	_apply_zoom()
 
 
@@ -808,6 +818,7 @@ func _draw() -> void:
 				_draw_gate(r)
 
 	_draw_aura_zones()
+	_draw_zones()
 	_draw_fuse_marks()
 
 	if _drag_uid >= 0 and board != null:
@@ -837,10 +848,12 @@ func _draw() -> void:
 
 	# On a map with no divider the halves simply meet, so there is one line to
 	# draw rather than the two edges of a neutral row.
-	var ny := BoardModel.NEUTRAL_ROW * tile_size
-	_draw_dashed(Vector2(0, ny), Vector2(size.x, ny))
-	if BoardModel.HAS_NEUTRAL:
-		_draw_dashed(Vector2(0, ny + tile_size), Vector2(size.x, ny + tile_size))
+	# A zoned board (the boss field) has no halves at all, so no line.
+	if not zone_of.is_valid():
+		var ny := BoardModel.NEUTRAL_ROW * tile_size
+		_draw_dashed(Vector2(0, ny), Vector2(size.x, ny))
+		if BoardModel.HAS_NEUTRAL:
+			_draw_dashed(Vector2(0, ny + tile_size), Vector2(size.x, ny + tile_size))
 
 	if fog and board != null:
 		_draw_fog()
@@ -1124,3 +1137,27 @@ func _draw_dashed(from: Vector2, to: Vector2) -> void:
 		draw_line(from + dir * travelled, from + dir * (travelled + seg),
 			Color(0.85, 0.70, 0.42, 0.75), 2.0)
 		travelled += dash + gap
+
+
+func _draw_zones() -> void:
+	## Ground colour and borders for a board that has zones. Drawn over the tiles and
+	## under everything else, so it reads as the ground rather than as an overlay.
+	if not zone_of.is_valid():
+		return
+	var edge := Color(0.95, 0.92, 0.80, 0.35)
+	for y in BoardModel.HEIGHT:
+		for x in BoardModel.WIDTH:
+			var c := Vector2i(x, y)
+			if BoardModel.is_void(c):
+				continue
+			var z: int = zone_of.call(c)
+			var r := Rect2(Vector2(c) * tile_size, Vector2(tile_size, tile_size))
+			if z >= 0 and z < zone_colors.size():
+				draw_rect(r, zone_colors[z], true)
+			# A border on the right and the bottom edge wherever the zone changes.
+			var right := c + Vector2i(1, 0)
+			if right.x < BoardModel.WIDTH and int(zone_of.call(right)) != z:
+				draw_line(r.position + Vector2(tile_size, 0), r.end, edge, 2.0)
+			var below := c + Vector2i(0, 1)
+			if below.y < BoardModel.HEIGHT and int(zone_of.call(below)) != z:
+				draw_line(r.position + Vector2(0, tile_size), r.end, edge, 2.0)

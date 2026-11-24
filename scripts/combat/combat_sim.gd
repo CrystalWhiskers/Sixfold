@@ -184,6 +184,11 @@ var _fields: Array[Dictionary] = []
 # at the same victim, and that is the point.
 var _drains: Array[Dictionary] = []
 
+## The boss defence mode, when this battle is one: the controller that runs the
+## boss, the crystals, the reinforcement waves and the win condition. Null for
+## every ordinary battle, and every hook below is a no-op without it.
+var boss_fight: BossFight = null
+
 
 func setup(p_board: BoardModel, p_seed: int) -> void:
 	board = p_board
@@ -325,6 +330,19 @@ func run(limit := -1.0) -> int:
 	return _result
 
 
+func step_until(t: float) -> void:
+	## Steps until the clock reaches `t` or the battle ends, applying the time limit
+	## exactly as run() does. For a battle played WHILE it is simulated — the boss
+	## defence keeps the simulation a moment ahead of the screen rather than
+	## resolving five minutes of fighting before the first frame.
+	while not _finished and elapsed < t:
+		if elapsed >= timeout_at() and not any_fuse_lit():
+			_result = _decide_timeout()
+			_finish("timeout")
+			return
+		step()
+
+
 func step() -> void:
 	if _finished:
 		return
@@ -336,6 +354,10 @@ func step() -> void:
 			# turn here, in the shuffled order, like anything else on its feet.
 			if u.is_lit():
 				_keg_turn(u)
+			continue
+		if u.boss and boss_fight != null:
+			# The boss thinks for itself: its cycle, its crystal, its blockers.
+			boss_fight.boss_turn()
 			continue
 		if u.is_riding():
 			# Inside a host and off the board. It gets no turn of its own — the
@@ -366,6 +388,8 @@ func step() -> void:
 	_tick_dots()
 	_tick_frenzy()
 	_tick_fuses()
+	if boss_fight != null:
+		boss_fight.tick()
 	_tick_mends()
 	_tick_regen()
 	_tick_pressure()
@@ -874,7 +898,15 @@ func _mark_for(u: UnitInstance) -> UnitInstance:
 		if d <= ab.taunt_radius and d < best_d:
 			best = other
 			best_d = d
-	return best if best != null else _choose_enemy(u)
+	if best != null:
+		return best
+	if boss_fight != null and u.team == boss_fight.boss_team():
+		return boss_fight.minion_target(u)
+	if boss_fight != null and u.team == boss_fight.player_team():
+		# Boss defence: the boss first, whenever it can be reached; see
+		# BossFight.player_target for when a minion comes first.
+		return boss_fight.player_target(u)
+	return _choose_enemy(u)
 
 
 func _choose_enemy(u: UnitInstance) -> UnitInstance:
@@ -1047,6 +1079,10 @@ func _begin_move(u: UnitInstance) -> bool:
 		# only way through. One that can walk will clear it itself, so we hold
 		# our place in the queue rather than barging.
 		if blocker.data.can_move:
+			return false
+		if boss_fight != null:
+			# Boss defence: a rooted unit is placed where the player wants it — a Spire
+			# by its crystal — and nothing walking past may shove it out of the way.
 			return false
 		# One that cannot never will, so we trade places with it. The log carries
 		# both halves so the view animates a shove, not a teleport.
@@ -1585,7 +1621,7 @@ func _resolve_freeze(u: UnitInstance, ab: AbilityData) -> void:
 	# permanent lock is the one outcome nobody enjoys being on the wrong end of,
 	# and taking the better of the two keeps a second caster useful without
 	# making a target it can never act again.
-	mark.frozen_left = maxf(mark.frozen_left, seconds)
+	mark.frozen_left = maxf(mark.frozen_left, seconds * mark.hold_scale)
 	mark.frozen_amp = maxf(mark.frozen_amp, amp)
 	# Whatever it was in the middle of is dropped, including a cast it had already
 	# paid the mana for.
@@ -1756,7 +1792,7 @@ func _charge_connects(u: UnitInstance, victim: UnitInstance, ab: AbilityData) ->
 	if secs > 0.0:
 		# Longest wins rather than adding, the same rule the freeze uses: two
 		# chargers hitting one unit should not lock it out of the round.
-		victim.stun_left = maxf(victim.stun_left, secs)
+		victim.stun_left = maxf(victim.stun_left, secs * victim.hold_scale)
 		victim.state = UnitInstance.State.IDLE
 		victim.state_timer = 0.0
 		_emit("stun", {uid = victim.uid, cell = victim.cell, seconds = secs})
@@ -1825,7 +1861,7 @@ func possess_candidates(u: UnitInstance) -> Array[UnitInstance]:
 	for other in board.units_view():
 		if other == u or not other.is_alive() or other.team == u.team:
 			continue
-		if other.is_possessed():
+		if other.is_possessed() or other.boss or other.structure:
 			# Already has something inside it. Two Usurpers do not share.
 			continue
 		if other.data.tier == u.data.tier:
@@ -3130,7 +3166,7 @@ func _tick_drains() -> void:
 			# Of MAX health, and shields are not part of that — a Warden cannot
 			# hide behind one, and the bite does not shrink as the victim wears
 			# down. That is what makes it an answer to something enormous.
-			var bite := victim.stat(StatModifier.Stat.MAX_HP) * float(d.percent)
+			var bite := victim.percent_basis(victim.stat(StatModifier.Stat.MAX_HP)) * float(d.percent)
 			var src := _unit_by_uid(int(d.source_uid))
 			if src != null and src.is_alive():
 				# Through _damage, so the Leech's lifesteal applies to it.
@@ -3391,7 +3427,7 @@ func _tick_dots() -> void:
 				# first tick: the biggest number the target will ever have is the
 				# one it has when the poison lands. The share then decays on top
 				# of that, so this peters out twice over.
-				var bite: float = d.dmg + u.current_hp * float(d.get("hp_share", 0.0))
+				var bite: float = d.dmg + u.percent_basis(u.current_hp) * float(d.get("hp_share", 0.0))
 				d.hp_share = float(d.get("hp_share", 0.0)) * float(d.get("falloff", 1.0))
 				_damage(u, bite, src if src != null else u, true, false)
 			if d.ticks_left <= 0:
@@ -3719,6 +3755,9 @@ func _damage(victim: UnitInstance, amount: float, source: UnitInstance,
 		is_spell := false, hp_bonus := true, may_reflect := true) -> void:
 	if not victim.is_alive():
 		return
+	if boss_fight != null and victim.structure and not boss_fight.may_hurt_crystal(victim, source):
+		# Boss defence: only the boss's own blow on the crystal she is after hurts it.
+		return
 	if victim.is_invulnerable():
 		_emit("blocked", {uid = victim.uid, cell = victim.cell})
 		return
@@ -3729,7 +3768,7 @@ func _damage(victim: UnitInstance, amount: float, source: UnitInstance,
 		# maximum health, so neither needs to scale with tier — they already do.
 		var frac: float = _hp_damage[source.team] + last_stand_share(source)
 		if frac > 0.0:
-			total += victim.stat(StatModifier.Stat.MAX_HP) * frac
+			total += victim.percent_basis(victim.stat(StatModifier.Stat.MAX_HP)) * frac
 	total *= victim.damage_taken_multiplier() * pressure() * victim.exposure()
 	total *= victim.taunt_damage_taken()
 	total *= victim.frozen_damage_taken()
@@ -3822,6 +3861,9 @@ func _bury(victim: UnitInstance, killer_uid: int, frozen: bool,
 		# is one branch because _fell is the single funnel every death goes
 		# through — an ordinary swing, a spell, a Devourer execute.
 		return
+	if victim.structure:
+		# A crystal is not a body: nothing raises it and nobody grieves for it.
+		return
 	if not _try_queue_revive(victim):
 		# Only a body nobody is already getting back up goes in the pile. A
 		# Revenant mid-revive is not available to be raised as well.
@@ -3837,6 +3879,14 @@ func _execute(u: UnitInstance, victim: UnitInstance) -> void:
 	# is still guarded.
 	if victim.is_invulnerable():
 		_emit("blocked", {uid = victim.uid, cell = victim.cell})
+		return
+	if victim.boss or victim.structure:
+		# Nothing deletes a boss or a crystal in one blow. The armed swing still lands
+		# as the heaviest hit the Devourer has — four of its ordinary ones.
+		var heavy := u.stat(StatModifier.Stat.ATTACK_DAMAGE) * 4.0
+		_emit("attack", {uid = u.uid, target_uid = victim.uid,
+			from = u.cell, to = victim.cell, amount = heavy})
+		_damage(victim, heavy, u)
 		return
 	_emit("attack", {
 		uid = u.uid, target_uid = victim.uid,
@@ -4015,6 +4065,28 @@ func _advance_timer(u: UnitInstance) -> void:
 		u.state = UnitInstance.State.IDLE
 
 
+var _field_cache: Dictionary = {}
+var _field_cache_at := -1.0
+
+
+func _shared_field(goal: Vector2i, u: UnitInstance) -> Dictionary:
+	## The distance field for this unit's walk. In an ordinary battle it is built
+	## fresh for every step, exactly as it always was. In boss defence dozens of units
+	## are all walking at the same boss, so one field per tick per (goal, side, wall
+	## price, gate rule) is shared between them. The one thing a shared field gives
+	## up is the walker's own tile being free rather than congested, which only
+	## changes the cost of routes that double back through the tile it is leaving.
+	if boss_fight == null:
+		return _distance_field(goal, u.cell)
+	if not is_equal_approx(_field_cache_at, elapsed):
+		_field_cache.clear()
+		_field_cache_at = elapsed
+	var key := "%d,%d|%d|%d|%s" % [goal.x, goal.y, _field_team, _field_wall_cost, _field_gates]
+	if not _field_cache.has(key):
+		_field_cache[key] = _distance_field(goal, Vector2i(-99, -99))
+	return _field_cache[key]
+
+
 func _next_step(u: UnitInstance) -> Vector2i:
 	# Own BFS rather than AStarGrid2D: a grid solver can mark tiles solid but
 	# has no way to express a barrier that sits *between* two open tiles.
@@ -4026,7 +4098,7 @@ func _next_step(u: UnitInstance) -> Vector2i:
 	# reasons it might not be able to: it has spent its own transit, or its side has
 	# spent the one it is allowed.
 	_field_gates = may_use_gate(u)
-	var step := _downhill(u, _distance_field(goal, u.cell), {})
+	var step := _downhill(u, _shared_field(goal, u), {})
 	if step != u.cell:
 		return step
 
@@ -4233,6 +4305,14 @@ func _check_over() -> void:
 	# answer, up to and including taking the other side's last unit with it.
 	if any_fuse_lit():
 		return
+	if boss_fight != null:
+		# Not a wipe: the fight is over when the boss falls or the Central Crystal
+		# does, and an empty lane is just a lane waiting for the next wave.
+		var outcome := boss_fight.outcome()
+		if outcome != BossFight.UNDECIDED:
+			_result = outcome
+			_finish("boss" if outcome == boss_fight.player_team() else "crystal")
+		return
 	var a := board.living_count_of(BoardModel.TEAM_A) + pending_respawns(BoardModel.TEAM_A)
 	var b := board.living_count_of(BoardModel.TEAM_B) + pending_respawns(BoardModel.TEAM_B)
 	if a > 0 and b > 0:
@@ -4245,6 +4325,13 @@ func _check_over() -> void:
 
 
 func _decide_timeout() -> int:
+	if boss_fight != null:
+		# Time ran out with the boss still standing: it held the field.
+		return boss_fight.boss.team
+	return _count_timeout()
+
+
+func _count_timeout() -> int:
 	# Bodies, not health. It used to total everyone's remaining health as a
 	# fraction of their maximum, which is a fairer measure of who was winning and
 	# a much worse one to play to: you cannot count it while watching, so the

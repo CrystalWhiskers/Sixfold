@@ -1,0 +1,1128 @@
+class_name BossFight
+extends RefCounted
+
+## Boss defence: one boss against an open field of three zones and four crystals,
+## in one long continuous battle on the ordinary CombatSim.
+##
+## The board (make_map) is one wide open battlefield. The boss enters at the top.
+## Below it are three wide ZONES, Left, Middle and Right, marked only by the colour
+## of the ground and a few scattered rocks for cover. Each has a crystal standing in
+## it. A fourth zone runs down the middle towards the bottom, holding the Central
+## Crystal as far from the boss's entry as the board allows; it is sealed until the
+## other three are gone. The boss goes for the zone crystals in a fixed order
+## (BossData.crystal_order), fighting whatever gets in its way. When the last breaks,
+## the seal comes off and it turns on the centre.
+##
+## The armies come from the Barracks: three sections, one per zone. Every
+## `wave_seconds` each section sends a fresh copy of itself to its zone's crystal,
+## on top of whoever is still standing (reinforcements STACK). Its units default to
+## guarding that crystal, and go after the boss — anywhere on the field — once it
+## comes within reach of them or of their crystal. A zone at its cap keeps the
+## rest of a wave waiting, at most one section's worth, and drops them in as space
+## opens. After the merge every section's wave arrives around the Central Crystal.
+##
+## The sim calls in three places: boss_turn() is the boss's whole turn, tick() runs
+## the clocks and the waves, outcome() decides the fight, and holds() lets a guard
+## stand still without pathfinding. Everything else — damage, death, summons, the
+## event log — is the sim's ordinary machinery.
+
+const UNDECIDED := -2
+
+const WIDTH := 17
+const HEIGHT := 26
+## Rows 0..HUB_ROWS-1 are where the boss comes in.
+const HUB_ROWS := 4
+const ZONE_NAMES := ["Left", "Middle", "Right", "Central"]
+## Zone boundaries: the Middle zone is the middle columns down to CENTRAL_TOP, the
+## Central zone the same columns below it, Left and Right everything either side.
+const MIDDLE_COLS := Vector2i(6, 10)
+const CENTRAL_TOP := 18
+const CRYSTAL_CELLS := [Vector2i(2, 17), Vector2i(8, 11), Vector2i(14, 17)]
+const CENTRAL_CELL := Vector2i(8, 24)
+const BOSS_CELL := Vector2i(8, 1)
+## Scattered broken wall: cover, not corridors. Short segments, never a line.
+const ROCKS := [
+	Vector2i(4, 6), Vector2i(5, 6), Vector2i(11, 6), Vector2i(12, 6),
+	Vector2i(1, 9), Vector2i(15, 9),
+	Vector2i(7, 8), Vector2i(9, 8),
+	Vector2i(4, 13), Vector2i(12, 13),
+	Vector2i(7, 15), Vector2i(9, 15),
+	Vector2i(2, 21), Vector2i(3, 21), Vector2i(13, 21), Vector2i(14, 21),
+	Vector2i(6, 20), Vector2i(10, 20),
+]
+## How close a unit has to be for the boss to aim a move at it rather than at the
+## crystal it is walking to.
+const AIM_RADIUS := 4
+## A guard leaves its crystal for the boss once the boss is this close to it...
+const ENGAGE_RANGE := 6
+## ...or this close to the crystal it guards.
+const GUARD_RADIUS := 7
+## How long a dash or leap takes on screen. The move itself is instant.
+const LEAP_TIME := 0.18
+
+var data: BossData = null
+var sim: CombatSim = null
+var barracks: Barracks = null
+var boss: UnitInstance = null
+## Index 0..2 are the zone crystals, 3 is the Central Crystal.
+var crystals: Array[UnitInstance] = []
+
+var phase := 0
+var merged := false
+## Position in the phase's move list of the NEXT move to be marked.
+var move_index := 0
+var gap_left := 0.0
+## Seconds left of a phase change's announcement, during which it does nothing.
+var pause_left := 0.0
+## The move currently marked on the board, or empty: {move, cells, left, aim}.
+var marked: Dictionary = {}
+var wave_left := 0.0
+var waves := 0
+
+## Units waiting for room, per zone (index 3 = the Central zone, after the merge).
+var queued: Array = [[], [], [], []]
+## uid -> the zone a unit was sent to guard: 0..2, or 3 once the armies merge.
+var zone_of_uid: Dictionary = {}
+var _phase_mods: Array[StatModifier] = []
+
+
+# --- The board ----------------------------------------------------------------
+
+static func make_map() -> MapData:
+	var m := MapData.new()
+	m.id = &"boss_field"
+	m.display_name = "The Open Field"
+	m.width = WIDTH
+	m.height = HEIGHT
+	m.has_neutral = false
+	m.asymmetric = true
+	var rows := PackedStringArray()
+	for y in HEIGHT:
+		var row := ""
+		for x in WIDTH:
+			row += MapData.WALL if ROCKS.has(Vector2i(x, y)) else MapData.OPEN
+		rows.append(row)
+	m.rows = rows
+	m.note = "One open battlefield in four zones, with scattered rock for cover."
+	return m
+
+
+static func zone_of_cell(c: Vector2i) -> int:
+	## 0/1/2 for the Left/Middle/Right zones, 3 for the Central zone, -1 for the
+	## boss's entry at the top.
+	if c.y < HUB_ROWS:
+		return -1
+	if c.x >= MIDDLE_COLS.x and c.x <= MIDDLE_COLS.y:
+		return 3 if c.y >= CENTRAL_TOP else 1
+	return 0 if c.x < MIDDLE_COLS.x else 2
+
+
+func player_team() -> int:
+	return BoardModel.TEAM_B
+
+
+func boss_team() -> int:
+	return BoardModel.TEAM_A
+
+
+# --- Setting up ---------------------------------------------------------------
+
+func place_structures(board: BoardModel, boss_data: BossData) -> void:
+	## Puts the boss and the four crystals on a board whose map is make_map(). Call
+	## before CombatSim.setup().
+	data = boss_data
+	crystals.clear()
+	for i in 4:
+		var cd := UnitData.new()
+		cd.id = &"crystal"
+		cd.display_name = "%s Crystal" % ZONE_NAMES[i]
+		cd.max_hp = data.central_crystal_hp if i == 3 else data.lane_crystal_hp
+		cd.attack_damage = 0.0
+		cd.can_move = false
+		cd.can_attack = false
+		cd.mana_per_attack = 0.0
+		cd.accent = Color(0.55, 0.85, 0.95) if i < 3 else Color(0.95, 0.85, 0.50)
+		var c := UnitInstance.create(cd, player_team())
+		c.structure = true
+		c.sealed = i == 3
+		board.force_place(c, CENTRAL_CELL if i == 3 else CRYSTAL_CELLS[i])
+		crystals.append(c)
+	var bd := UnitData.new()
+	bd.id = data.id
+	bd.display_name = data.display_name
+	bd.max_hp = data.max_hp
+	bd.attack_damage = data.attack_damage
+	bd.attack_speed = data.attack_speed
+	bd.move_time = data.move_time
+	bd.sight_range = 40
+	bd.mana_per_attack = 0.0
+	bd.accent = data.accent
+	bd.note = data.note
+	boss = UnitInstance.create(bd, boss_team())
+	boss.boss = true
+	boss.percent_cap = data.percent_cap
+	boss.hold_scale = data.hold_scale
+	board.force_place(boss, BOSS_CELL)
+
+
+func attach(p_sim: CombatSim, p_barracks: Barracks) -> void:
+	## Hooks into a sim that has NOT been set up yet. The fight's own rules replace
+	## the round clock: no sudden death, and the boss's time limit as the timeout.
+	sim = p_sim
+	barracks = p_barracks
+	sim.boss_fight = self
+	sim.sudden_death = 1.0e9
+	sim.timeout = data.time_limit
+
+
+func start() -> void:
+	## After CombatSim.setup(): opens the fight, and the first wave goes out at once.
+	zone_of_uid.clear()
+	queued = [[], [], [], []]
+	phase = 0
+	merged = false
+	move_index = 0
+	marked = {}
+	waves = 0
+	wave_left = data.wave_seconds
+	gap_left = _phase().gap if _phase() != null else 999.0
+	_apply_phase_mods()
+	var ids: Array[int] = []
+	for c in crystals:
+		ids.append(c.uid)
+	sim._emit("boss_start", {uid = boss.uid, name = data.display_name,
+		title = data.title, max_hp = boss.stat(StatModifier.Stat.MAX_HP),
+		crystals = ids, phase = phase, phase_name = _phase_name(),
+		wave_seconds = data.wave_seconds, target_uid = current_target_uid()})
+	# The Spire's Raise Host and every other "random unit from your own side"
+	# draws from this pool: the player's own loadout.
+	if barracks != null:
+		sim.board.set_team_pool(player_team(), barracks.types)
+	send_wave()
+
+
+# --- Queries ------------------------------------------------------------------
+
+func _phase() -> BossPhase:
+	if data == null or data.phases.is_empty():
+		return null
+	return data.phases[clampi(phase, 0, data.phases.size() - 1)]
+
+
+func _phase_name() -> String:
+	var p := _phase()
+	return "" if p == null else p.display_name
+
+
+func current_target() -> UnitInstance:
+	## The crystal it is going for. Before the seal lifts: the first zone crystal
+	## standing in the fixed order — including one that has rebuilt. After it: the
+	## Central Crystal, for good, so a rebuilt crystal can never stall the end.
+	if merged:
+		return crystals[3]
+	for zone in data.crystal_order:
+		var c := crystals[zone]
+		if c.is_alive():
+			return c
+	return crystals[3]
+
+
+func may_hurt_crystal(crystal: UnitInstance, source: UnitInstance) -> bool:
+	## A crystal takes damage from one thing only: the boss's own blow on the
+	## crystal she is after. Her moves, her minions and anything splashing never do.
+	return source == boss and crystal == current_target()
+
+
+func current_target_uid() -> int:
+	var t := current_target()
+	return -1 if t == null else t.uid
+
+
+func lane_crystals_left() -> int:
+	var n := 0
+	for i in 3:
+		if crystals[i].is_alive():
+			n += 1
+	return n
+
+
+func outcome() -> int:
+	if not boss.is_alive():
+		return player_team()
+	if not crystals[3].is_alive():
+		return boss_team()
+	return UNDECIDED
+
+
+func player_target(u: UnitInstance) -> UnitInstance:
+	## What one of the player's units fights. The boss, whenever it can: if the boss
+	## is in reach it is the target whatever else is closer. A minion is fought only
+	## when the boss is out of reach and the minion is IN reach — it is in the way, or
+	## at arm's length. Otherwise the unit marches on the boss.
+	if not boss.is_alive():
+		return null
+	var reach := sim.reach_against(u, boss)
+	if BoardModel.in_reach(u.cell, boss.cell, reach) and sim._has_shot(u, boss):
+		return boss
+	var near: UnitInstance = null
+	var near_d := 1 << 30
+	for m in sim._units:
+		if not m.is_alive() or m.team != boss_team() or m == boss or m.is_hidden():
+			continue
+		if not BoardModel.in_reach(u.cell, m.cell, sim.reach_against(u, m)):
+			continue
+		var d := BoardModel.tile_distance(u.cell, m.cell)
+		if d < near_d or (d == near_d and near != null and m.uid < near.uid):
+			near = m
+			near_d = d
+	return near if near != null else boss
+
+
+# --- The boss's turn ----------------------------------------------------------
+
+func boss_turn() -> void:
+	var u := boss
+	if u.is_held():
+		return
+	if not marked.is_empty():
+		# Committed. It stands in the middle of its own mark until the blow lands.
+		return
+	if pause_left > 0.0:
+		# Announcing a new phase: it stands where it is and does nothing at all.
+		return
+	if u.state != UnitInstance.State.IDLE:
+		sim._advance_timer(u)
+		return
+	if gap_left <= 0.0:
+		_mark_next_move()
+		return
+	var foe := _foe_in_reach()
+	if foe != null:
+		u.target = foe
+		if u.can_attack_now():
+			sim._begin_attack(u)
+		return
+	var aim := current_target()
+	if aim == null or not u.can_move_now():
+		return
+	u.target = aim
+	sim._begin_move(u)
+
+
+func _foe_in_reach() -> UnitInstance:
+	## What it swings at when it is not using a move: the crystal it wants if it is
+	## standing at it, otherwise the weakest thing in arm's reach — it is cutting a
+	## way through, not picking a fight.
+	var want := current_target()
+	var best: UnitInstance = null
+	for v in sim.board.units_in_box(boss.cell, 1, player_team()):
+		if not v.is_alive() or v.sealed:
+			continue
+		if v == want:
+			return v
+		if v.structure:
+			continue
+		if best == null or v.current_hp < best.current_hp \
+				or (is_equal_approx(v.current_hp, best.current_hp) and v.uid < best.uid):
+			best = v
+	return best
+
+
+func next_move() -> BossMove:
+	var p := _phase()
+	if p == null or p.moves.is_empty():
+		return null
+	return p.moves[move_index % p.moves.size()]
+
+
+func _mark_next_move() -> void:
+	var p := _phase()
+	var mv := next_move()
+	if mv == null:
+		gap_left = 999.0
+		return
+	move_index = (move_index + 1) % p.moves.size()
+	if mv.shape == BossMove.Shape.STANCE:
+		_begin_stance(mv)
+		return
+	_mark(mv)
+
+
+# --- The charge-up stance -----------------------------------------------------
+
+var _stance_mods: Array[StatModifier] = []
+var _stagger_mods: Array[StatModifier] = []
+var _boost_mods: Array[StatModifier] = []
+var stagger_left := 0.0
+var boost_left := 0.0
+
+
+func in_stance() -> bool:
+	return bool(marked.get("stance", false))
+
+
+func _begin_stance(mv: BossMove) -> void:
+	## It plants itself and gathers power: less damage taken, and a meter the player
+	## can see filling. The meter is the damage it has taken since it began.
+	_stance_mods = [StatModifier.make(StatModifier.Stat.DAMAGE_TAKEN,
+		StatModifier.Mode.PERCENT, -clampf(mv.stance_resist, 0.0, 0.95))]
+	for m in _stance_mods:
+		boss.add_battle_modifier(m)
+	marked = {move = mv, stance = true, left = maxf(mv.telegraph, CombatSim.TICK),
+		hp = boss.current_hp, taken = 0.0, cells = [] as Array[Vector2i]}
+	boss.target = null
+	sim._emit("boss_stance", {uid = boss.uid, name = mv.display_name, cell = boss.cell,
+		seconds = mv.telegraph, threshold = mv.break_threshold, phase = phase})
+
+
+func _tick_stance() -> void:
+	var mv: BossMove = marked.move
+	var lost := maxf(float(marked.hp) - boss.current_hp, 0.0)
+	marked.taken = float(marked.taken) + lost
+	marked.hp = boss.current_hp
+	marked.left = float(marked.left) - CombatSim.TICK
+	if lost > 0.0:
+		sim._emit("boss_stance_meter", {uid = boss.uid, taken = marked.taken,
+			threshold = mv.break_threshold})
+	if float(marked.taken) >= mv.break_threshold:
+		_break_stance(mv)
+	elif float(marked.left) <= 0.0:
+		_complete_stance(mv)
+
+
+func _end_stance() -> void:
+	for m in _stance_mods:
+		boss.battle_modifiers.erase(m)
+	_stance_mods.clear()
+	marked = {}
+
+
+func _break_stance(mv: BossMove) -> void:
+	## Broken: staggered, open to everything, and its cycle carries on afterwards.
+	_end_stance()
+	boss.stun_left = maxf(boss.stun_left, mv.stagger_seconds)
+	boss.state = UnitInstance.State.IDLE
+	_stagger_mods = [StatModifier.make(StatModifier.Stat.DAMAGE_TAKEN,
+		StatModifier.Mode.PERCENT, mv.stagger_amp)]
+	for m in _stagger_mods:
+		boss.add_battle_modifier(m)
+	stagger_left = mv.stagger_seconds
+	var p := _phase()
+	gap_left = maxf(p.gap if p != null else 3.0, mv.stagger_seconds)
+	sim._emit("boss_stance_broken", {uid = boss.uid, cell = boss.cell,
+		seconds = mv.stagger_seconds})
+	sim._emit("stun", {uid = boss.uid, cell = boss.cell, seconds = mv.stagger_seconds})
+
+
+func _complete_stance(mv: BossMove) -> void:
+	## Not broken: it comes out of the stance stronger and opens with its finisher.
+	_end_stance()
+	for m in _boost_mods:
+		boss.battle_modifiers.erase(m)
+	_boost_mods = [
+		StatModifier.make(StatModifier.Stat.ATTACK_DAMAGE, StatModifier.Mode.PERCENT, mv.boost_attack),
+		StatModifier.make(StatModifier.Stat.ATTACK_SPEED, StatModifier.Mode.PERCENT, mv.boost_speed),
+	]
+	for m in _boost_mods:
+		boss.add_battle_modifier(m)
+	boost_left = mv.boost_seconds
+	sim._emit("boss_empowered", {uid = boss.uid, cell = boss.cell,
+		seconds = mv.boost_seconds})
+	if mv.finisher != null:
+		_mark(mv.finisher)
+
+
+func _tick_boosts() -> void:
+	if stagger_left > 0.0:
+		stagger_left -= CombatSim.TICK
+		if stagger_left <= 0.0:
+			for m in _stagger_mods:
+				boss.battle_modifiers.erase(m)
+			_stagger_mods.clear()
+	if boost_left > 0.0:
+		boost_left -= CombatSim.TICK
+		if boost_left <= 0.0:
+			for m in _boost_mods:
+				boss.battle_modifiers.erase(m)
+			_boost_mods.clear()
+			sim._emit("boss_boost_end", {uid = boss.uid, cell = boss.cell})
+
+
+func _mark(mv: BossMove, step := 0, wound := false) -> void:
+	## Marks a move — or, for a chained one (Onrush's legs, the stripes' two beats),
+	## its `step`-th part. The next part is marked when this one lands.
+	##
+	## A big move with a `windup` charges first: for that long she glows and its
+	## name is up, and only then do the tiles get marked. Three beats in all —
+	## charge, mark, blow.
+	if step == 0 and not wound and mv.windup > 0.0:
+		marked = {move = mv, windup = true, left = mv.windup, cells = [] as Array[Vector2i]}
+		boss.target = null
+		sim._emit("boss_windup", {uid = boss.uid, move = mv.id, name = mv.display_name,
+			seconds = mv.windup, cell = boss.cell, phase = phase})
+		return
+	var aim := _aim_for(mv)
+	var cells := move_cells(mv, boss.cell, aim, step)
+	marked = {move = mv, cells = cells, left = maxf(mv.telegraph, CombatSim.TICK),
+		aim = aim, step = step}
+	boss.target = null
+	sim._emit("boss_telegraph", {uid = boss.uid, move = mv.id, name = mv.display_name,
+		cells = cells, seconds = mv.telegraph, cell = boss.cell, phase = phase})
+
+
+func _aim_for(mv: BossMove) -> Vector2i:
+	## Where a move points. A dash heads straight for the crystal it is after; a leap
+	## finds its own crowd; everything else points at the nearest of the army if
+	## any is close, and at the crystal it is walking to if not.
+	if mv.shape == BossMove.Shape.DASH:
+		# At the crystal it is going for: a charge across the open field that carries
+		# it most of the way there, through anything standing on the line.
+		var t := current_target()
+		return t.cell if t != null else boss.cell + Vector2i(0, 1)
+	if mv.shape == BossMove.Shape.LEAP or mv.shape == BossMove.Shape.HUNT:
+		return _thickest(mv)
+	var best: UnitInstance = null
+	var best_d := AIM_RADIUS + 1
+	for v in sim.board.units_in_box(boss.cell, AIM_RADIUS, player_team()):
+		if not v.is_alive() or v.structure:
+			continue
+		var d := BoardModel.box_distance(boss.cell, v.cell)
+		if d < best_d or (d == best_d and best != null and v.uid < best.uid):
+			best = v
+			best_d = d
+	if best != null:
+		return best.cell
+	var t := current_target()
+	return t.cell if t != null else boss.cell + Vector2i(0, 1)
+
+
+func _crystal_after(c: UnitInstance) -> UnitInstance:
+	## The crystal it will go for after this one, or this one if it is the last.
+	var order: Array = []
+	for lane in data.crystal_order:
+		order.append(crystals[lane])
+	order.append(crystals[3])
+	var at := order.find(c)
+	for i in range(at + 1, order.size()):
+		if (order[i] as UnitInstance).is_alive():
+			return order[i]
+	return c
+
+
+func _thickest(mv: BossMove) -> Vector2i:
+	## The tile within the leap's reach with the most of the army in the box around
+	## it. Ties go to the nearer, then to the lower uid of the unit it centres on.
+	var best := current_target().cell
+	var best_n := 0
+	var best_d := 1 << 30
+	var best_uid := 1 << 30
+	for v in sim.board.units_in_box(boss.cell, mv.reach, player_team()):
+		if not v.is_alive() or v.structure:
+			continue
+		var n := 0
+		for w in sim.board.units_in_box(v.cell, mv.span, player_team()):
+			if w.is_alive() and not w.structure:
+				n += 1
+		var d := BoardModel.box_distance(boss.cell, v.cell)
+		if n > best_n or (n == best_n and (d < best_d or (d == best_d and v.uid < best_uid))):
+			best = v.cell
+			best_n = n
+			best_d = d
+			best_uid = v.uid
+	return best
+
+
+static func _direction(from: Vector2i, to: Vector2i) -> Vector2i:
+	var d := to - from
+	var dir := Vector2i(signi(d.x), signi(d.y))
+	if dir == Vector2i.ZERO:
+		dir = Vector2i(0, 1)
+	return dir
+
+
+static func onrush_direction(at: Vector2i, step: int) -> Vector2i:
+	## Which way an Onrush leg runs: always towards the far side of the map from where
+	## she stands, and cycling diagonal, across, down-or-up, so the legs criss-cross
+	## the whole field instead of tracing one line back and forth.
+	var dx := 1 if at.x < WIDTH / 2 else -1
+	var dy := 1 if at.y < HEIGHT / 2 else -1
+	match step % 3:
+		0:
+			return Vector2i(dx, dy)
+		1:
+			return Vector2i(dx, 0)
+	return Vector2i(0, dy)
+
+
+func move_cells(mv: BossMove, at: Vector2i, aim: Vector2i, step := 0) -> Array[Vector2i]:
+	## Every tile a move will hit, worked out when it is marked and never again: the
+	## mark on the board IS the blow.
+	var out: Array[Vector2i] = []
+	match mv.shape:
+		BossMove.Shape.ONRUSH:
+			var d := onrush_direction(at, step)
+			var c := at + d
+			while c.x >= 0 and c.y >= 0 and c.x < WIDTH and c.y < HEIGHT:
+				out.append(c)
+				c += d
+		BossMove.Shape.CROSS:
+			for k in _band(mv.span):
+				for x in WIDTH:
+					out.append(Vector2i(x, at.y + k))
+				for y in HEIGHT:
+					out.append(Vector2i(at.x + k, y))
+		BossMove.Shape.RING:
+			for y in HEIGHT:
+				for x in WIDTH:
+					var r := BoardModel.box_distance(Vector2i(x, y), at)
+					if r >= mv.reach and r < mv.reach + maxi(mv.span, 1):
+						out.append(Vector2i(x, y))
+		BossMove.Shape.STRIPES:
+			for y in range(HUB_ROWS, HEIGHT):
+				if y % 2 == step % 2:
+					for x in WIDTH:
+						out.append(Vector2i(x, y))
+		BossMove.Shape.RAIN:
+			var open: Array[Vector2i] = []
+			for y in range(HUB_ROWS, HEIGHT):
+				for x in WIDTH:
+					if not BoardModel.is_blocked(Vector2i(x, y)):
+						open.append(Vector2i(x, y))
+			for i in mini(mv.count, open.size() / 2):
+				out.append(open.pop_at(sim.rng.randi_range(0, open.size() - 1)))
+		BossMove.Shape.HUNT:
+			for k in _band(mv.span):
+				for x in WIDTH:
+					out.append(Vector2i(x, aim.y + k))
+	var dir := _direction(at, aim)
+	var sy := dir.y if dir.y != 0 else 1
+	var sx := dir.x if dir.x != 0 else 1
+	match mv.shape:
+		BossMove.Shape.ROWS:
+			for k in _band(mv.span):
+				for x in range(at.x - mv.reach, at.x + mv.reach + 1):
+					out.append(Vector2i(x, at.y + k * sy))
+		BossMove.Shape.COLUMNS:
+			for k in _band(mv.span):
+				for i in range(1, mv.reach + 1):
+					out.append(Vector2i(at.x + k * sx, at.y + i * sy))
+		BossMove.Shape.THRUST, BossMove.Shape.DASH:
+			for i in range(1, mv.reach + 1):
+				out.append(at + dir * i)
+		BossMove.Shape.LEAP:
+			for dy in range(-mv.span, mv.span + 1):
+				for dx in range(-mv.span, mv.span + 1):
+					out.append(aim + Vector2i(dx, dy))
+	var kept: Array[Vector2i] = []
+	for c in out:
+		if sim != null and not sim.board.in_bounds(c):
+			continue
+		if BoardModel.is_blocked(c) or kept.has(c):
+			continue
+		kept.append(c)
+	return kept
+
+
+static func _band(span: int) -> Array[int]:
+	## Offsets for a band `span` wide: centred when odd, leaning towards the aim
+	## when even (a two-row combo is its own row and the one it is facing).
+	var out: Array[int] = []
+	var lo := -((span - 1) / 2)
+	for k in range(lo, lo + maxi(span, 1)):
+		out.append(k)
+	return out
+
+
+func _strike() -> void:
+	var mv: BossMove = marked.move
+	var cells: Array[Vector2i] = marked.cells
+	var aim: Vector2i = marked.aim
+	var step := int(marked.get("step", 0))
+	marked = {}
+	var p := _phase()
+	gap_left = p.gap if p != null else 4.0
+	if not boss.is_alive():
+		return
+	sim._emit("boss_strike", {uid = boss.uid, move = mv.id, name = mv.display_name,
+		cells = cells, cell = boss.cell})
+	var dmg := boss.stat(StatModifier.Stat.ATTACK_DAMAGE) * maxf(mv.damage_mult, 0.0)
+	var victims: Array[UnitInstance] = []
+	for c in cells:
+		var v := sim.board.unit_at(c)
+		if v == null or v.team == boss.team or not v.is_alive() or v.sealed:
+			continue
+		if v.structure:
+			# A move never hurts a crystal: only her own blow on the crystal she is
+			# after does (see may_hurt_crystal).
+			continue
+		victims.append(v)
+	for v in victims:
+		sim._damage(v, dmg, boss, true)
+	if mv.shape == BossMove.Shape.DASH or mv.shape == BossMove.Shape.LEAP \
+			or mv.shape == BossMove.Shape.ONRUSH:
+		_land(mv, cells, aim)
+	# Chained moves: the next leg or beat is marked the moment this one lands, so
+	# each part is telegraphed on its own before it comes.
+	if mv.shape == BossMove.Shape.ONRUSH and step + 1 < mv.legs:
+		_mark(mv, step + 1)
+	elif mv.shape == BossMove.Shape.STRIPES and step == 0:
+		_mark(mv, 1)
+
+
+func _land(mv: BossMove, cells: Array[Vector2i], aim: Vector2i) -> void:
+	## Where a dash or a leap leaves the boss: as far along the dash as it can stand,
+	## or beside the crowd it leapt on.
+	var to := boss.cell
+	if mv.shape == BossMove.Shape.DASH or mv.shape == BossMove.Shape.ONRUSH:
+		for i in range(cells.size() - 1, -1, -1):
+			if sim.board.is_empty(cells[i]):
+				to = cells[i]
+				break
+	else:
+		to = _nearest_free(aim, boss.cell)
+	if to == boss.cell:
+		return
+	var from := boss.cell
+	if sim.board.move_unit(boss, to):
+		boss.move_from = from
+		sim._emit("move", {uid = boss.uid, from = from, to = to, duration = LEAP_TIME,
+			leap = true})
+
+
+func _nearest_free(centre: Vector2i, fallback: Vector2i) -> Vector2i:
+	var best := fallback
+	var best_d := 1 << 30
+	for dy in range(-2, 3):
+		for dx in range(-2, 3):
+			var c := centre + Vector2i(dx, dy)
+			if not sim.board.in_bounds(c) or not sim.board.is_empty(c):
+				continue
+			var d := BoardModel.box_distance(c, centre) * 10 + BoardModel.tile_distance(c, centre)
+			if d < best_d:
+				best = c
+				best_d = d
+	return best
+
+
+# --- The clocks ---------------------------------------------------------------
+
+# --- The clocks ---------------------------------------------------------------
+
+func tick() -> void:
+	if in_stance():
+		_tick_stance()
+	elif bool(marked.get("windup", false)):
+		marked.left = float(marked.left) - CombatSim.TICK
+		if float(marked.left) <= 0.0:
+			_mark(marked.move, 0, true)
+	elif not marked.is_empty():
+		marked.left = float(marked.left) - CombatSim.TICK
+		if float(marked.left) <= 0.0:
+			_strike()
+	elif pause_left > 0.0:
+		pause_left = maxf(pause_left - CombatSim.TICK, 0.0)
+		if pause_left <= 0.0:
+			# The bar's break is over: it can be hurt again.
+			boss.sealed = false
+	elif gap_left > 0.0:
+		gap_left -= CombatSim.TICK
+	_tick_boosts()
+	_tick_rebuilds()
+	_tick_summons()
+	_refresh_upgrades()
+	_check_crystals()
+	_check_phase()
+	wave_left -= CombatSim.TICK
+	if wave_left <= 0.0:
+		wave_left += data.wave_seconds
+		send_wave()
+	_drop_queued()
+
+
+func _check_crystals() -> void:
+	if merged or lane_crystals_left() > 0:
+		return
+	merged = true
+	crystals[3].sealed = false
+	for uid in zone_of_uid.keys():
+		zone_of_uid[uid] = 3
+	# Whatever was still waiting for the zones goes to the centre instead.
+	for zone in 3:
+		for e in queued[zone]:
+			queued[3].append(e)
+		queued[zone] = []
+	sim._emit("crystals_merge", {central_uid = crystals[3].uid,
+		cell = crystals[3].cell})
+	_check_phase()
+	# The armies merge now, not at the next wave: the centre is under attack.
+	send_wave()
+	wave_left = data.wave_seconds
+
+
+# --- Waves --------------------------------------------------------------------
+
+func send_wave() -> void:
+	## One fresh copy of every Barracks section, on top of whoever is still
+	## standing: each to its own zone's crystal, or all to the centre once merged.
+	waves += 1
+	if barracks != null:
+		for section in Barracks.SECTIONS:
+			# A section whose crystal has fallen sends its waves to the Central Crystal
+			# from then on; the others keep coming to their own until theirs falls.
+			var zone := 3 if merged or not crystals[section].is_alive() else section
+			for e in barracks.template(section):
+				queued[zone].append(e)
+	# At most one section's worth may wait per zone (three for the merged centre):
+	# a zone that has been full for three waves does not owe the player three armies
+	# the moment it clears.
+	for zone in 4:
+		var cap := _queue_cap(zone)
+		while (queued[zone] as Array).size() > cap:
+			(queued[zone] as Array).pop_front()
+	var placed := _drop_queued()
+	var waiting := 0
+	for q in queued:
+		waiting += (q as Array).size()
+	sim._emit("wave", {index = waves, placed = placed, queued = waiting,
+		next_in = data.wave_seconds, merged = merged})
+
+
+func _queue_cap(zone: int) -> int:
+	var per := barracks.slot_count() if barracks != null else 0
+	return per * 3 if zone == 3 else per
+
+
+func zone_cap(zone: int) -> int:
+	return data.zone_cap * 3 if zone == 3 else data.zone_cap
+
+
+func army_in_zone(zone: int) -> int:
+	## How many of a zone's guards are on their feet.
+	var n := 0
+	for u in sim._units:
+		if u.is_alive() and int(zone_of_uid.get(u.uid, -9)) == zone:
+			n += 1
+	for u in sim._pending_units:
+		if u.is_alive() and int(zone_of_uid.get(u.uid, -9)) == zone:
+			n += 1
+	return n
+
+
+func _drop_queued() -> int:
+	var placed := 0
+	for zone in 4:
+		var q: Array = queued[zone]
+		if q.is_empty():
+			continue
+		var room := zone_cap(zone) - army_in_zone(zone)
+		while not q.is_empty() and room > 0:
+			var e: Dictionary = q[0]
+			var cell := spawn_cell(zone, e)
+			if cell == Vector2i(-1, -1):
+				break
+			q.pop_front()
+			_spawn(e, cell, zone)
+			placed += 1
+			room -= 1
+	return placed
+
+
+func home_cell(zone: int, e: Dictionary) -> Vector2i:
+	## Where a unit from this Barracks slot would ideally stand: its slot laid out
+	## just in front of its crystal. After the merge every section packs in round
+	## the Central Crystal, nearest first, so the whole army lands in the centre.
+	var off: Vector2i = barracks.slot_offset(int(e.slot)) if barracks != null else Vector2i.ZERO
+	if zone == 3:
+		return CENTRAL_CELL + off
+	return crystals[zone].cell + off
+
+
+func spawn_cell(zone: int, e: Dictionary) -> Vector2i:
+	## The free tile nearest its home, searched outwards ring by ring. A unit lands
+	## near where it is meant to be or, on a crowded field, as near as it can.
+	var home := home_cell(zone, e)
+	for r in 8:
+		var best := Vector2i(-1, -1)
+		var best_d := 1 << 30
+		for dy in range(-r, r + 1):
+			for dx in range(-r, r + 1):
+				if maxi(absi(dx), absi(dy)) != r:
+					continue
+				var c := home + Vector2i(dx, dy)
+				if not sim.board.in_bounds(c) or not sim.board.is_empty(c):
+					continue
+				if c.y < HUB_ROWS:
+					continue
+				var d := absi(dx) + absi(dy)
+				if d < best_d:
+					best = c
+					best_d = d
+		if best != Vector2i(-1, -1):
+			return best
+	return Vector2i(-1, -1)
+
+
+func _spawn(e: Dictionary, cell: Vector2i, zone: int) -> void:
+	var base: UnitData = e.data
+	var u := UnitInstance.create(barracks.field_data(base) if barracks != null else base,
+		player_team())
+	var tb: TeamBuffs = sim.team_buffs.get(player_team(), null)
+	if tb != null:
+		tb.apply_to(u)
+	if not sim.board.force_place(u, cell):
+		return
+	u.current_hp = u.stat(StatModifier.Stat.MAX_HP)
+	u.move_from = cell
+	zone_of_uid[u.uid] = zone
+	base_of_uid[u.uid] = base
+	sim._pending_units.append(u)
+	sim._emit("summon", {
+		uid = u.uid, owner_uid = -1, team = u.team, cell = cell,
+		unit_id = u.data.id, tier = u.data.tier,
+		hp = u.current_hp, max_hp = u.stat(StatModifier.Stat.MAX_HP),
+		has_ability = u.data.ability != null, permanent = false, wave = true,
+		zone = zone,
+	})
+
+
+func living_army() -> int:
+	var n := 0
+	for u in sim._units:
+		if u.team == player_team() and u.is_alive() and not u.structure:
+			n += 1
+	for u in sim._pending_units:
+		if u.team == player_team() and u.is_alive():
+			n += 1
+	return n
+
+
+func _check_phase() -> void:
+	if data == null or data.phases.is_empty():
+		return
+	var frac := boss.current_hp / maxf(boss.stat(StatModifier.Stat.MAX_HP), 1.0)
+	var want := data.phase_for(frac, merged)
+	if want <= phase:
+		return
+	# One bar at a time. Each phase is its own health bar: however big the blow that
+	# emptied this one, the next starts full — the overflow is lost — and nothing
+	# can hurt the boss during the announcement.
+	phase = phase + 1
+	var top := data.phases[phase].hp_threshold * boss.stat(StatModifier.Stat.MAX_HP)
+	boss.current_hp = maxf(boss.current_hp, top)
+	move_index = 0
+	_apply_phase_mods()
+	var p := _phase()
+	# The announcement: it stops for a breath, and its next move comes a full gap
+	# after that, so the change of pattern is something you see coming.
+	pause_left = maxf(p.entry_pause, 0.0)
+	boss.sealed = pause_left > 0.0
+	gap_left = maxf(gap_left, p.gap)
+	sim._emit("boss_phase", {uid = boss.uid, index = phase, name = _phase_name(),
+		cell = boss.cell, seconds = pause_left, hp = boss.current_hp})
+	_summon_wave(p.summons_on_start, p.minion_power)
+	summon_left = p.summon_every
+
+
+func bar_of(hp: float) -> Vector2:
+	## The current phase's own bar: (health left in it, its size).
+	var full := boss.stat(StatModifier.Stat.MAX_HP)
+	var top := data.phases[phase].hp_threshold * full
+	var bottom := (data.phases[phase + 1].hp_threshold * full
+		if phase + 1 < data.phases.size() else 0.0)
+	return Vector2(clampf(hp - bottom, 0.0, top - bottom), top - bottom)
+
+
+# --- Summons ------------------------------------------------------------------
+
+var summon_left := 0.0
+## Circles marked on the ground, each becoming a minion when its clock runs out.
+var _summon_marks: Array[Dictionary] = []
+
+
+func minions_alive() -> int:
+	var n := 0
+	for u in sim._units:
+		if u.is_alive() and u.team == boss_team() and u != boss:
+			n += 1
+	for u in sim._pending_units:
+		if u.is_alive() and u.team == boss_team():
+			n += 1
+	return n + _summon_marks.size()
+
+
+func _tick_summons() -> void:
+	var p := _phase()
+	if p != null and p.summon_every > 0.0 and boss.is_alive():
+		summon_left -= CombatSim.TICK
+		if summon_left <= 0.0:
+			summon_left += p.summon_every
+			_summon_wave(p.summon_count, p.minion_power)
+	var i := _summon_marks.size() - 1
+	while i >= 0:
+		var m: Dictionary = _summon_marks[i]
+		m.left = float(m.left) - CombatSim.TICK
+		if float(m.left) <= 0.0:
+			_summon_marks.remove_at(i)
+			_spawn_minion(m.cell, float(m.power))
+		i -= 1
+
+
+func _summon_wave(count: int, power: float) -> void:
+	## Marks `count` summoning circles round the boss (up to the cap). Each becomes a
+	## minion `summon_warning` seconds later — the circle is the telegraph.
+	var cells: Array[Vector2i] = []
+	for i in count:
+		if minions_alive() + cells.size() >= data.minion_cap:
+			break
+		var c := _nearest_free(boss.cell + Vector2i([-2, 2, 0, -1, 1][i % 5], 2), boss.cell)
+		if c == boss.cell or cells.has(c):
+			continue
+		cells.append(c)
+	if cells.is_empty():
+		return
+	for c in cells:
+		_summon_marks.append({cell = c, left = data.summon_warning, power = power})
+	sim._emit("boss_summon", {uid = boss.uid, cells = cells, seconds = data.summon_warning,
+		cell = boss.cell})
+
+
+func _spawn_minion(cell: Vector2i, power: float) -> void:
+	if not boss.is_alive():
+		return
+	if not sim.board.is_empty(cell):
+		cell = _nearest_free(cell, Vector2i(-1, -1))
+		if cell == Vector2i(-1, -1):
+			return
+	var md := UnitData.new()
+	md.id = &"crimson_shade"
+	md.display_name = data.minion_name
+	md.max_hp = data.minion_hp * power
+	md.attack_damage = data.minion_attack * power
+	md.attack_speed = data.minion_attack_speed
+	md.move_time = data.minion_move_time
+	md.sight_range = 40
+	md.mana_per_attack = 0.0
+	md.accent = data.accent.lightened(0.25)
+	var m := UnitInstance.create(md, boss_team())
+	if not sim.board.force_place(m, cell):
+		return
+	m.current_hp = m.stat(StatModifier.Stat.MAX_HP)
+	m.move_from = cell
+	sim._pending_units.append(m)
+	sim._emit("summon", {
+		uid = m.uid, owner_uid = boss.uid, team = m.team, cell = cell,
+		unit_id = md.id, tier = 1, hp = m.current_hp, max_hp = m.current_hp,
+		has_ability = false, permanent = false, minion = true,
+	})
+
+
+# --- Upgrades reach the field -------------------------------------------------
+
+var _seen_revision := 0
+## uid -> the plain (un-upgraded) UnitData a unit was sent as, so an upgrade bought
+## later can be laid over it.
+var base_of_uid: Dictionary = {}
+
+
+func _refresh_upgrades() -> void:
+	## An upgrade bought mid-fight reaches the units already fighting, not just the
+	## next wave: each takes its type's new level, keeping the share of health it had.
+	if barracks == null or barracks.revision == _seen_revision:
+		return
+	_seen_revision = barracks.revision
+	for u in sim._units:
+		if not u.is_alive() or u.team != player_team() or not base_of_uid.has(u.uid):
+			continue
+		var want := barracks.field_data(base_of_uid[u.uid])
+		if want == u.data:
+			continue
+		var frac := u.current_hp / maxf(u.stat(StatModifier.Stat.MAX_HP), 1.0)
+		u.data = want
+		u.current_hp = u.stat(StatModifier.Stat.MAX_HP) * frac
+		sim._emit("upgraded", {uid = u.uid, cell = u.cell, hp = u.current_hp,
+			max_hp = u.stat(StatModifier.Stat.MAX_HP)})
+
+
+func _apply_phase_mods() -> void:
+	## Haste and lifesteal for the phase, as battle modifiers on the boss, replacing
+	## the last phase's. Lifesteal through the stat means every source of its damage
+	## heals it — swings and moves alike — through the sim's one drain rule.
+	for m in _phase_mods:
+		boss.battle_modifiers.erase(m)
+	_phase_mods.clear()
+	var p := _phase()
+	if p == null:
+		return
+	if not is_equal_approx(p.haste, 1.0):
+		_phase_mods.append(StatModifier.make(StatModifier.Stat.ATTACK_SPEED,
+			StatModifier.Mode.PERCENT, p.haste - 1.0))
+		_phase_mods.append(StatModifier.make(StatModifier.Stat.MOVE_TIME,
+			StatModifier.Mode.PERCENT,
+			BuffData.signed_percent(StatModifier.Stat.MOVE_TIME, p.haste - 1.0)))
+	if p.lifesteal > 0.0:
+		_phase_mods.append(StatModifier.make(StatModifier.Stat.LIFESTEAL,
+			StatModifier.Mode.FLAT, p.lifesteal))
+	for m in _phase_mods:
+		boss.add_battle_modifier(m)
+
+
+
+
+# --- Crystals rebuild ---------------------------------------------------------
+
+## lane -> seconds until a broken zone crystal stands again.
+var rebuilding: Dictionary = {}
+
+
+func _tick_rebuilds() -> void:
+	## A broken zone crystal rebuilds itself after crystal_rebuild_seconds, at
+	## crystal_rebuild_fraction of its health. While it is down its section's waves
+	## go to the Central Crystal; once it stands again they come back to it, and —
+	## until the seal has lifted — so does the boss, in her fixed order.
+	for i in 3:
+		var c := crystals[i]
+		if c.is_alive():
+			continue
+		if not rebuilding.has(i):
+			rebuilding[i] = data.crystal_rebuild_seconds
+			sim._emit("crystal_rebuilding", {uid = c.uid, cell = c.cell, lane = i,
+				seconds = data.crystal_rebuild_seconds})
+		rebuilding[i] = float(rebuilding[i]) - CombatSim.TICK
+		if float(rebuilding[i]) <= 0.0 and _restore_crystal(i):
+			rebuilding.erase(i)
+
+
+func _restore_crystal(i: int) -> bool:
+	var c := crystals[i]
+	var cell: Vector2i = CRYSTAL_CELLS[i]
+	if not sim.board.is_empty(cell):
+		# Somebody is standing on its spot: it waits until they move.
+		return false
+	if not sim.board.force_place(c, cell):
+		return false
+	c.state = UnitInstance.State.IDLE
+	c.target = null
+	c.shield = 0.0
+	c.current_hp = c.stat(StatModifier.Stat.MAX_HP) * clampf(data.crystal_rebuild_fraction, 0.05, 1.0)
+	# The view put its body away when it broke; a "summon" brings one back.
+	sim._emit("summon", {uid = c.uid, owner_uid = -1, team = c.team, cell = cell,
+		unit_id = c.data.id, tier = 1, hp = c.current_hp,
+		max_hp = c.stat(StatModifier.Stat.MAX_HP), has_ability = false, permanent = true,
+		wave = true, restored = true})
+	sim._emit("crystal_restored", {uid = c.uid, cell = cell, lane = i, hp = c.current_hp})
+	return true
+
+
+func minion_target(u: UnitInstance) -> UnitInstance:
+	## What one of her shades fights: the nearest of the player's units. Never a
+	## crystal — those are hers alone to break.
+	var best: UnitInstance = null
+	var best_d := 1 << 30
+	for v in sim._units:
+		if not v.is_alive() or v.team != player_team() or v.structure or v.is_hidden():
+			continue
+		var d := BoardModel.tile_distance(u.cell, v.cell)
+		if d < best_d or (d == best_d and best != null and v.uid < best.uid):
+			best = v
+			best_d = d
+	return best

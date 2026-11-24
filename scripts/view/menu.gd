@@ -1,6 +1,7 @@
 extends Control
 
 const MAIN_SCENE := "res://scenes/main.tscn"
+const BOSS_SCENE := "res://scenes/boss.tscn"
 const BUTTON_SIZE := Vector2(340, 62)
 var _editor: LoadoutEditor = null
 var _settings: SettingsPanel = null
@@ -69,6 +70,7 @@ func _ready() -> void:
 	column.add_child(_menu_button("Battle the Computer", _on_vs_computer))
 	column.add_child(_menu_button("Local PvP", _on_local_pvp))
 	column.add_child(_menu_button("Custom Match", _on_custom))
+	column.add_child(_menu_button("Boss Defence", _on_boss))
 	column.add_child(_menu_button("Loadouts", _on_loadouts))
 	column.add_child(_menu_button("Settings", _on_settings))
 	column.add_child(_spacer(10.0))
@@ -201,6 +203,11 @@ func _on_local_pvp() -> void:
 
 func _on_loadouts() -> void:
 	_editor.open()
+
+
+func _on_boss() -> void:
+	# Its own scene: one long fight against a boss, not a match of rounds.
+	get_tree().change_scene_to_file(BOSS_SCENE)
 
 
 func _on_custom() -> void:

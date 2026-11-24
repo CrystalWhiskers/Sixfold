@@ -51,6 +51,12 @@ const GLYPHS := ".#X^%/O"
 ## odd height — an even board splits evenly on its own and needs no divider.
 @export var has_neutral: bool = true
 
+## A board that is NOT two mirrored halves. Only the boss defence board sets it:
+## there the two sides are not two armies but an army and a boss, and the whole
+## point of the board is that the halves differ. Every ordinary map leaves it off,
+## so the mirror rule below still guards them.
+@export var asymmetric: bool = false
+
 ## One string per row. Empty means a plain open rectangle.
 @export var rows: PackedStringArray = []
 
@@ -222,7 +228,7 @@ func invalid_reason() -> String:
 
 	# Both halves must be the same board upside down, or one side is handed a
 	# better position before a single unit is placed.
-	for y in height:
+	for y in (0 if asymmetric else height):
 		for x in width:
 			var c := Vector2i(x, y)
 			if glyph(c) != glyph(mirror(c)):

@@ -3318,6 +3318,163 @@ A tougher keg lights later and less often (156 of 200 rounds at tier 3, down fro
 kill it. Saltpetre on the tier 3 keg is +16.8 / +37.8 / +49.2 points at bronze /
 silver / gold, against +37 to +48 for other gold unit-buffs in this fixture.
 
+## Boss Defence
+
+A fourth mode off the main menu (`scenes/boss.tscn`, `scripts/view/boss_main.gd`):
+one long fight against **The Vermilion Arbiter**, an original boss defined entirely
+in data — `data/boss/arbiter.tres` for the boss and `data/boss/upgrades.tres` for the
+unit upgrades. Regenerate both with `tools/generate_boss.gd`, or edit the .tres
+files directly (reordering a phase's `moves` changes its cycle).
+
+**The board** (`BossFight.make_map()`, 17 x 26) is one open battlefield. The boss
+comes in at the top. Below it are three wide **zones** — Left, Middle, Right — marked
+by ground colour (`BoardView.zone_of` / `zone_colors`) and a border, with a few short
+rocks for cover; nothing walls a zone off. The Central zone runs down the middle at
+the bottom with the Central Crystal, as far from the boss's entry as the board allows.
+`MapData.asymmetric` exists only for this board.
+
+**The Barracks** (`scripts/runtime/barracks.gd`, drawn by `BarracksPanel` under the
+field in its own wood-and-brass style): three sections, one per zone, each a 3 x 4
+grid that is that zone's army template. Drag to move, onto a twin to merge (the
+board's merge lottery), onto anything else to swap. Supply ticks up in real time:
+
+| | Cost | Effect |
+|---|---|---|
+| Recruit | 12, x1.15 per recruit (rounded) | a random tier-1 draw from your loadout into that section |
+| Income | 30, x1.6 per upgrade | +2 Supply a second (from a base of 4) |
+| Unit upgrade | 30 / 50 / 80 / 120 / 180 | one unit TYPE up a level, Lv1-Lv5: its own ability grows (table below) and +15% health and attack per level |
+
+You start with 20 Supply and six free draws. The upgrade bar along the bottom of the
+panel holds the loadout's five unit types. An upgrade reaches every copy of the type —
+the ones fighting now (`BossFight._refresh_upgrades`, keeping each one's share of
+health) and every wave after (`Barracks.field_data`).
+
+**Waves stack.** The first goes out when the fight starts, then one every 20 s: a fresh
+copy of each section, set out in front of its own crystal in the section's grid shape,
+on top of whoever is alive. A zone holds at most 20 of its own; the rest wait (one
+section's worth at most). While a section's crystal is down, its waves go to the
+Central Crystal; once the crystal rebuilds they come back to it.
+
+**Everyone goes for the boss.** `BossFight.player_target`: the boss whenever it is in
+reach; a minion only when the boss is not and the minion is (in the way, or at arm's
+length); otherwise the unit marches on the boss. Units walking at the same boss share
+one distance field per tick (`CombatSim._shared_field`). Rooted units are never shoved
+in this mode.
+
+**Crystals.** Fixed order (`crystal_order`): Left, Middle, Right. A crystal only takes
+damage from the boss's own blow on the crystal she is after (`may_hurt_crystal`) —
+never her moves, her minions, or any splash. A broken zone crystal rebuilds after 45 s
+at 50% health, and until the seal lifts she comes back for it in her order. The seal
+lifts the first time all three are down at once and stays lifted: from then on she
+goes for the Central Crystal only, and every wave arrives round it. Win = the boss to
+zero. Lose = Central Crystal broken, or the 8-minute limit.
+
+**The boss**: 90,000 health in four separate bars, 100 attack, 0.9 swings a second.
+- **Bars.** Each phase is its own bar of 22,500. A bar breaks one at a time; damage
+  past the end of a bar is lost, and she cannot be hurt during the 1.5 s announcement.
+- **Summons.** Original adds (Crimson Shade: 300 health, 25 attack, scaled per phase),
+  marked by a summoning circle for 1 s before they step out. Phase 2: 2 on entry, 1
+  every 20 s; phase 3: 3, then 2 every 18 s, x1.3; phase 4: 4, then 2 every 15 s, x1.6.
+  At most 8 at once. They fight your units, never the crystals.
+- **Charge-up stance** (phases 2-4, once per cycle): 5 s planted, taking 60% less. Deal
+  3,000 / 4,500 / 6,000 to it in that time and it breaks — staggered 3 s, taking 50%
+  more. If not, she is boosted (+50% attack, +30% speed for 15 s) and unleashes its
+  finisher: Crimson Cross, Onrush, Thousand Cuts.
+- **Every move is telegraphed**: the tiles flash red, her name for the move is up, she
+  stands still, then it lands on exactly those tiles. Map-wide moves and finishers
+  first CHARGE for 2.5 s (her tile glows, the move is named), then mark, then land.
+  Every map-wide move leaves somewhere safe.
+- **Map-wide moves**: Onrush / Endless Onrush (6 / 9 dashes right across the map, each
+  leg marked before it lands), Crimson Cross (her row and column, 3 wide), Shockwave /
+  Great Shockwave (a ring round her), Thousand Cuts (every other row, then the rows
+  between, in two beats), Blade Rain / Blade Storm (24 / 40 random tiles), Hunting Sweep
+  (a 3-row band across the map through the biggest crowd).
+- **The cycle** is fixed and loops; big moves are spread out (at most one move in four,
+  in practice about one in eight). `_cycle()` in the generator lays them out.
+
+| Phase | At | Moves | Gap | Haste | Lifesteal |
+|---|---|---|---|---|---|
+| First Blade | bar 1 | Crescent Sweep, Falling Edge, Longspear, Breach Dash | 3.0 s | x1.0 | — |
+| Twin Blades | bar 2 | ordinary moves, with Gathering Storm (stance) and Hunting Sweep | 2.4 s | x1.2 | — |
+| Rending Arts | bar 3 | ordinary moves, with Shockwave, Red Tide (stance) and Blade Rain | 2.2 s | x1.3 | — |
+| Crimson Finale | bar 4 | ordinary moves, with Endless Onrush, Last Breath (stance), Great Shockwave, Blade Storm | 2.0 s | x1.4 | 10% |
+
+**Unit upgrades, Lv1 to Lv5** — each level grows the unit's OWN ability (plus +15%
+health and attack per level). `a.` is a field on its ability, `u.` on the unit,
+`*` a multiplier on the unit's own per-tier value:
+
+| Unit | Lv1 → Lv5 |
+|---|---|
+| Warden | shield 150% → 175 → 200 → 250 → 350% of max health |
+| Archer | Quickdraw stacks 7 → 8 → 9 → 10 → 14; range band Long → Sniper (Lv2) → Siege (Lv5) |
+| Lancer | ordinary pierce 3 → 4 → 5 → 6 → 7; Impale pierce 4 → 9, x2.2 → x3.5 |
+| Reaver | Execute x4.5 → x8; splash from Lv3, radius 1 → 2 at Lv5 |
+| Vexer | first bite 28% → 45%, ticks 7 → 12, opening 6% → 12% per tier |
+| Stasis | freeze 1.0 → 1.8 s per tier, amp 17% → 32% per tier |
+| Pyre | lance 90 → 190, scorch radius 1 → 2 (Lv3) → 3 (Lv5) |
+| Aegis | reflect 6 → 12 s, 225% → 400% back |
+| Tyrant | burden radius 2 → 3 → 3 → 4 → 5, strength x1.1 → x1.7 |
+| Seraph | heal radius 4 → 7, heal 50% → 90% |
+| Herald | horn radius 1 → 2 → 2 → 3 → 4, 13% → 22% per tier |
+| Revenant | revive 55% → 90%, delay 0.9 → 0.4 s |
+| Assassin | strike 55 → 130, unseen 4 → 7 s |
+| Wellspring | mana zone radius 1 → 2 → 3 → 4 → 5 |
+| Amalgam | +1% → 6% of max health as shield per hit taken |
+| Transcendence | beam wash 10% → 60% |
+| Conjurer | wisps per tier 1.25 → 3, retinue 6 → 12 |
+| Culverin | shell cross arm 1 → 4, burning ground 6 → 12 s |
+| Leech | drain 0.6% → 1.5% per tier, lifesteal 30% → 60% |
+| Usurper | grip 3 → 6 s per tier |
+| Breaker | charge x2.0 → x3.5 per tier, stun 0.5 → 1.0 s per tier |
+| Colossus | shield per hit x1.15 → x2.8 |
+| Pariah | lone bite x1.15 → x2.3 |
+| Vigil | raises 1 → 2 → 2 → 3 → 4 per tier, at 90% → 100% health |
+| Paragon | taunt radius 3 → 6, 4.5 → 8 s |
+| Sapper | 1 → 4 walls at once, x4.5 → x8 |
+| Mason | 1 → 4 walls, 280 → 600 health each |
+| Devourer | ascended x2.7 → x4 health, x1.55 → x2 speed |
+| Spire | raises 2 → 3 → 4 → 5 → 6 hosts from your loadout |
+| Engineer | builds in 9 → 4 s, repairs x1.2 → x3 |
+| Martyr | last stand 3 → 6 s, cuts through 3 → 7 |
+| Siren | lost 0.6 → 1.2 s, ceiling 2.3 → 4.5 s |
+| Hospitaller | mend radius 3 → 6, 6% → 12%, every 1.0 → 0.5 s |
+| Powderkeg | blast radius 1 → 2 (Lv2) → 3 (Lv5), x5.5 → x9 |
+
+**Unit labels.** On coloured blocks a unit shows its three-letter short name
+(`UnitView.short_name`, unique across the roster — WAR, LAN, KEG, PGN...), in light
+letters with a dark outline; the tier is a small number in the corner, and the pips
+only show on tiles big enough not to cover the name. The Barracks and the upgrade bar
+use the same names.
+
+Measured with `tools/measure_boss.gd`: a scripted `decent` player (merges, buys income
+to three upgrades, keeps every section at three or more, then alternates recruits and
+the cheapest unit upgrade) and an `idle` one that never spends.
+
+**Phase music** is personal and never shipped. Each phase names a stretch of a file in
+`audio/boss/` (`music_path`, `music_from`, `music_to`), and `Audio.play_segment` loops
+just that stretch. `audio/boss/` is in `.gitignore` and in the Web export's
+`exclude_filter`; without the files the mode keeps whatever music is already playing.
+See `audio/boss/README.md`.
+
+The music starts the moment the mode opens and runs on into the fight. On screen the
+four stretches are Theme 1-4, in phase order. The Gebura theme is split on its bar
+lines, measured from the onsets in the file: 110 BPM exactly, the first beat at
+0.071 s, a new section every 168 beats (42 bars). So 0 - 91.6364 s, 91.6364 -
+183.2727 s, 183.2727 s - end; every stretch is a whole number of beats, and the file
+is 506 beats, so every loop lands on the downbeat. (The first cut, 91.231 / 182.846,
+was about 0.4 s early and Theme 1 and 4 were a quarter-beat out — that was the
+hiccup.)
+
+Every stretch is looped by the engine itself, which is sample-exact. One that runs to
+the end of the file loops inside the stream (`loop` + `loop_offset`). One that ends
+mid-file is played from a cut-down copy of the MP3 that ends there
+(`Audio.mp3_bytes_until`: whole MP3 frames up to the first frame boundary at or after
+the cut, with the Xing/Info header's frame count and padding rewritten so the decoder
+stops there); the loop start moves by the same few milliseconds, so the loop is
+exactly the stretch's length. Frames only borrow bits from frames before them, so the
+cut decodes sample-for-sample like the whole file. The per-frame wrap in
+`Audio._process` is only the fallback for a format it cannot cut.
+
 ## Decisions the code is waiting on
 
 - **Should the board flip for Player 1 in PvP?** Right now both players use the

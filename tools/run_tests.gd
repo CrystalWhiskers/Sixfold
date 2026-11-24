@@ -11,7 +11,7 @@ extends SceneTree
 ## So the count itself is asserted. If it drops, something died quietly and the
 ## run says so. Raise this when you add tests — it is a ratchet, and the number
 ## only ever goes up.
-const MIN_CHECKS := 2644
+const MIN_CHECKS := 2766
 
 var _passed := 0
 var _failed := 0
@@ -175,6 +175,8 @@ func _initialize() -> void:
 	_test_engineer_sentries_scale()
 	_test_live_counts()
 	_test_this_pass()
+	_test_boss_defence()
+	_test_boss_music()
 	_test_mirror_matchup_is_fair()
 
 	var ran := _passed + _failed
@@ -13124,3 +13126,939 @@ func _test_discord() -> void:
 			"%.2f against %.2f" % [rich, bare + 2.0])
 	_check("so a gold tier 6 reaches four seconds, past the unit's own ceiling",
 		true)
+
+
+# --- Boss defence ---------------------------------------------------------------
+
+func _boss_board(sections: Array = [[], [], []], boss: BossData = null) -> Dictionary:
+	## The open field with the crystals and the boss, a Barracks whose three sections
+	## hold exactly `sections` (unit ids, tier 1), and the fight started — so the
+	## first wave is already on the field. Call BoardModel.reset_map() when done.
+	BoardModel.use_map(BossFight.make_map())
+	var board := BoardModel.new()
+	var data := boss if boss != null else (load("res://data/boss/arbiter.tres") as BossData).duplicate(true)
+	var barracks := Barracks.new()
+	barracks.setup(data, load("res://data/loadouts/starter.tres") as LoadoutData, 99)
+	for s in Barracks.SECTIONS:
+		for i in barracks.slot_count():
+			barracks.sections[s][i] = null
+		var i := 0
+		for id in sections[s]:
+			barracks.sections[s][i] = _find(id)
+			i += 1
+	var bf := BossFight.new()
+	bf.place_structures(board, data)
+	var sim := CombatSim.new()
+	sim.crit_chance = 0.0
+	bf.attach(sim, barracks)
+	sim.setup(board, 99)
+	bf.start()
+	sim._absorb_new_units()
+	return {board = board, bf = bf, sim = sim, data = data, barracks = barracks}
+
+
+func _army_in_zone(bf: BossFight, zone: int) -> int:
+	return bf.army_in_zone(zone)
+
+
+func _test_boss_defence() -> void:
+	_section("Boss defence")
+	var data := load("res://data/boss/arbiter.tres") as BossData
+	var listed := data != null and data.phases.size() == 4
+	if listed:
+		for p in data.phases:
+			listed = listed and not p.moves.is_empty()
+	_check("the boss is data: four phases, each with its own move list", listed)
+	if not listed:
+		return
+	_check("it has its own name, not anybody else's",
+		data.display_name == "The Vermilion Arbiter")
+	var shapes := func(p: BossPhase) -> Array:
+		var out := []
+		for m in p.moves:
+			out.append(m.shape)
+		return out
+	_check("phase one: a row sweep, a column slash, a spear thrust and a dash",
+		shapes.call(data.phases[0]) == [BossMove.Shape.ROWS, BossMove.Shape.COLUMNS,
+			BossMove.Shape.THRUST, BossMove.Shape.DASH])
+	var p2 := data.phases[1]
+	_check("phase two, at 75%: a second weapon — a faster cycle with the two-row combo",
+		is_equal_approx(p2.hp_threshold, 0.75)
+		and p2.moves.any(func(m): return m.shape == BossMove.Shape.ROWS and m.span == 2)
+		and p2.gap < data.phases[0].gap and p2.haste > 1.0)
+	var p3 := data.phases[2]
+	_check("phase three, at 50%: the big vertical and horizontal splits, and the leap",
+		is_equal_approx(p3.hp_threshold, 0.50)
+		and p3.moves.any(func(m): return m.shape == BossMove.Shape.COLUMNS and m.span >= 3)
+		and p3.moves.any(func(m): return m.shape == BossMove.Shape.ROWS and m.span >= 3)
+		and p3.moves.any(func(m): return m.shape == BossMove.Shape.LEAP))
+	var p4 := data.phases[3]
+	_check("phase four, at 25%: its final form heals off its blows",
+		is_equal_approx(p4.hp_threshold, 0.25) and p4.lifesteal > 0.0)
+	var tied := false
+	for p in data.phases:
+		tied = tied or p.on_central
+	_check("and no phase is tied to the crystals — those are a separate track", not tied)
+	_check("every phase change is announced with a pause",
+		data.phases.slice(1).all(func(p): return p.entry_pause > 0.0))
+	_check("the moves reach across an open field, not a two-tile lane",
+		data.phases[0].moves[0].reach >= 3 and data.phases[0].moves[2].reach >= 7
+		and data.phases[0].moves[3].reach >= 8)
+
+	# --- The field: open, in four zones, with scattered rock rather than walls.
+	var s := _boss_board()
+	var bf: BossFight = s.bf
+	var sim: CombatSim = s.sim
+	var board: BoardModel = s.board
+	_check("the battlefield is big: 17 x 26",
+		BoardModel.WIDTH == 17 and BoardModel.HEIGHT == 26)
+	var rock := 0
+	for y in BoardModel.HEIGHT:
+		for x in BoardModel.WIDTH:
+			if BoardModel.is_wall(Vector2i(x, y)):
+				rock += 1
+	_check("and open: only a little scattered rock", rock > 0 and rock <= 24,
+		"%d rock tiles" % rock)
+	# No wall between zones: along every zone boundary, most of the edge is open.
+	var edges := 0
+	var blocked_edges := 0
+	for y in range(BossFight.HUB_ROWS, BoardModel.HEIGHT):
+		for x in BoardModel.WIDTH:
+			var c := Vector2i(x, y)
+			for n in [c + Vector2i(1, 0), c + Vector2i(0, 1)]:
+				if n.x >= BoardModel.WIDTH or n.y >= BoardModel.HEIGHT:
+					continue
+				if BossFight.zone_of_cell(c) == BossFight.zone_of_cell(n):
+					continue
+				edges += 1
+				if BoardModel.is_blocked(c) or BoardModel.is_blocked(n):
+					blocked_edges += 1
+	_check("no zone is walled off from its neighbours",
+		edges > 0 and float(blocked_edges) / float(edges) < 0.25,
+		"%d of %d boundary edges blocked" % [blocked_edges, edges])
+	var reach := {BossFight.BOSS_CELL: true}
+	var frontier: Array[Vector2i] = [BossFight.BOSS_CELL]
+	while not frontier.is_empty():
+		var c: Vector2i = frontier.pop_back()
+		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var n: Vector2i = c + d
+			if board.in_bounds(n) and not BoardModel.is_blocked(n) and not reach.has(n):
+				reach[n] = true
+				frontier.append(n)
+	var walkable := 0
+	var all_open := 0
+	for y in BoardModel.HEIGHT:
+		for x in BoardModel.WIDTH:
+			if not BoardModel.is_blocked(Vector2i(x, y)):
+				all_open += 1
+				if reach.has(Vector2i(x, y)):
+					walkable += 1
+	_check("every open tile can be walked to from where the boss comes in",
+		walkable == all_open, "%d of %d" % [walkable, all_open])
+	var zones_ok := true
+	for i in 3:
+		zones_ok = zones_ok and BossFight.zone_of_cell(bf.crystals[i].cell) == i
+	_check("the Left, Middle and Right crystals each stand in their own zone", zones_ok)
+	_check("the Central Crystal stands in its own zone down the middle, at the bottom",
+		BossFight.zone_of_cell(bf.crystals[3].cell) == 3
+		and bf.crystals[3].cell.y >= BoardModel.HEIGHT - 3
+		and absi(bf.crystals[3].cell.x - BoardModel.WIDTH / 2) <= 1)
+	_check("as far from the boss's entry as the board allows",
+		BoardModel.tile_distance(bf.crystals[3].cell, BossFight.BOSS_CELL) >= 20)
+	_check("the boss comes in at the top", bf.boss.cell.y < BossFight.HUB_ROWS and bf.boss.boss)
+
+	# --- The cycle: fixed and looping, per phase.
+	var seen: PackedStringArray = []
+	for i in 8:
+		seen.append(String(bf.next_move().id))
+		bf._mark_next_move()
+		bf.marked = {}
+	var want: PackedStringArray = []
+	for i in 8:
+		want.append(String(data.phases[0].moves[i % data.phases[0].moves.size()].id))
+	_check("the phase-one cycle runs in its listed order and loops", seen == want,
+		", ".join(seen))
+	bf.boss.current_hp = bf.boss.stat(StatModifier.Stat.MAX_HP) * 0.76
+	bf._check_phase()
+	_check("at 76% it is still in phase one", bf.phase == 0)
+	bf.boss.current_hp = bf.boss.stat(StatModifier.Stat.MAX_HP) * 0.74
+	var before_change := sim.events.size()
+	bf._check_phase()
+	_check("at 74% it moves to phase two, and its cycle starts from the top",
+		bf.phase == 1 and bf.next_move().id == data.phases[1].moves[0].id)
+	_check("announced, with a pause it stands through",
+		bf.pause_left > 0.0 and sim.events.slice(before_change).any(
+			func(e): return e.kind == "boss_phase" and float(e.seconds) > 0.0))
+	var paused_from := sim.events.size()
+	bf.gap_left = 0.0
+	for i in int(bf.pause_left / CombatSim.TICK) - 1:
+		sim.step()
+	var acted := false
+	for e in sim.events.slice(paused_from):
+		if int(e.get("uid", -1)) == bf.boss.uid and e.kind in ["boss_telegraph",
+				"attack", "move"]:
+			acted = true
+	_check("it does nothing during the pause", not acted and bf.marked.is_empty())
+	bf.pause_left = 0.0
+	bf.boss.current_hp = bf.boss.stat(StatModifier.Stat.MAX_HP) * 0.49
+	bf._check_phase()
+	_check("at 49%, phase three", bf.phase == 2)
+	_check("and it is faster for it", bf.boss.stat(StatModifier.Stat.ATTACK_SPEED)
+		> data.attack_speed + 0.01)
+	bf.boss.current_hp = bf.boss.stat(StatModifier.Stat.MAX_HP) * 0.9
+	bf._check_phase()
+	_check("healing back above the lines does not take it back to an earlier phase",
+		bf.phase == 2)
+	bf.boss.current_hp = bf.boss.stat(StatModifier.Stat.MAX_HP) * 0.24
+	bf._check_phase()
+	_check("at 24% it is in its final form, and heals off what it deals",
+		bf.phase == 3 and bf.boss.lifesteal() > 0.0)
+	BoardModel.reset_map()
+
+	# --- The telegraph comes first, and only the marked tiles are hit.
+	s = _boss_board()
+	bf = s.bf
+	sim = s.sim
+	board = s.board
+	var near := UnitInstance.create(_find("warden"), BoardModel.TEAM_B)
+	var away := UnitInstance.create(_find("warden"), BoardModel.TEAM_B)
+	board.force_place(near, bf.boss.cell + Vector2i(1, 0))
+	board.force_place(away, Vector2i(16, 12))
+	sim._pending_units.append(near)
+	sim._pending_units.append(away)
+	sim._absorb_new_units()
+	bf.gap_left = 0.0
+	sim.step()
+	var marks := _kind_events(sim, "boss_telegraph")
+	_check("a move begins as a mark on the board, with its name",
+		marks.size() == 1 and not String(marks[0].name).is_empty()
+		and (marks[0].cells as Array).has(near.cell))
+	var hurt_before := near.current_hp
+	var secs: float = float(marks[0].seconds) if not marks.is_empty() else 1.0
+	for i in int(secs / CombatSim.TICK) - 1:
+		sim.step()
+	_check("nothing lands while the mark is up",
+		_kind_events(sim, "boss_strike").is_empty()
+		and is_equal_approx(near.current_hp, hurt_before))
+	for i in 3:
+		sim.step()
+	var strikes := _kind_events(sim, "boss_strike")
+	_check("then it strikes the marked tiles",
+		strikes.size() == 1 and near.current_hp < hurt_before,
+		"%.0f -> %.0f" % [hurt_before, near.current_hp])
+	_check("and nothing outside them",
+		is_equal_approx(away.current_hp, away.stat(StatModifier.Stat.MAX_HP)))
+	if not marks.is_empty() and not strikes.is_empty():
+		_check("the strike comes after the mark by the warning's length",
+			float(strikes[0].t) - float(marks[0].t) >= secs - 0.001)
+	BoardModel.reset_map()
+
+	# --- Crystals: the fixed order, the seal, and the switch to the centre.
+	s = _boss_board([["warden"], ["warden"], ["warden"]])
+	bf = s.bf
+	sim = s.sim
+	_check("it goes for the Left Crystal first", bf.current_target() == bf.crystals[0])
+	var central := bf.crystals[3]
+	sim._damage(central, 500.0, bf.boss)
+	_check("the Central Crystal is sealed while any zone crystal stands",
+		is_equal_approx(central.current_hp, central.stat(StatModifier.Stat.MAX_HP)))
+	sim._damage(bf.crystals[0], 1.0e7, bf.boss)
+	sim.step()
+	_check("with the Left down it goes for the Middle", bf.current_target() == bf.crystals[1])
+	sim._damage(bf.crystals[1], 1.0e7, bf.boss)
+	sim.step()
+	_check("then the Right", bf.current_target() == bf.crystals[2] and not bf.merged)
+	_check("the fight does not end when a zone crystal breaks", not sim.is_finished())
+	var near_centre_before := 0
+	for u in s.board.units_of(BoardModel.TEAM_B):
+		if not u.structure and BoardModel.box_distance(u.cell, central.cell) <= 6:
+			near_centre_before += 1
+	sim._damage(bf.crystals[2], 1.0e7, bf.boss)
+	sim.step()
+	_check("after all three it turns on the Central Crystal, unsealed",
+		bf.current_target() == central and not central.sealed and bf.merged)
+	_check("and the merge leaves its phase alone — that is the health bar's job",
+		bf.phase == 0)
+	var near_centre_after := 0
+	for u in s.board.units_of(BoardModel.TEAM_B):
+		if not u.structure and BoardModel.box_distance(u.cell, central.cell) <= 6:
+			near_centre_after += 1
+	_check("and every section's wave now deploys around the Central Crystal",
+		near_centre_after >= near_centre_before + 3,
+		"%d by the centre, was %d" % [near_centre_after, near_centre_before])
+	sim._damage(central, 300.0, bf.boss)
+	_check("the Central Crystal now takes damage",
+		central.current_hp < central.stat(StatModifier.Stat.MAX_HP))
+	sim._damage(central, 1.0e7, bf.boss)
+	sim.step()
+	_check("and when it breaks, the boss wins", sim.is_finished()
+		and sim.result() == BoardModel.TEAM_A)
+	BoardModel.reset_map()
+
+	s = _boss_board([["warden"], [], []])
+	bf = s.bf
+	sim = s.sim
+	sim._damage(bf.boss, 1.0e7, bf.crystals[0])
+	sim.step()
+	_check("bring the boss to zero and the player wins", sim.is_finished()
+		and sim.result() == BoardModel.TEAM_B)
+	BoardModel.reset_map()
+
+	s = _boss_board([["warden"], [], []])
+	sim = s.sim
+	sim.run(3.0)
+	_check("time running out with the boss standing is a loss",
+		sim.is_finished() and sim.result() == BoardModel.TEAM_A)
+	BoardModel.reset_map()
+
+	# --- The Barracks and Supply.
+	var b := Barracks.new()
+	b.setup(data, load("res://data/loadouts/starter.tres") as LoadoutData, 5)
+	_check("the Barracks opens with the free draws dealt round its three sections",
+		b.unit_count(0) + b.unit_count(1) + b.unit_count(2) == data.start_draws
+		and b.unit_count(0) > 0 and b.unit_count(1) > 0 and b.unit_count(2) > 0)
+	_check("and a small stash of Supply", is_equal_approx(b.supply, data.start_supply))
+	b.tick(10.0)
+	_check("Supply ticks up at the income rate",
+		is_equal_approx(b.supply, data.start_supply + data.base_income * 10.0),
+		"%.1f" % b.supply)
+	var count1 := b.unit_count(1)
+	var supply := b.supply
+	_check("a recruit buys one unit into that section",
+		b.recruit(1) and b.unit_count(1) == count1 + 1
+		and is_equal_approx(b.supply, supply - data.recruit_cost))
+	b.supply = data.recruit_cost - 1.0
+	var count2 := b.unit_count(2)
+	_check("and you cannot spend Supply you do not have",
+		not b.recruit(2) and b.unit_count(2) == count2
+		and is_equal_approx(b.supply, data.recruit_cost - 1.0))
+	b.supply = 1000.0
+	var rate := b.income
+	var price := b.income_price()
+	_check("an income upgrade raises the rate",
+		b.upgrade_income() and is_equal_approx(b.income, rate + data.income_step))
+	_check("and the next one costs more", b.income_price() > price + 0.01,
+		"%.0f then %.0f" % [price, b.income_price()])
+	b.supply = price - 1.0
+	_check("and it, too, cannot be bought on credit", not b.upgrade_income())
+	b.supply = 1000.0
+	var r_price := b.recruit_price()
+	b.recruit(0)
+	_check("each recruit costs more than the last",
+		b.recruit_price() > r_price, "%.0f then %.0f" % [r_price, b.recruit_price()])
+	# Merging: two of the same in a section become one of the next tier.
+	for i in b.slot_count():
+		b.sections[0][i] = null
+	var warden := _find("warden")
+	b.sections[0][0] = warden
+	b.sections[0][1] = warden
+	var merged_how := b.drop(0, 0, 0, 1)
+	_check("dragging a unit onto its twin in the Barracks merges them",
+		merged_how == "merged" and b.at(0, 0) == null and b.at(0, 1) != null
+		and b.at(0, 1).tier == 2)
+	b.sections[0][2] = _find("archer")
+	_check("onto an empty slot it moves, onto anything else it swaps",
+		b.drop(0, 2, 0, 5) == "moved" and b.at(0, 5) == _find("archer")
+		and b.drop(0, 5, 0, 1) == "swapped" and b.at(0, 1) == _find("archer"))
+
+	# --- Waves copy the sections, into the right zone, and stack.
+	s = _boss_board([["warden", "archer"], ["lancer"], ["seraph", "warden", "archer"]])
+	bf = s.bf
+	sim = s.sim
+	b = s.barracks
+	_check("the first wave goes out the moment the fight starts",
+		bf.waves == 1 and _army_in_zone(bf, 0) == 2 and _army_in_zone(bf, 1) == 1
+		and _army_in_zone(bf, 2) == 3,
+		"%d / %d / %d" % [_army_in_zone(bf, 0), _army_in_zone(bf, 1), _army_in_zone(bf, 2)])
+	var placed_near := true
+	for e in _kind_events(sim, "summon"):
+		var z := int(e.get("zone", -1))
+		if z < 0 or z > 2 or BoardModel.box_distance(e.cell, bf.crystals[z].cell) > 6:
+			placed_near = false
+	_check("each section's units land by their own zone's crystal", placed_near)
+	b.supply = 1000.0
+	b.recruit(1)
+	var mid_before := _army_in_zone(bf, 1)
+	var left_before := _army_in_zone(bf, 0)
+	bf.send_wave()
+	sim._absorb_new_units()
+	_check("the next wave stacks a fresh copy of each section on top of the living",
+		_army_in_zone(bf, 0) == left_before + 2,
+		"left %d -> %d" % [left_before, _army_in_zone(bf, 0)])
+	_check("and a change made in the Barracks shows up from that wave",
+		_army_in_zone(bf, 1) == mid_before + 2,
+		"middle %d -> %d" % [mid_before, _army_in_zone(bf, 1)])
+	var first := bf.waves
+	for i in int(bf.data.wave_seconds / CombatSim.TICK) + 1:
+		sim.step()
+	_check("and the timer sends waves by itself", bf.waves == first + 1)
+	BoardModel.reset_map()
+
+	# Unit upgrades: one type at a time, Lv1 to Lv5, growing its own ability.
+	s = _boss_board([["lancer"], ["lancer"], []])
+	var ub := s.barracks as Barracks
+	var ubf := s.bf as BossFight
+	var usim := s.sim as CombatSim
+	ub.supply = 10000.0
+	var lancer := _find("lancer")
+	_check("the upgrade bar holds the loadout's unit types",
+		ub.types.size() == 5 and ub.level.has(&"lancer"),
+		"%d types" % ub.types.size())
+	var lv_prices: Array[float] = []
+	for i in 5:
+		lv_prices.append(ub.upgrade_price(&"lancer"))
+		ub.upgrade_type(&"lancer")
+	var rising := true
+	for i in range(1, lv_prices.size()):
+		rising = rising and lv_prices[i] > lv_prices[i - 1]
+	_check("each level costs more than the last", rising, str(lv_prices))
+	_check("and the top is Lv5", ub.level_of(&"lancer") == 5 and not ub.upgrade_type(&"lancer")
+		and is_inf(ub.upgrade_price(&"lancer")))
+	var top := ub.field_data(lancer)
+	_check("a Lv5 Lancer pierces 7 deep, where it started at 2",
+		lancer.pierce_targets == 2 and top.pierce_targets == 7,
+		"%d -> %d" % [lancer.pierce_targets, top.pierce_targets])
+	usim.step()
+	var all_upgraded := true
+	var fielded := 0
+	for u in usim._units:
+		if u.is_alive() and u.data.id == &"lancer":
+			fielded += 1
+			all_upgraded = all_upgraded and u.data.pierce_targets == 7
+	_check("an upgrade reaches every copy already on the field", fielded == 2 and all_upgraded,
+		"%d lancers" % fielded)
+	ubf.send_wave()
+	usim._absorb_new_units()
+	var fresh_ok := true
+	for u in usim._pending_units + usim._units:
+		if u.is_alive() and u.data.id == &"lancer":
+			fresh_ok = fresh_ok and u.data.pierce_targets == 7
+	_check("and every wave after it", fresh_ok)
+	BoardModel.reset_map()
+	# Every unit in the roster has five levels, and every level changes its ability.
+	var table: BossUpgrades = data.upgrades
+	var missing: PackedStringArray = []
+	var flat: PackedStringArray = []
+	var probe := Barracks.new()
+	var probe_loadout := LoadoutData.new()
+	probe_loadout.units = _roster().units.duplicate()
+	probe.setup(data, probe_loadout, 3)
+	probe.supply = 1.0e9
+	for u in _roster().units:
+		if table == null or not table.has_unit(u.id):
+			missing.append(String(u.id))
+			continue
+		var prev := u
+		for lv in range(1, 6):
+			probe.upgrade_type(u.id)
+			var now := probe.field_data(u)
+			var vals := table.level_values(u.id, lv)
+			var changed := false
+			for raw in vals:
+				var k := String(raw)
+				var field := k.substr(2).trim_suffix("*")
+				var a: Object = (now.ability if k.begins_with("a.") else now)
+				var b2: Object = (prev.ability if k.begins_with("a.") else prev)
+				if a != null and b2 != null and str(a.get(field)) != str(b2.get(field)):
+					changed = true
+			if lv > 1 and not changed:
+				flat.append("%s Lv%d" % [u.id, lv])
+			prev = now
+	_check("every unit in the roster has its five upgrade levels", missing.is_empty(),
+		", ".join(missing))
+	_check("and every level changes something about its own ability", flat.is_empty(),
+		", ".join(flat))
+
+	# A zone at its cap: the rest wait, one section's worth at most, and drop in later.
+	var capped := (load("res://data/boss/arbiter.tres") as BossData).duplicate(true)
+	capped.zone_cap = 3
+	s = _boss_board([["warden", "archer", "lancer", "seraph"], [], []], capped)
+	bf = s.bf
+	sim = s.sim
+	for i in 3:
+		bf.send_wave()
+	sim._absorb_new_units()
+	_check("a zone at its cap holds no more than the cap",
+		_army_in_zone(bf, 0) == 3, "%d" % _army_in_zone(bf, 0))
+	_check("the rest wait, but never more than one section's worth",
+		(bf.queued[0] as Array).size() > 0
+		and (bf.queued[0] as Array).size() <= (s.barracks as Barracks).slot_count())
+	var waiting := (bf.queued[0] as Array).size()
+	var victim: UnitInstance = null
+	for u in sim._units:
+		if not u.structure and int(bf.zone_of_uid.get(u.uid, -1)) == 0 and u.is_alive():
+			victim = u
+			break
+	sim._damage(victim, 1.0e7, bf.boss)
+	bf._drop_queued()
+	_check("and drop in as room opens", (bf.queued[0] as Array).size() == waiting - 1)
+	BoardModel.reset_map()
+
+	# --- Everyone goes for the boss first.
+	s = _boss_board([[], ["warden"], []])
+	bf = s.bf
+	sim = s.sim
+	board = s.board
+	var soldier: UnitInstance = null
+	for u in board.units_of(BoardModel.TEAM_B):
+		if not u.structure:
+			soldier = u
+	_check("a unit marches on the boss from right across the field",
+		sim._mark_for(soldier) == bf.boss)
+	var shade_data := UnitData.new()
+	shade_data.id = &"crimson_shade"
+	var shade := UnitInstance.create(shade_data, BoardModel.TEAM_A)
+	board.force_place(shade, soldier.cell + Vector2i(1, 0))
+	sim._pending_units.append(shade)
+	sim._absorb_new_units()
+	_check("a minion in its way, with the boss out of reach, is fought first",
+		sim._mark_for(soldier) == shade)
+	board.move_unit(bf.boss, soldier.cell + Vector2i(-1, 0))
+	_check("but with the boss in reach, the boss comes first",
+		sim._mark_for(soldier) == bf.boss)
+	BoardModel.reset_map()
+
+	# --- Each phase is its own bar: no overflow, and a break between bars.
+	s = _boss_board()
+	bf = s.bf
+	sim = s.sim
+	var full := bf.boss.stat(StatModifier.Stat.MAX_HP)
+	_check("more health than before: %d" % roundi(full), full >= 85000.0)
+	bf.boss.current_hp = full * 0.10
+	bf._check_phase()
+	_check("emptying the first bar in one blow only ends the first bar",
+		bf.phase == 1 and is_equal_approx(bf.boss.current_hp, full * data.phases[1].hp_threshold),
+		"phase %d at %.0f" % [bf.phase, bf.boss.current_hp])
+	_check("and the next bar starts full", is_equal_approx(bf.bar_of(bf.boss.current_hp).x,
+		bf.bar_of(bf.boss.current_hp).y))
+	var guarded := bf.boss.current_hp
+	sim._damage(bf.boss, 500.0, bf.crystals[0])
+	_check("nothing hurts it while the new bar is announced",
+		is_equal_approx(bf.boss.current_hp, guarded))
+	for i in int(bf.pause_left / CombatSim.TICK) + 2:
+		sim.step()
+	sim._damage(bf.boss, 500.0, bf.crystals[0])
+	_check("and after the announcement it can be hurt again", bf.boss.current_hp < guarded)
+
+	# --- Summons, called at the start of a phase and every so often within it.
+	var called := _kind_events(sim, "boss_summon")
+	_check("phase two opens with summoning circles marked on the ground",
+		called.size() >= 1 and (called[0].cells as Array).size() == data.phases[1].summons_on_start)
+	var shades := 0
+	for u in sim._units:
+		if u.team == BoardModel.TEAM_A and u != bf.boss and u.is_alive():
+			shades += 1
+	_check("and a shade steps out of each once the warning is over",
+		shades == data.phases[1].summons_on_start, "%d shades" % shades)
+	var before_summons := called.size()
+	for i in int(data.phases[1].summon_every / CombatSim.TICK) + 2:
+		sim.step()
+	_check("and more are called every %.0fs while the phase lasts" % data.phases[1].summon_every,
+		_kind_events(sim, "boss_summon").size() > before_summons)
+	# Several big calls in a row: one call alone places only a handful of circles.
+	for k in 4:
+		bf._summon_wave(50, 1.0)
+	_check("never more than the cap at once", bf.minions_alive() <= data.minion_cap,
+		"%d" % bf.minions_alive())
+	BoardModel.reset_map()
+
+	# --- The charge-up stance.
+	s = _boss_board()
+	bf = s.bf
+	sim = s.sim
+	var stance: BossMove = null
+	for p in data.phases:
+		for m in p.moves:
+			if m.shape == BossMove.Shape.STANCE and stance == null:
+				stance = m
+	_check("the later phases have a charge-up stance in their cycle",
+		stance != null and stance.finisher != null
+		and not data.phases[0].moves.any(func(m): return m.shape == BossMove.Shape.STANCE)
+		and data.phases.slice(1).all(func(p): return p.moves.any(
+			func(m): return m.shape == BossMove.Shape.STANCE)))
+	bf._begin_stance(stance)
+	_check("in the stance it takes %d%% less damage" % roundi(stance.stance_resist * 100.0),
+		is_equal_approx(bf.boss.damage_taken_multiplier(), 1.0 - stance.stance_resist),
+		"x%.2f" % bf.boss.damage_taken_multiplier())
+	bf.boss.current_hp -= stance.break_threshold + 1.0
+	sim.step()
+	_check("enough damage breaks it: staggered, and taking extra",
+		not bf.in_stance() and bf.boss.is_stunned()
+		and is_equal_approx(bf.boss.damage_taken_multiplier(), 1.0 + stance.stagger_amp)
+		and _kind_events(sim, "boss_stance_broken").size() == 1)
+	BoardModel.reset_map()
+	s = _boss_board()
+	bf = s.bf
+	sim = s.sim
+	var atk := bf.boss.stat(StatModifier.Stat.ATTACK_DAMAGE)
+	bf._begin_stance(stance)
+	for i in int(stance.telegraph / CombatSim.TICK) + 1:
+		sim.step()
+	_check("left alone it completes: boosted, and its finisher is already marked",
+		not bf.in_stance() and bf.boss.stat(StatModifier.Stat.ATTACK_DAMAGE) > atk * 1.4
+		and not bf.marked.is_empty() and bf.marked.move == stance.finisher)
+	BoardModel.reset_map()
+
+	# --- The map-wide moves: marked first, and never all of the field.
+	s = _boss_board()
+	bf = s.bf
+	sim = s.sim
+	var open := 0
+	for y in range(BossFight.HUB_ROWS, BoardModel.HEIGHT):
+		for x in BoardModel.WIDTH:
+			if not BoardModel.is_blocked(Vector2i(x, y)):
+				open += 1
+	var wide_shapes := [BossMove.Shape.ONRUSH, BossMove.Shape.CROSS, BossMove.Shape.RING,
+		BossMove.Shape.STRIPES, BossMove.Shape.RAIN, BossMove.Shape.HUNT]
+	var seen_wide := {}
+	var all_safe := true
+	var notes: PackedStringArray = []
+	for p in data.phases:
+		for m in p.moves + ([] if true else []):
+			var mv: BossMove = m.finisher if m.shape == BossMove.Shape.STANCE else m
+			if mv == null or not wide_shapes.has(mv.shape):
+				continue
+			seen_wide[mv.shape] = true
+			var cells := bf.move_cells(mv, Vector2i(8, 12), Vector2i(8, 18))
+			if cells.is_empty() or cells.size() >= open:
+				all_safe = false
+				notes.append("%s %d of %d" % [mv.display_name, cells.size(), open])
+	_check("every kind of map-wide move is in the boss's cycle somewhere",
+		seen_wide.size() == wide_shapes.size(), "%d kinds" % seen_wide.size())
+	_check("and every one of them leaves somewhere safe to stand", all_safe, ", ".join(notes))
+	# Onrush: several legs, each right across the map, each marked before it lands.
+	var rush: BossMove = null
+	for p in data.phases:
+		for m in p.moves:
+			if m.shape == BossMove.Shape.ONRUSH:
+				rush = m
+	bf.marked = {}
+	bf.gap_left = 999.0
+	bf._mark(rush)
+	var wound_events := sim.events.size()
+	_check("a big move charges up first: glowing and named, nothing marked yet",
+		bool(bf.marked.get("windup", false)) and (bf.marked.cells as Array).is_empty()
+		and rush.windup >= 2.0)
+	for i in int(rush.windup / CombatSim.TICK) - 1:
+		sim.step()
+	_check("and stays charging for its whole wind-up",
+		bool(bf.marked.get("windup", false))
+		and _kind_events(sim, "boss_telegraph").filter(func(e): return e.name == rush.display_name).is_empty())
+	for i in 3:
+		sim.step()
+	var tele := _kind_events(sim, "boss_telegraph").filter(func(e): return e.name == rush.display_name)
+	var wind := _kind_events(sim, "boss_windup").filter(func(e): return e.name == rush.display_name)
+	_check("then the mark goes down — charge, mark, blow",
+		not wind.is_empty() and not tele.is_empty()
+		and float(tele[0].t) - float(wind[0].t) >= rush.windup - CombatSim.TICK - 0.001)
+	var legs := 0
+	var long_legs := 0
+	var marked_first := true
+	var guard_ticks := 0
+	while not bf.marked.is_empty() and guard_ticks < 400:
+		var leg: Array = bf.marked.cells
+		var at: Vector2i = bf.boss.cell
+		legs += 1
+		if leg.size() >= 6:
+			long_legs += 1
+		var hits_before := _kind_events(sim, "boss_strike").size()
+		sim.step()
+		if _kind_events(sim, "boss_strike").size() > hits_before and float(bf.marked.get("left", 1.0)) > 0.5 \
+				and legs == 1 and bf.boss.cell == at:
+			marked_first = false
+		for i in int(rush.telegraph / CombatSim.TICK) + 1:
+			sim.step()
+			guard_ticks += 1
+			if bf.marked.is_empty() or bf.marked.cells != leg:
+				break
+	_check("Onrush is %d dashes, every one marked before it lands" % rush.legs,
+		legs == rush.legs and marked_first, "%d legs" % legs)
+	_check("and they run right across the map", long_legs >= rush.legs - 1,
+		"%d of %d long" % [long_legs, legs])
+	BoardModel.reset_map()
+
+	# --- Big moves are rarer than the rest, at a fixed spot in each cycle.
+	var share_ok := true
+	var shares: PackedStringArray = []
+	for p in data.phases:
+		var big := 0
+		for m in p.moves:
+			if m.shape == BossMove.Shape.STANCE or wide_shapes.has(m.shape):
+				big += 1
+		var share := float(big) / maxf(float(p.moves.size()), 1.0)
+		shares.append("%s %d/%d" % [p.display_name, big, p.moves.size()])
+		share_ok = share_ok and share <= 0.25
+	_check("no more than one move in four is a big one, in any phase", share_ok,
+		", ".join(shares))
+	var all_wound := true
+	for p in data.phases:
+		for m in p.moves:
+			var mv: BossMove = m.finisher if m.shape == BossMove.Shape.STANCE else m
+			if mv != null and wide_shapes.has(mv.shape) and mv.windup < 2.0:
+				all_wound = false
+	_check("and every map-wide move and finisher has a charge-up of at least 2s", all_wound)
+
+	# --- Crystals: only her own blow on the one she is after.
+	s = _boss_board()
+	bf = s.bf
+	sim = s.sim
+	var left := bf.crystals[0]
+	var mid := bf.crystals[1]
+	var wide: BossMove = null
+	for p in data.phases:
+		for m in p.moves:
+			if m.shape == BossMove.Shape.CROSS or (m.finisher != null
+					and m.finisher.shape == BossMove.Shape.CROSS):
+				wide = m if m.shape == BossMove.Shape.CROSS else m.finisher
+	bf.boss.current_hp = bf.boss.stat(StatModifier.Stat.MAX_HP)
+	(s.board as BoardModel).move_unit(bf.boss, Vector2i(left.cell.x + 1, left.cell.y - 3))
+	bf.marked = {move = wide, cells = bf.move_cells(wide, bf.boss.cell, left.cell),
+		left = 0.05, aim = left.cell, step = 0}
+	var crossed_left := (bf.marked.cells as Array).has(left.cell)
+	var left_hp := left.current_hp
+	sim.step()
+	_check("a map-wide move passes over a crystal without touching it",
+		crossed_left and is_equal_approx(left.current_hp, left_hp))
+	var mid_hp := mid.current_hp
+	sim._damage(mid, 500.0, bf.boss)
+	_check("her blow on a crystal she is NOT after does nothing",
+		is_equal_approx(mid.current_hp, mid_hp))
+	var shade2 := UnitInstance.create(shade_data, BoardModel.TEAM_A)
+	sim._damage(left, 500.0, shade2)
+	_check("nor does anything of a minion's",
+		is_equal_approx(left.current_hp, left_hp))
+	sim._damage(left, 500.0, bf.boss)
+	_check("only her own blow on the crystal she is after",
+		left.current_hp < left_hp)
+	BoardModel.reset_map()
+
+	# --- Broken crystals rebuild, and their waves go and come back.
+	s = _boss_board([["warden"], ["warden"], ["warden"]])
+	bf = s.bf
+	sim = s.sim
+	var lc := bf.crystals[0]
+	sim._damage(lc, 1.0e7, bf.boss)
+	sim.step()
+	_check("a broken zone crystal starts rebuilding",
+		bf.rebuilding.has(0) and _kind_events(sim, "crystal_rebuilding").size() == 1)
+	var mark_events := sim.events.size()
+	bf.send_wave()
+	var went_centre := false
+	for e in sim.events.slice(mark_events):
+		if e.kind == "summon" and int(e.get("zone", -1)) == 3:
+			went_centre = true
+	_check("its section reinforces the centre while it is down", went_centre)
+	# Clear its spot, then wait it out.
+	for i in int(data.crystal_rebuild_seconds / CombatSim.TICK) + 2:
+		if (s.board as BoardModel).unit_at(BossFight.CRYSTAL_CELLS[0]) != null \
+				and (s.board as BoardModel).unit_at(BossFight.CRYSTAL_CELLS[0]) != lc:
+			(s.board as BoardModel).remove((s.board as BoardModel).unit_at(BossFight.CRYSTAL_CELLS[0]))
+		bf.wave_left = 999.0
+		bf.gap_left = 999.0
+		sim.step()
+	_check("after %.0fs it stands again, at %d%% health" % [data.crystal_rebuild_seconds,
+		roundi(data.crystal_rebuild_fraction * 100.0)],
+		lc.is_alive() and is_equal_approx(lc.current_hp,
+			lc.stat(StatModifier.Stat.MAX_HP) * data.crystal_rebuild_fraction),
+		"alive %s, %.0f" % [lc.is_alive(), lc.current_hp])
+	_check("and the boss comes back for it, in her order", bf.current_target() == lc)
+	mark_events = sim.events.size()
+	bf.send_wave()
+	var went_home := false
+	for e in sim.events.slice(mark_events):
+		if e.kind == "summon" and int(e.get("zone", -1)) == 0:
+			went_home = true
+	_check("and its section's waves come back to it", went_home)
+	BoardModel.reset_map()
+
+	# The seal lifts the first time all three are down at once, and stays lifted.
+	s = _boss_board()
+	bf = s.bf
+	sim = s.sim
+	for i in 3:
+		sim._damage(bf.crystals[i], 1.0e7, bf.boss)
+		sim.step()
+	_check("all three down at once lifts the seal", bf.merged and not bf.crystals[3].sealed)
+	bf._restore_crystal(0)
+	_check("and a crystal rebuilding afterwards does not draw her back off the centre",
+		bf.crystals[0].is_alive() and bf.current_target() == bf.crystals[3]
+		and not bf.crystals[3].sealed)
+	BoardModel.reset_map()
+
+	# --- A fallen crystal's section reinforces the centre instead.
+	s = _boss_board([["warden"], ["warden"], ["warden"]])
+	bf = s.bf
+	sim = s.sim
+	sim._damage(bf.crystals[0], 1.0e7, bf.boss)
+	sim.step()
+	var summons_before := _kind_events(sim, "summon").size()
+	bf.send_wave()
+	var to_centre := 0
+	var to_own := 0
+	for e in _kind_events(sim, "summon").slice(summons_before):
+		if int(e.get("zone", -1)) == 3:
+			to_centre += 1
+		elif int(e.get("zone", -1)) in [1, 2]:
+			to_own += 1
+	_check("once its crystal falls, a section's waves spawn at the Central Crystal",
+		to_centre == 1 and to_own == 2, "%d to the centre, %d to their own" % [to_centre, to_own])
+	BoardModel.reset_map()
+
+	# --- The Spire raises hosts from your own loadout, and nothing shoves it.
+	s = _boss_board([["spire"], [], []])
+	bf = s.bf
+	sim = s.sim
+	board = s.board
+	var spire: UnitInstance = null
+	for u in board.units_of(BoardModel.TEAM_B):
+		if u.data.id == &"spire":
+			spire = u
+	spire.mana = UnitInstance.MANA_MAX
+	for i in 40:
+		sim.step()
+	var raised: Array[StringName] = []
+	for e in _kind_events(sim, "summon"):
+		if int(e.get("owner_uid", -1)) == spire.uid:
+			raised.append(e.unit_id)
+	var from_loadout := not raised.is_empty()
+	for id in raised:
+		from_loadout = from_loadout and (s.barracks as Barracks).level.has(id)
+	_check("the Spire raises its hosts, drawn from your own loadout",
+		raised.size() == 2 and from_loadout, "raised %s" % str(raised))
+	s = _boss_board([["spire"], [], []])
+	sim = s.sim
+	board = s.board
+	var rooted: UnitInstance = null
+	for u in board.units_of(BoardModel.TEAM_B):
+		if u.data.id == &"spire":
+			rooted = u
+	var walker := UnitInstance.create(_find("warden"), BoardModel.TEAM_B)
+	board.force_place(walker, rooted.cell + Vector2i(0, 1))
+	var spot := rooted.cell
+	# Hem the walker in with friends on every other side, so the Spire's tile is
+	# its only way on: anywhere else this is exactly where the Spire gets shoved.
+	for dx in [-1, 0, 1]:
+		for dy in [-1, 0, 1]:
+			var c: Vector2i = walker.cell + Vector2i(dx, dy)
+			if c == walker.cell or c == spot or not board.in_bounds(c) \
+					or board.unit_at(c) != null:
+				continue
+			board.force_place(UnitInstance.create(_find("warden"), BoardModel.TEAM_B), c)
+	walker.target = s.bf.boss
+	for i in 30:
+		sim._begin_move(walker)
+	_check("and nothing walking past shoves it off its spot", rooted.cell == spot)
+	BoardModel.reset_map()
+
+	# --- Coloured blocks say which unit they are.
+	var shorts := {}
+	var clash: PackedStringArray = []
+	for u in _roster().units:
+		var sn := UnitView.short_name(u)
+		if shorts.has(sn) or sn.length() < 2:
+			clash.append("%s/%s" % [u.id, sn])
+		shorts[sn] = true
+	_check("every unit in the roster has its own short name on a block",
+		clash.is_empty(), ", ".join(clash))
+
+	# --- The boss is not a unit you can cheese.
+	s = _boss_board([["warden"], [], []])
+	bf = s.bf
+	sim = s.sim
+	_check("it cannot be disoriented or possessed",
+		bf.boss.is_disorient_immune()
+		and not sim.possess_candidates(UnitInstance.create(_find("usurper"),
+			BoardModel.TEAM_B)).has(bf.boss))
+	var before := bf.boss.current_hp
+	sim._execute(UnitInstance.create(_find("devourer"), BoardModel.TEAM_B), bf.boss)
+	_check("an execute is a heavy blow, not a deletion",
+		bf.boss.is_alive() and bf.boss.current_hp < before)
+	_check("share-of-health effects read its health as capped",
+		is_equal_approx(bf.boss.percent_basis(bf.boss.stat(StatModifier.Stat.MAX_HP)),
+			data.percent_cap))
+	var crystal := bf.crystals[0]
+	crystal.current_hp = 100.0
+	crystal.heal(500.0)
+	crystal.add_shield(500.0, 500.0)
+	_check("crystals cannot be healed or shielded",
+		is_equal_approx(crystal.current_hp, 100.0) and is_zero_approx(crystal.shield))
+	BoardModel.reset_map()
+
+
+func _test_boss_music() -> void:
+	_section("Boss defence music")
+	var data := load("res://data/boss/arbiter.tres") as BossData
+	var want := [
+		["res://audio/boss/gebura_battle.mp3", 0.0, 91.6364],
+		["res://audio/boss/gebura_battle.mp3", 91.6364, 183.2727],
+		["res://audio/boss/red_mist.mp3", 0.0, 0.0],
+		["res://audio/boss/gebura_battle.mp3", 183.2727, 0.0],
+	]
+	var got: PackedStringArray = []
+	var ok := data != null and data.phases.size() == want.size()
+	if ok:
+		for i in want.size():
+			var p := data.phases[i]
+			got.append("%s: %s %.0f-%.0f" % [p.music_label, p.music_path.get_file(),
+				p.music_from, p.music_to])
+			ok = ok and p.music_path == want[i][0] and is_equal_approx(p.music_from, want[i][1]) \
+				and is_equal_approx(p.music_to, want[i][2]) \
+				and p.music_label == ["Theme 1", "Theme 2", "Theme 3", "Theme 4"][i]
+	_check("phases 1-4 play Theme 1-4: the battle theme, its second part, the Red Mist theme whole, the battle theme's end",
+		ok, ", ".join(got))
+	var beat := 60.0 / 110.0
+	_check("Themes 1 and 2 are each exactly 168 beats at 110 BPM, cut on the bar line, so each loop lands on the downbeat",
+		absf(91.6364 / beat - 168.0) < 0.002 and absf((183.2727 - 91.6364) / beat - 168.0) < 0.002)
+	_check("a stretch with an end wraps to its own start, carrying the overshoot over",
+		is_equal_approx(_audio_script().segment_wrap(91.331, 0.0, 91.231), 0.1)
+		and is_equal_approx(_audio_script().segment_wrap(182.946, 91.231, 182.846), 91.331)
+		and _audio_script().segment_wrap(91.2, 0.0, 91.231) < 0.0
+		and _audio_script().segment_wrap(120.0, 91.0, 183.0) < 0.0)
+	_check("a stretch that runs to the end of the file is left to finish",
+		_audio_script().segment_wrap(400.0, 183.0, 0.0) < 0.0)
+	var cfg := ConfigFile.new()
+	cfg.load("res://export_presets.cfg")
+	_check("the web export leaves the boss music out",
+		String(cfg.get_value("preset.0", "exclude_filter", "")).contains("audio/boss/*"))
+	var have := ResourceLoader.exists(want[0][0]) and ResourceLoader.exists(want[2][0])
+	if not have:
+		print("  (boss music not on this machine — the mode plays on without it)")
+		return
+	var theme := load(want[0][0]) as AudioStream
+	_check("the battle theme is long enough for all three of its pieces",
+		theme != null and theme.get_length() > 183.0 + 30.0,
+		"%.0fs" % (theme.get_length() if theme != null else 0.0))
+	_check("and is 506 beats long, so Theme 4 wrapping off its end lands on the beat too",
+		theme != null and absf(theme.get_length() / beat - 506.0) < 0.05,
+		"%.3f beats" % (theme.get_length() / beat if theme != null else 0.0))
+	var mp3 := theme as AudioStreamMP3
+	var cuts_ok := mp3 != null
+	var cut_note: PackedStringArray = []
+	if mp3 != null:
+		for to: float in [91.6364, 183.2727]:
+			var cut := AudioStreamMP3.new()
+			cut.data = _audio_script().mp3_bytes_until(mp3.data, to)
+			var end := cut.get_length()
+			var a := _mix(mp3, end - 0.1, 2048)
+			var b := _mix(cut, end - 0.1, 2048)
+			var same := a.size() == 2048 and a == b
+			cut_note.append("%.4f→%.4f%s" % [to, end, "" if same else " (differs)"])
+			cuts_ok = cuts_ok and end >= to and end < to + 0.03 and same
+	_check("cutting the file at a stretch's end keeps it sample-for-sample, ending within one MP3 frame after the cut",
+		cuts_ok, ", ".join(cut_note))
+
+
+func _mix(s: AudioStream, at: float, n: int) -> PackedVector2Array:
+	var pb := s.instantiate_playback()
+	pb.start(at)
+	var out := PackedVector2Array()
+	while out.size() < n:
+		var part: PackedVector2Array = pb.mix_audio(1.0, n - out.size())
+		if part.is_empty():
+			break
+		out.append_array(part)
+	return out
+
+
+func _audio_script() -> GDScript:
+	return load("res://autoload/audio.gd") as GDScript

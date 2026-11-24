@@ -364,7 +364,195 @@ func _load_run(pattern: String, count: int) -> Array[AudioStream]:
 
 func _restart_music() -> void:
 	if _music.stream != null:
-		_music.play()
+		_music.play(maxf(_segment_from, 0.0))
+
+
+## A stretch of a file looped as a track of its own — the boss defence's phase
+## music, which is several pieces cut from one long file. -1 when the music player
+## is playing an ordinary whole track.
+var _segment_from := -1.0
+var _segment_to := -1.0
+
+
+static func segment_wrap(position: float, from: float, to: float) -> float:
+	## Where the music should jump to, or -1 to carry on. Past the end of the stretch
+	## it goes back to its start PLUS however far it overshot, so the beat keeps its
+	## place: a loop checked once a frame would otherwise drop the overshoot and
+	## stutter. A stretch that runs to the end of the file (`to` of 0) is looped by
+	## the stream itself instead — see play_segment — which is sample-accurate.
+	if to > from and position >= to:
+		return from + fmod(position - to, to - from)
+	return -1.0
+
+
+func play_segment(key: String, path: String, from: float, to: float) -> bool:
+	## Loops `from`..`to` seconds of `path` (to 0 = the end of the file). Returns false,
+	## and leaves the current music alone, if the file is not there — the boss music
+	## is personal and never exported, so its absence is normal on the web.
+	if not enabled:
+		return false
+	if key == _music_now:
+		return true
+	if path.is_empty() or not ResourceLoader.exists(path):
+		return false
+	var s := load(path) as AudioStream
+	if s == null:
+		return false
+	var start := maxf(from, 0.0)
+	var wrap_to := to
+	if s is AudioStreamMP3 and to > from:
+		# A stretch that ends mid-file: cut the file just after it, so the stream ends
+		# there and the engine itself loops it, on the exact sample. A wrap checked
+		# once a frame lands up to a buffer late and is heard as a hiccup.
+		var cut := _mp3_cut(path, s as AudioStreamMP3, to)
+		if cut != null:
+			# The cut falls on the first MP3 frame boundary at or after `to` (frames
+			# are 26 ms); the loop start moves by the same amount, so the loop is
+			# exactly `to - from` long and keeps the beat.
+			cut.loop = true
+			cut.loop_offset = from + (cut.get_length() - to)
+			s = cut
+			wrap_to = 0.0
+	elif s is AudioStreamMP3 or s is AudioStreamOggVorbis:
+		# A stretch that runs to the end of the file loops in the stream itself, back
+		# to its start: the engine does that on the exact sample. Anything else that
+		# ends mid-file must not loop in the stream, or it would play on into the
+		# next piece; _process wraps it instead.
+		s = s.duplicate()
+		s.set("loop", to <= from)
+		s.set("loop_offset", start)
+	_music_now = key
+	_segment_from = start
+	_segment_to = wrap_to
+	_music.stream = s
+	_music.play(start)
+	set_process(true)
+	return true
+
+
+## Cut-down copies of MP3s, by path and end time: cutting re-reads the whole file.
+var _cuts := {}
+
+
+func _mp3_cut(path: String, s: AudioStreamMP3, to: float) -> AudioStreamMP3:
+	var key := "%s@%.4f" % [path, to]
+	if _cuts.has(key):
+		return _cuts[key]
+	var bytes := mp3_bytes_until(s.data, to)
+	if bytes.is_empty():
+		return null
+	var cut := AudioStreamMP3.new()
+	cut.data = bytes
+	# The decoder may hide a few samples at the start (encoder delay); the cut is
+	# only good if it really ends at or just after `to`.
+	if cut.get_length() < to - 0.001 or cut.get_length() > to + 0.1:
+		return null
+	_cuts[key] = cut
+	return cut
+
+
+static func mp3_bytes_until(data: PackedByteArray, seconds: float) -> PackedByteArray:
+	## The file up to the end of the first MP3 frame that finishes at or after
+	## `seconds` (counting audio frames from the first), or empty if it is not an MP3
+	## this can walk. Frames only ever borrow bits from frames BEFORE them, so the
+	## cut-down file decodes exactly like the start of the whole one.
+	var i := 0
+	if data.size() >= 10 and data[0] == 0x49 and data[1] == 0x44 and data[2] == 0x33:
+		i = 10 + ((data[6] & 0x7f) << 21 | (data[7] & 0x7f) << 14 \
+			| (data[8] & 0x7f) << 7 | (data[9] & 0x7f))
+		if data[5] & 0x10:
+			i += 10
+	const RATES_1 := [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320]
+	const RATES_2 := [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160]
+	const HZ := [44100, 48000, 32000]
+	var samples := 0
+	var frames := 0
+	var first := true
+	var tag_at := -1
+	var tag_end := -1
+	var delay := 0
+	while i + 4 <= data.size():
+		if data[i] != 0xff or (data[i + 1] & 0xe0) != 0xe0:
+			return PackedByteArray()
+		var version := (data[i + 1] >> 3) & 3
+		var layer := (data[i + 1] >> 1) & 3
+		var rate_i := data[i + 2] >> 4
+		var hz_i := (data[i + 2] >> 2) & 3
+		if version == 1 or layer != 1 or rate_i == 0 or rate_i == 15 or hz_i == 3:
+			return PackedByteArray()
+		var mpeg1 := version == 3
+		var hz: int = HZ[hz_i] / (1 if mpeg1 else (2 if version == 2 else 4))
+		var kbps: int = (RATES_1 if mpeg1 else RATES_2)[rate_i]
+		var length := (144000 if mpeg1 else 72000) * kbps / hz + ((data[i + 2] >> 1) & 1)
+		# A LAME/Xing header frame holds no audio: it does not count.
+		var tag := false
+		if first:
+			for at in range(i + 4, mini(i + 40, data.size() - 4)):
+				var word := data.slice(at, at + 4).get_string_from_ascii()
+				if word == "Xing" or word == "Info":
+					tag = true
+					tag_at = at
+					tag_end = i + length
+					# The decoder hides the encoder's delay at the start, so the cut
+					# has to run that much further to end at or after `seconds`.
+					var ext := _tag_extension(data, at, tag_end)
+					if ext >= 0:
+						delay = ((data[ext] << 4) | (data[ext + 1] >> 4)) + 529
+			first = false
+		i += length
+		if not tag:
+			samples += 1152 if mpeg1 else 576
+			frames += 1
+			if float(samples - delay) / hz >= seconds:
+				var out := data.slice(0, mini(i, data.size()))
+				if tag_at >= 0:
+					_retag(out, tag_at, tag_end, frames)
+				return out
+	return PackedByteArray()
+
+
+static func _tag_extension(data: PackedByteArray, at: int, end: int) -> int:
+	## Where the encoder's delay and padding sit in a Xing/Info header frame (two
+	## 12-bit numbers, after the optional counts and table), or -1 if it has none.
+	var flags := data[at + 7]
+	var p := at + 8
+	for bit: int in [1, 2, 4, 8]:
+		if flags & bit:
+			p += 100 if bit == 4 else 4
+	if p + 24 >= end or data[p] == 0:
+		return -1
+	return p + 21
+
+
+static func _retag(out: PackedByteArray, at: int, end: int, frames: int) -> void:
+	## The header frame says how long the whole file is, and decoders believe it:
+	## rewrite it for the cut — its frame and byte counts, and no end padding (the
+	## padding belonged to the whole file's last frame, which is gone).
+	var flags := out[at + 7]
+	var p := at + 8
+	if flags & 1:
+		for k in 4:
+			out[p + k] = (frames >> (24 - 8 * k)) & 0xff
+		p += 4
+	if flags & 2:
+		for k in 4:
+			out[p + k] = (out.size() >> (24 - 8 * k)) & 0xff
+	var ext := _tag_extension(out, at, end)
+	if ext >= 0:
+		# A stored 529 reads back as no padding at all.
+		out[ext + 1] = (out[ext + 1] & 0xf0) | (529 >> 8)
+		out[ext + 2] = 529 & 0xff
+
+
+func _process(_delta: float) -> void:
+	if _segment_from < 0.0 or not _music.playing:
+		return
+	# The precise playhead: the position at the last mix plus the time since it, so
+	# the check is not a whole audio buffer late.
+	var at := _music.get_playback_position() + AudioServer.get_time_since_last_mix()
+	var jump := segment_wrap(at, _segment_from, _segment_to)
+	if jump >= 0.0:
+		_music.seek(jump)
 
 
 func play_music(name: String) -> void:
@@ -376,6 +564,8 @@ func play_music(name: String) -> void:
 	if not ResourceLoader.exists(path):
 		push_warning("Audio: no such track '%s'" % path)
 		return
+	_segment_from = -1.0
+	_segment_to = -1.0
 	_music_now = name
 	_music.stream = load(path) as AudioStream
 	_music.play()
@@ -409,6 +599,8 @@ func boss_track_name(index: int) -> String:
 
 
 func stop_music() -> void:
+	_segment_from = -1.0
+	_segment_to = -1.0
 	_music_now = ""
 	_music.stop()
 

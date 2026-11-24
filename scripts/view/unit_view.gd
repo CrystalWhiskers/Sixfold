@@ -32,7 +32,7 @@ const TIER_COLORS: Array[Color] = [
 ##
 ## GameSetup owns the SETTING and writes it down to here; this is where the
 ## drawing reads it.
-static var portraits_on := true
+static var portraits_on := false
 
 
 static func portrait_for(d: UnitData) -> Texture2D:
@@ -44,6 +44,23 @@ static func portrait_for(d: UnitData) -> Texture2D:
 	if not portraits_on or d == null:
 		return null
 	return d.sprite
+
+
+## Short names that are not simply the first three letters, because those would
+## clash (PARiah / PARagon) or read badly.
+const SHORT_OVERRIDES := {
+	&"assassin": "ASN", &"paragon": "PGN", &"powderkeg": "KEG",
+	&"transcendence": "TRN", &"crystal": "", &"crimson_shade": "SHD",
+}
+
+
+static func short_name(d: UnitData) -> String:
+	## The unit's label on a coloured block: three letters, unique across the roster.
+	if d == null:
+		return ""
+	if SHORT_OVERRIDES.has(d.id):
+		return SHORT_OVERRIDES[d.id]
+	return String(d.id).substr(0, 3).to_upper()
 
 
 static func tier_color(tier: int) -> Color:
@@ -210,6 +227,9 @@ func _process(delta: float) -> void:
 		queue_redraw()
 	if possessed:
 		possessed_t = fmod(possessed_t + delta * 2.2, TAU)
+		queue_redraw()
+	if unit != null and unit.sealed:
+		# The Central Crystal's seal turns.
 		queue_redraw()
 	if unit != null and unit.data != null and unit.data.tier >= APEX_TIER:
 		apex_t = fmod(apex_t + delta * 1.1, TAU)
@@ -418,6 +438,67 @@ func _draw_cast(body: Rect2, alpha: float) -> void:
 		Color(1.0, 0.90, 0.58, alpha))
 
 
+func _draw_crystal() -> void:
+	## A crystal: a faceted gem on the tile and a wide health bar under it. The
+	## Central Crystal is gold and, while sealed, sits inside a ring.
+	var half := tile_size * 0.5
+	var alpha := 1.0
+	if dying:
+		alpha = death_t
+	var col := unit.data.accent
+	var r := half * 0.72
+	var gem := PackedVector2Array([Vector2(0, -r), Vector2(r * 0.7, 0), Vector2(0, r),
+		Vector2(-r * 0.7, 0)])
+	draw_colored_polygon(gem, Color(col.darkened(0.35), 0.95 * alpha))
+	var face := PackedVector2Array([Vector2(0, -r), Vector2(r * 0.7, 0), Vector2(0, r * 0.2)])
+	draw_colored_polygon(face, Color(col.lightened(0.25), 0.95 * alpha))
+	gem.append(gem[0])
+	draw_polyline(gem, Color(1, 1, 1, 0.85 * alpha), 2.0)
+	if flash > 0.0:
+		draw_colored_polygon(PackedVector2Array(gem.slice(0, 4)),
+			Color(1, 1, 1, 0.6 * flash))
+	if unit.sealed:
+		var spin: float = float(Time.get_ticks_msec()) * 0.002
+		for i in 6:
+			var from: float = spin + float(i) * TAU / 6.0
+			draw_arc(Vector2.ZERO, half - 2.0, from, from + 0.6, 6,
+				Color(0.98, 0.88, 0.50, 0.9 * alpha), 2.5)
+	if dying:
+		return
+	var bar := Rect2(-half + 3.0, half - 8.0, tile_size - 6.0, 6.0)
+	draw_rect(bar.grow(1.0), Color(0.02, 0.03, 0.05, 0.9), true)
+	var filled := bar
+	filled.size.x = bar.size.x * display_hp
+	draw_rect(filled, Color(0.55, 0.90, 1.0) if not unit.sealed else Color(0.98, 0.86, 0.46), true)
+
+
+func _draw_boss() -> void:
+	## The boss fills its tile and spills over it: a lacquered red plate, a blade
+	## drawn across it, and a thin bar of its own (the HUD carries the big one).
+	var half := tile_size * 0.5
+	var alpha := death_t if dying else 1.0
+	var body := Rect2(-half + 1.0, -half + 1.0, tile_size - 2.0, tile_size - 2.0)
+	var red := unit.data.accent
+	draw_rect(body.grow(3.0), Color(red.darkened(0.6), 0.85 * alpha), true)
+	draw_rect(body, Color(red.darkened(0.15), alpha), true)
+	draw_rect(body, Color(1.0, 0.78, 0.55, alpha), false, 3.0)
+	var blade := Color(0.95, 0.93, 0.90, alpha)
+	draw_line(Vector2(-half * 0.55, half * 0.55), Vector2(half * 0.6, -half * 0.6), blade, 4.0)
+	draw_line(Vector2(-half * 0.25, half * 0.05), Vector2(half * 0.05, half * 0.35),
+		Color(0.85, 0.70, 0.30, alpha), 4.0)
+	if held != HELD_NONE:
+		draw_rect(body.grow(5.0), Color(0.60, 0.82, 0.95, 0.9 * alpha), false, 2.0)
+	if flash > 0.0:
+		draw_rect(body, Color(1, 1, 1, 0.5 * flash), true)
+	if dying:
+		return
+	var bar := Rect2(-half + 2.0, -half - 8.0, tile_size - 4.0, 5.0)
+	draw_rect(bar.grow(1.0), Color(0.02, 0.03, 0.05, 0.9), true)
+	var filled := bar
+	filled.size.x = bar.size.x * display_hp
+	draw_rect(filled, Color(0.95, 0.25, 0.22), true)
+
+
 func _draw_tier_pips(body: Rect2, tier: int, tint: Color, alpha: float) -> void:
 	# One pip per tier along the bottom edge: countable without reading.
 	var pip := maxf(tile_size * 0.055, 3.0)
@@ -434,6 +515,12 @@ func _draw_tier_pips(body: Rect2, tier: int, tint: Color, alpha: float) -> void:
 
 func _draw() -> void:
 	if unit == null:
+		return
+	if unit.structure:
+		_draw_crystal()
+		return
+	if unit.boss:
+		_draw_boss()
 		return
 	var half := tile_size * 0.5
 	var body := Rect2(-half + 5.0, -half + 5.0, tile_size - 10.0, tile_size - 10.0)
@@ -474,13 +561,20 @@ func _draw() -> void:
 		var art := body.grow(-4.0)
 		draw_texture_rect(art_tex, art, false, Color(1, 1, 1, alpha))
 	else:
-		var initial := String(unit.data.display_name).substr(0, 1).to_upper()
+		# Its short name, not an initial: with seven units starting "S" a single
+		# letter told nobody anything. Unique across the roster — see short_name().
+		var initial := short_name(unit.data)
 		var font := ThemeDB.fallback_font
-		var size := 30
+		var size := clampi(int(tile_size * 0.34), 8, 26)
 		var w := font.get_string_size(initial, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
-		var ink := Color(0, 0, 0, 0.65 * alpha)
+		# Light letters with a dark outline: they read on any accent colour, and on
+		# a small tile they stay legible where dark ink on a dark plate did not.
+		var ink := Color(0.98, 0.97, 0.94, 0.95 * alpha)
+		var edge := Color(0.02, 0.02, 0.04, 0.9 * alpha)
 		if unit.team == player_team:
-			draw_string(font, Vector2(-w * 0.5, 10.0), initial,
+			draw_string_outline(font, Vector2(-w * 0.5, size * 0.36), initial,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, size, maxi(size / 4, 2), edge)
+			draw_string(font, Vector2(-w * 0.5, size * 0.36), initial,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, size, ink)
 		else:
 			# Rotated about the tile's own centre rather than the text baseline,
@@ -488,7 +582,9 @@ func _draw() -> void:
 			# canvas transform outright, so it has to be reset afterwards — the
 			# health bar and everything below draw in plain local space.
 			draw_set_transform(Vector2.ZERO, PI, Vector2.ONE)
-			draw_string(font, Vector2(-w * 0.5, 10.0), initial,
+			draw_string_outline(font, Vector2(-w * 0.5, size * 0.36), initial,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, size, maxi(size / 4, 2), edge)
+			draw_string(font, Vector2(-w * 0.5, size * 0.36), initial,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, size, ink)
 			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
@@ -640,18 +736,21 @@ func _draw() -> void:
 		draw_rect(body, Color(1, 1, 1, 0.55 * flash), true)
 
 	var tfont := ThemeDB.fallback_font
-	var badge := Rect2(-half + 5.0, -half + 4.0, 24.0, 17.0)
+	# The tier, tiny, in the corner: the name in the middle is what identifies the
+	# unit; the tier is a detail, and the pips along the edge say it again. Just the
+	# digit in its tier colour with a thin dark outline — no chip behind it.
+	var tt := str(tier)
+	var tfs := clampi(roundi(tile_size * 0.17), 7, 9)
 	var chip := tint
 	chip.a = alpha
-	draw_rect(badge.grow(1.0), Color(0.04, 0.05, 0.08, 0.85 * alpha), true)
-	draw_rect(badge, chip, true)
-	var tt := "T%d" % tier
-	var tw2 := tfont.get_string_size(tt, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
-	draw_string(tfont, Vector2(badge.position.x + (badge.size.x - tw2) * 0.5,
-		badge.position.y + 13.0), tt, HORIZONTAL_ALIGNMENT_LEFT, -1, 12,
-		Color(0.06, 0.07, 0.10, alpha))
+	draw_string_outline(tfont, Vector2(-half + 3.0, -half + 2.0 + float(tfs)), tt,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, tfs, 2, Color(0.04, 0.05, 0.08, 0.9 * alpha))
+	draw_string(tfont, Vector2(-half + 3.0, -half + 2.0 + float(tfs)), tt,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, tfs, chip)
 
-	_draw_tier_pips(body, tier, tint, alpha)
+	# On a small tile the pips would sit on the name; the corner number says it.
+	if tile_size >= 44.0:
+		_draw_tier_pips(body, tier, tint, alpha)
 
 	if reeling:
 		# Lost. Drawn as birds going round its head rather than as another ring: this unit

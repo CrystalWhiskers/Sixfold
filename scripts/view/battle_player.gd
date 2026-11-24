@@ -140,15 +140,95 @@ func _process(delta: float) -> void:
 	_aim_chevrons()
 
 	if (_cursor >= _events.size() and _moves.is_empty() and _deferred.is_empty()
-			and _hold <= 0.0):
+			and _hold <= 0.0 and not live):
 		_playing = false
 		_view.playback = false
 		set_process(false)
 		finished.emit(_winner)
 
 
+## Every event, as it is played. The boss defence HUD reads its bars, its phase
+## name and its wave clock off this rather than off the model, which is ahead of
+## the screen while the fight is being simulated live.
+signal event_played(e: Dictionary)
+
+## True while the log is still being written — a battle simulated as it plays. An
+## empty stretch of log then means "nothing has happened yet", not "it is over".
+var live := false
+
+const BOSS_RED := Color(0.95, 0.20, 0.18)
+
+
 func _apply(e: Dictionary) -> void:
+	event_played.emit(e)
 	match e.kind:
+		"boss_telegraph":
+			# The mark: every tile the move will hit, red for exactly as long as the
+			# warning lasts, with the move's name over the boss.
+			var marked: Array[Vector2i] = []
+			for c in e.get("cells", []):
+				marked.append(c)
+			var secs := float(e.get("seconds", 1.0)) / maxf(speed, 0.01)
+			_view.flash_cells(marked, Color(BOSS_RED, 0.42), secs)
+			_view.spawn_label(_at(int(e.uid), e.cell), String(e.name).to_upper(),
+				Color(1.0, 0.55, 0.50))
+		"boss_strike":
+			var struck: Array[Vector2i] = []
+			for c in e.get("cells", []):
+				struck.append(c)
+			_view.flash_cells(struck, Color(1.0, 0.35, 0.25, 0.75), 0.30)
+			Audio.play_crit()
+		"boss_phase":
+			_view.spawn_label(_at(int(e.uid), e.cell), String(e.name).to_upper(),
+				Color(1.0, 0.40, 0.36))
+			var bv := _view.view_for(int(e.uid))
+			if bv != null and e.has("hp"):
+				bv.set_hp(float(e.hp), bv.hp_max)
+		"boss_summon":
+			# Summoning circles: the tiles a shade will step out of, a beat early.
+			var circles: Array[Vector2i] = []
+			for c in e.get("cells", []):
+				circles.append(c)
+			_view.flash_cells(circles, Color(0.70, 0.30, 0.85, 0.55),
+				float(e.get("seconds", 1.0)) / maxf(speed, 0.01))
+		"boss_stance":
+			# The charge-up: the ground round her burns while the meter fills.
+			var around: Array[Vector2i] = []
+			for dy in range(-1, 2):
+				for dx in range(-1, 2):
+					around.append(Vector2i(e.cell) + Vector2i(dx, dy))
+			_view.flash_cells(around, Color(1.0, 0.75, 0.20, 0.50),
+				float(e.get("seconds", 5.0)) / maxf(speed, 0.01))
+			_view.spawn_label(_at(int(e.uid), e.cell), "%s — BREAK IT!" % String(e.name).to_upper(),
+				Color(1.0, 0.80, 0.30))
+		"boss_windup":
+			# The charge-up before a big move: her tile and the ring round it glow for
+			# the whole wind-up, with the move's name, before any tile is marked.
+			var glow: Array[Vector2i] = []
+			for dy in range(-2, 3):
+				for dx in range(-2, 3):
+					glow.append(Vector2i(e.cell) + Vector2i(dx, dy))
+			_view.flash_cells(glow, Color(1.0, 0.30, 0.20, 0.35),
+				float(e.get("seconds", 2.5)) / maxf(speed, 0.01))
+			_view.spawn_label(_at(int(e.uid), e.cell), "%s..." % String(e.name).to_upper(),
+				Color(1.0, 0.55, 0.35))
+			Audio.play_round_start()
+		"boss_stance_broken":
+			_view.spawn_label(_at(int(e.uid), e.cell), "BROKEN", Color(0.70, 0.95, 0.70))
+		"boss_empowered":
+			_view.spawn_label(_at(int(e.uid), e.cell), "EMPOWERED", Color(1.0, 0.45, 0.25))
+		"upgraded":
+			var uv := _view.view_for(int(e.uid))
+			if uv != null:
+				uv.set_hp(float(e.hp), float(e.max_hp))
+				uv.merge_pop()
+		"crystals_merge":
+			_view.spawn_label(_view.cell_to_pos(e.cell), "THE ARMIES MERGE",
+				Color(0.98, 0.88, 0.52))
+		"wave":
+			pass
+		"boss_start":
+			pass
 		"spawn":
 			_pos[e.uid] = _board(e.cell)
 			_hp[e.uid] = {cur = float(e.hp), max = float(e.max_hp)}
@@ -732,7 +812,10 @@ func _summon(e: Dictionary) -> void:
 	v.has_ability = bool(e.get("has_ability", false))
 	v.set_mana(0.0)
 	v.set_shield(0.0)
-	_view.spawn_label(v.position, "SUMMON", Color(0.72, 0.62, 0.90))
+	if not bool(e.get("wave", false)):
+		# Reinforcement waves drop a whole army at once; a label on every one of
+		# them would bury the board. The HUD announces the wave instead.
+		_view.spawn_label(v.position, "SUMMON", Color(0.72, 0.62, 0.90))
 
 
 func _schedule_revive(e: Dictionary) -> void:

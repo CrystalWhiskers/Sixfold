@@ -180,6 +180,27 @@ var fuse_left: float = 0.0
 ## keg's CURRENT tile every step, because the keg keeps walking.
 var flee_from_uid: int = -1
 
+## Boss defence mode. Set by BossFight and never by a round reset: they are what the
+## unit IS for the length of the fight, not battle state.
+##
+## `boss`: the boss itself. It cannot be possessed, disoriented or executed,
+## freezes and stuns last `hold_scale` as long on it, and every share-of-health
+## effect reads its health as at most `percent_cap`.
+## `structure`: a crystal. Never healed, never shielded, never raised from the pile.
+## `sealed`: a structure nothing can harm yet — the Central Crystal until the three
+## lane crystals are gone.
+var boss: bool = false
+var structure: bool = false
+var sealed: bool = false
+var percent_cap: float = 0.0
+var hold_scale: float = 1.0
+
+
+func percent_basis(amount: float) -> float:
+	## A share-of-health effect's base: the number as given, unless this is a boss,
+	## in which case it is capped.
+	return minf(amount, percent_cap) if percent_cap > 0.0 else amount
+
 ## A charge in progress: how many tiles it still has in it, which way it is going, and
 ## how long until it reaches the next tile.
 ##
@@ -395,6 +416,8 @@ func charge_time() -> float:
 
 
 func is_invulnerable() -> bool:
+	if sealed:
+		return true
 	return (state == State.CASTING and data.ability != null
 		and data.ability.guards_caster)
 
@@ -424,7 +447,7 @@ func is_disoriented() -> bool:
 
 
 func is_disorient_immune() -> bool:
-	return disorient_immune_left > 0.0
+	return disorient_immune_left > 0.0 or boss or structure
 
 
 func is_frozen() -> bool:
@@ -653,7 +676,7 @@ func add_shield(amount: float, cap: float, seconds := 0.0) -> void:
 	# THE one place a shield is gained. Every source goes through here — the
 	# Warden's bulwark, the Colossus hardening, the Aegis Wall buff — so the
 	# duration cannot be attached at three sites and forgotten at a fourth.
-	if is_suppressed() or recovery_denied or hp_locked:
+	if is_suppressed() or recovery_denied or hp_locked or structure:
 		return
 	var had := shield > 0.0
 	shield = minf(maxf(shield, 0.0) + amount, cap)
@@ -727,7 +750,7 @@ func heal(amount: float) -> void:
 	# Seraph, the Engineer's repair, lifesteal — because "cannot be healed" has to
 	# mean all of them, and a rule enforced in six places is a rule with five
 	# chances to be forgotten when a seventh healer is written.
-	if amount <= 0.0 or not is_alive() or is_suppressed() or recovery_denied:
+	if amount <= 0.0 or not is_alive() or is_suppressed() or recovery_denied or structure:
 		return
 	# A husk stays on one health for as long as it lives. Healing it is the most
 	# obvious way to break that promise, so it is refused here as well as being
