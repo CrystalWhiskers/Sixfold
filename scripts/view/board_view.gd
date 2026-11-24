@@ -22,6 +22,22 @@ const MIN_TILE := 56.0
 const MIN_ZOOM := 0.6
 const MAX_ZOOM := 3.0
 const ZOOM_STEP := 1.15
+
+## How far one notch of the mouse wheel zooms, as a multiple of ZOOM_STEP's own
+## step: 1 is the old fixed feel, 2 zooms twice as far per notch, 0.5 half as far.
+## Chosen in Settings, which has a board to try it on.
+##
+## A static here rather than a read of GameSetup, for the same reason as
+## UnitView.portraits_on: the test suite compiles this script with no autoloads,
+## so the setting lives on GameSetup and is written down to this flag.
+static var scroll_sensitivity := 1.0
+const MIN_SCROLL := 0.25
+const MAX_SCROLL := 3.0
+
+
+## The zoom factor of one wheel notch at the current sensitivity.
+static func wheel_step() -> float:
+	return pow(ZOOM_STEP, clampf(scroll_sensitivity, MIN_SCROLL, MAX_SCROLL))
 # Below this a tile stops being a readable unit and becomes a coloured dot.
 const FLOOR_TILE := 22.0
 const KEY_PAN := 46.0
@@ -144,6 +160,11 @@ func _apply_zoom() -> void:
 		var v: UnitView = _views[uid]
 		if is_instance_valid(v):
 			v.tile_size = tile_size
+	# The ones playing their death fade are no longer in _views, but are still on
+	# screen for a moment and have to shrink with everything else.
+	for v in _dying:
+		if is_instance_valid(v):
+			v.tile_size = tile_size
 	_apply_pan()
 	sync_positions()
 	queue_redraw()
@@ -189,7 +210,8 @@ func wheel_zoom(into: bool) -> void:
 	# here.
 	var at := get_global_mouse_position()
 	var anchor := at if view_area.has_point(at) else Vector2.INF
-	zoom_by(ZOOM_STEP if into else 1.0 / ZOOM_STEP, anchor)
+	var step := wheel_step()
+	zoom_by(step if into else 1.0 / step, anchor)
 
 
 func reset_zoom() -> void:

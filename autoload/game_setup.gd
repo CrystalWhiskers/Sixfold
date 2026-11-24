@@ -131,6 +131,14 @@ var portraits := false:
 		# exists — see UnitView.portraits_on.
 		UnitView.portraits_on = value
 
+## How far one notch of the mouse wheel zooms the board; 1 is the original feel.
+## Set in Settings, written down to BoardView for the same reason `portraits` is
+## written to UnitView. Like the other settings it lasts until the game is closed.
+var scroll_sensitivity := 1.0:
+	set(value):
+		scroll_sensitivity = clampf(value, BoardView.MIN_SCROLL, BoardView.MAX_SCROLL)
+		BoardView.scroll_sensitivity = scroll_sensitivity
+
 ## Its own stream so which track you get is not decided by how many other random
 ## numbers the match happened to draw.
 var _music_rng := RandomNumberGenerator.new()

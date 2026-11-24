@@ -66,7 +66,16 @@ static func short_name(d: UnitData) -> String:
 static func tier_color(tier: int) -> Color:
 	return TIER_COLORS[clampi(tier - 1, 0, TIER_COLORS.size() - 1)]
 
-@export var tile_size := 84.0
+## Set by the board on every zoom. A setter, not a plain field: a unit only repaints
+## when something asks it to, so a unit standing still kept drawing itself at the OLD
+## size after a zoom out — giant blocks spilling over their neighbours until it next
+## took a hit or moved.
+@export var tile_size := 84.0:
+	set(value):
+		if is_equal_approx(value, tile_size):
+			return
+		tile_size = value
+		queue_redraw()
 
 var unit: UnitInstance = null
 var hp_cur := 0.0

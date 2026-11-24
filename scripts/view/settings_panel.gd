@@ -49,6 +49,9 @@ const LEVELS := [
 	{prop = "voice_volume", name = "Voices"},
 ]
 var _boss_button: Button = null
+var _scroll_slider: HSlider = null
+var _scroll_label: Label = null
+var _scroll_demo: ScrollDemo = null
 
 
 func _ready() -> void:
@@ -86,6 +89,7 @@ func _ready() -> void:
 
 	column.add_child(_build_levels())
 	column.add_child(_build_portrait_toggle())
+	column.add_child(_build_scroll())
 	column.add_child(_build_playlist())
 	column.add_child(_build_boss_toggle())
 
@@ -219,6 +223,78 @@ func _refresh_portraits() -> void:
 	_portrait_button.button_pressed = on
 	_portrait_button.add_theme_color_override("font_color",
 		Color(0.86, 0.90, 0.96) if on else Color(0.48, 0.52, 0.60))
+
+
+## The scroll-zoom row: how far one wheel notch zooms, and a button that opens a
+## board to try it on. A slider on its own asks you to judge "1.4x" in the abstract.
+static func make_scroll_slider() -> HSlider:
+	var s := HSlider.new()
+	s.min_value = BoardView.MIN_SCROLL
+	s.max_value = BoardView.MAX_SCROLL
+	s.step = 0.05
+	s.value = GameSetup.scroll_sensitivity
+	s.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	return s
+
+
+static func scroll_text() -> String:
+	# Says what a notch DOES as well as the multiplier, because "1.00x" alone does
+	# not tell you whether that is a lot.
+	var per_notch := roundi((BoardView.wheel_step() - 1.0) * 100.0)
+	return "Scroll zoom speed — %.2fx (one notch zooms %d%%)" % [
+		GameSetup.scroll_sensitivity, per_notch]
+
+
+func _build_scroll() -> Control:
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 6)
+
+	_scroll_label = _heading("")
+	box.add_child(_scroll_label)
+
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+	box.add_child(row)
+
+	_scroll_slider = make_scroll_slider()
+	_scroll_slider.custom_minimum_size = Vector2(PANEL_WIDTH * 0.45, 20.0)
+	_scroll_slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_scroll_slider.value_changed.connect(_on_scroll_speed)
+	row.add_child(_scroll_slider)
+
+	var try_it := Button.new()
+	try_it.text = "Try it on a board"
+	try_it.custom_minimum_size = Vector2(PANEL_WIDTH * 0.32, 34.0)
+	try_it.add_theme_font_size_override("font_size", 15)
+	try_it.pressed.connect(Audio.play_confirm)
+	try_it.pressed.connect(_open_scroll_demo)
+	row.add_child(try_it)
+
+	_refresh_scroll()
+	return box
+
+
+func _on_scroll_speed(value: float) -> void:
+	GameSetup.scroll_sensitivity = value
+	_refresh_scroll()
+
+
+func _refresh_scroll() -> void:
+	if _scroll_label == null:
+		return
+	_scroll_label.text = scroll_text()
+	_scroll_slider.set_value_no_signal(GameSetup.scroll_sensitivity)
+
+
+func _open_scroll_demo() -> void:
+	if _scroll_demo == null:
+		_scroll_demo = ScrollDemo.new()
+		add_child(_scroll_demo)
+		# Whatever was settled on in there shows on the slider out here.
+		_scroll_demo.closed.connect(_refresh_scroll)
+	_scroll_demo.open()
 
 
 func _build_boss_toggle() -> Control:
@@ -458,11 +534,14 @@ func open() -> void:
 	_refresh_portraits()
 	_refresh_tracks()
 	_refresh_boss()
+	_refresh_scroll()
 	visible = true
 
 
 func _on_done() -> void:
 	# A preview must not follow the player out of the settings screen.
 	_stop_preview()
+	if _scroll_demo != null and _scroll_demo.visible:
+		_scroll_demo._on_done()
 	visible = false
 	closed.emit()

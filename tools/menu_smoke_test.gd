@@ -819,6 +819,7 @@ func _run() -> void:
 	_check_portrait_toggle()
 	_check_volume_slider()
 	_check_category_sliders()
+	await _check_scroll_speed()
 	_check_boss_music()
 	_check_custom_matches()
 	_check_drawn_rounds()
@@ -1245,6 +1246,81 @@ func _check_backdrop() -> void:
 	_check("and the new one has a full board again",
 		backdrop._board.living_count_of(BoardModel.TEAM_A) > 1
 		and backdrop._board.living_count_of(BoardModel.TEAM_B) > 1)
+
+
+func _check_scroll_speed() -> void:
+	print("\nScroll zoom speed")
+	var panel: SettingsPanel = _menu._settings
+	if panel == null:
+		return
+	panel.open()
+	_check("the scroll speed starts at the old feel",
+		is_equal_approx(GameSetup.scroll_sensitivity, 1.0)
+		and is_equal_approx(BoardView.wheel_step(), BoardView.ZOOM_STEP),
+		"%.2f, step %.3f" % [GameSetup.scroll_sensitivity, BoardView.wheel_step()])
+	_check("Settings has a scroll speed slider", panel._scroll_slider != null)
+	if panel._scroll_slider == null:
+		return
+	panel._scroll_slider.value = 2.0
+	_check("moving it sets the speed, and the board reads it",
+		is_equal_approx(GameSetup.scroll_sensitivity, 2.0)
+		and is_equal_approx(BoardView.scroll_sensitivity, 2.0),
+		"%.2f / %.2f" % [GameSetup.scroll_sensitivity, BoardView.scroll_sensitivity])
+	_check("and the label says what a notch does",
+		panel._scroll_label.text.contains("2.00x") and panel._scroll_label.text.contains("32%"),
+		panel._scroll_label.text)
+	GameSetup.scroll_sensitivity = 99.0
+	_check("the speed cannot be pushed past its range",
+		is_equal_approx(GameSetup.scroll_sensitivity, BoardView.MAX_SCROLL),
+		"%.2f" % GameSetup.scroll_sensitivity)
+	GameSetup.scroll_sensitivity = 2.0
+
+	# The demonstration board: open it, roll the wheel over it, see the zoom move by
+	# exactly one notch at the chosen speed.
+	panel._open_scroll_demo()
+	await get_tree().process_frame
+	var demo: ScrollDemo = panel._scroll_demo
+	_check("Try it opens a demonstration board",
+		demo != null and demo.visible and demo._view != null)
+	if demo == null or demo._view == null:
+		return
+	_check("with units on it to look at",
+		demo._view.board.all_units().size() >= 2,
+		"%d units" % demo._view.board.all_units().size())
+	_check("and its slider shows the same speed",
+		is_equal_approx(demo._slider.value, 2.0), "%.2f" % demo._slider.value)
+	var before := demo._view.zoom
+	var wheel := InputEventMouseButton.new()
+	wheel.button_index = MOUSE_BUTTON_WHEEL_UP
+	wheel.pressed = true
+	wheel.position = Vector2(260, 300)
+	demo._viewport.push_input(wheel, true)
+	_check("one notch over the demo board zooms by the chosen step",
+		is_equal_approx(demo._view.zoom, before * pow(BoardView.ZOOM_STEP, 2.0)),
+		"%.3f -> %.3f" % [before, demo._view.zoom])
+	# Every unit has to be told the new tile size, or it goes on drawing at the old
+	# one — the "units are massive after zooming out" bug.
+	demo._view.zoom_to(BoardView.MIN_ZOOM)
+	var stale: Array[String] = []
+	for v in demo._view._views.values():
+		if not is_equal_approx((v as UnitView).tile_size, demo._view.tile_size):
+			stale.append("%.0f" % (v as UnitView).tile_size)
+	_check("after zooming out, every unit is drawn at the new tile size",
+		stale.is_empty(), "board %.0f, units %s" % [demo._view.tile_size, ", ".join(stale)])
+	demo._slider.value = 0.5
+	_check("the demo's slider changes the setting too",
+		is_equal_approx(GameSetup.scroll_sensitivity, 0.5),
+		"%.2f" % GameSetup.scroll_sensitivity)
+	demo._on_done()
+	await get_tree().process_frame
+	_check("Done closes the demonstration and clears its board",
+		not demo.visible and demo._view == null)
+	_check("and the Settings slider has caught up",
+		is_equal_approx(panel._scroll_slider.value, 0.5), "%.2f" % panel._scroll_slider.value)
+
+	GameSetup.scroll_sensitivity = 1.0
+	panel._refresh_scroll()
+	panel._on_done()
 
 
 func _check_category_sliders() -> void:

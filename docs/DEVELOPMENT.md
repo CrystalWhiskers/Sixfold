@@ -3543,3 +3543,26 @@ cut decodes sample-for-sample like the whole file. The per-frame wrap in
 Board geometry note: the odd height is load-bearing. `mirror(y) = HEIGHT - 1 - y`
 maps the centre row onto itself, which is the only reason the mirror-matchup test
 is an exact fairness check. Going back to an even board costs you that.
+
+---
+
+## Web export: keep resources as text
+
+`project.godot` sets `editor/export/convert_text_resources_to_binary=false`, so every
+`.tres` ships in the export exactly as it is on disk. With Godot's default (convert to
+binary) the 4.7.2 exporter dropped every map's `rows` — the `PackedStringArray` that
+holds the terrain — so on itch.io every map was an open rectangle with no walls, high
+ground or voids, while the barrier `lines` survived. The game itself never notices:
+an empty `rows` is a valid plain map. To check an export, run the pack with the
+desktop engine and load a map from it:
+
+    godot --headless --main-pack build/web/index.pck --script <a script that loads res://data/maps/the_breach.tres and prints rows.size()>
+
+## Scroll zoom speed
+
+One wheel notch zooms by `BoardView.wheel_step()`, which is `ZOOM_STEP` raised to
+`BoardView.scroll_sensitivity` (0.25–3, default 1). The setting lives on
+`GameSetup.scroll_sensitivity` and is written down to BoardView, like `portraits`.
+Settings has a slider and a "Try it on a board" button that opens `ScrollDemo`: the
+current map with a few units on it, in a SubViewport, zoomed by the same BoardView
+wheel code a match uses.
