@@ -3479,6 +3479,29 @@ health and attack per level). `a.` is a field on its ability, `u.` on the unit,
 | Hospitaller | mend radius 3 → 6, 6% → 12%, every 1.0 → 0.5 s |
 | Powderkeg | blast radius 1 → 2 (Lv2) → 3 (Lv5), x5.5 → x9 |
 
+Every unit's level changes exactly **three** things (a test holds every row to it).
+Where the ability above gives fewer, the rest come from the unit's own stats, as a
+share of its own number so a higher tier keeps its lead: `u.mana_per_attack*` or
+`u.mana_per_charge*` (casts sooner, +10% → +60%), `u.attack_speed*` (+5% → +30%) or
+`u.move_time*` (walks 5% → 30% quicker). The upgrade bar's tooltip lists all three
+for the next level with the unit's real before and after numbers
+(`Barracks.level_changes`).
+
+**Shades.** A shade tears out of its summoning circle: 2.5x its own hit to the army
+within one tile (`minion_burst_mult`, `minion_burst_radius`), and while shades stand
+the boss takes 6% less damage per shade, up to 60% (`minion_ward_per_shade`). They
+are 420 health / 35 attack before the phase's `minion_power`. On the board they are
+drawn as a hooded figure (`UnitView._draw_shade`), not letters.
+
+**Endless Onrush** has `seeks_army` on: each leg is aimed through the unit with the
+most of the army packed round it, anywhere on the field, at any angle
+(`BossFight.aimed_line`), and on to the edge. With no army on the field it falls back
+to the fixed criss-cross. Red Tide's Onrush keeps the fixed pattern.
+
+**Boss sounds** are made by `tools/generate_sfx.gd` (sine waves and filtered noise, no
+samples): `boss_charge` on a big move's wind-up, `boss_slam` when any move lands,
+`shade_summon` on a shade's arrival, `recruit` and `upgrade` in the Barracks.
+
 **Unit labels.** On coloured blocks a unit shows its three-letter short name
 (`UnitView.short_name`, unique across the roster — WAR, LAN, KEG, PGN...), in light
 letters with a dark outline; the tier is a small number in the corner, and the pips
