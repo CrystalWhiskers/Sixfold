@@ -49,6 +49,11 @@ extends Resource
 @export var income_step: float = 1.0
 @export var income_cost: float = 30.0
 @export var income_growth: float = 1.6
+## Passive growth: every `passive_income_every` seconds of the fight, income rises by
+## `passive_income` on its own, with nothing bought — so the longer you hold, the more
+## you have to answer her enrage with. 0 for none.
+@export var passive_income: float = 1.0
+@export var passive_income_every: float = 30.0
 ## A recruit: one random draw from the player's loadout, at tier 1, into a section.
 ## The first costs `recruit_cost`; each after it costs `recruit_step` more (10, 12, 14...).
 ## `recruit_growth` can make it climb by a multiple instead (1 = flat steps only).

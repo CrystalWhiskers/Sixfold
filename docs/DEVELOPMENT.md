@@ -3636,3 +3636,8 @@ attack, +8% attack speed and +10% summon power per surge, stacking without end
 player won 6 of 6, 3:55 – 9:09 (average 5:49); the idle player still loses, now at
 9 – 16 minutes when the enraged boss breaks through. Starting the enrage at 4:00 let
 one decent run drag to 21 minutes, so it starts at 5:00.
+
+**Passive income.** Every `passive_income_every` (30 s) of fight time the Barracks'
+income rises by `passive_income` (+1 Supply/s) on its own (`Barracks.tick`,
+`next_passive_in`); the Barracks header shows "+1 in 12s". Measured with the decent
+player: 6 of 6 won, 4:02 – 5:16 (average 4:44), ending at 18 – 20 Supply/s.

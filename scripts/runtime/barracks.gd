@@ -52,6 +52,8 @@ func setup(p_data: BossData, loadout: LoadoutData, seed_value: int) -> void:
 	supply = data.start_supply
 	income = data.base_income
 	income_level = 0
+	clock = 0.0
+	passive_gained = 0.0
 	recruits = 0
 	spent = 0.0
 	types.clear()
@@ -72,8 +74,27 @@ func slot_count() -> int:
 	return data.section_cols * data.section_rows
 
 
+## Fight time the Barracks has seen, and the Supply per second it has gained on its
+## own (BossData.passive_income), separate from what was bought.
+var clock := 0.0
+var passive_gained := 0.0
+
+
 func tick(seconds: float) -> void:
-	supply += income * maxf(seconds, 0.0)
+	seconds = maxf(seconds, 0.0)
+	supply += income * seconds
+	clock += seconds
+	if data.passive_income > 0.0 and data.passive_income_every > 0.0:
+		while clock >= data.passive_income_every * (passive_gained / data.passive_income + 1.0) - 0.0001:
+			income += data.passive_income
+			passive_gained += data.passive_income
+
+
+func next_passive_in() -> float:
+	## Seconds until income next rises on its own, or INF if it never does.
+	if data.passive_income <= 0.0 or data.passive_income_every <= 0.0:
+		return INF
+	return data.passive_income_every * (passive_gained / data.passive_income + 1.0) - clock
 
 
 # --- Prices -------------------------------------------------------------------

@@ -13481,6 +13481,20 @@ func _test_boss_defence() -> void:
 	_check("Supply ticks up at the income rate",
 		is_equal_approx(b.supply, data.start_supply + data.base_income * 10.0),
 		"%.1f" % b.supply)
+	var pb := Barracks.new()
+	pb.setup(data, load("res://data/loadouts/starter.tres") as LoadoutData, 8)
+	var base_rate := pb.income
+	for i in 290:
+		pb.tick(0.1)
+	_check("income does not grow on its own before %ds" % roundi(data.passive_income_every),
+		is_equal_approx(pb.income, base_rate), "%.1f/s" % pb.income)
+	for i in 20:
+		pb.tick(0.1)
+	_check("then it grows by itself, with nothing bought",
+		is_equal_approx(pb.income, base_rate + data.passive_income), "%.1f/s" % pb.income)
+	pb.tick(data.passive_income_every * 2.0)
+	_check("and keeps growing every %ds" % roundi(data.passive_income_every),
+		is_equal_approx(pb.income, base_rate + 3.0 * data.passive_income), "%.1f/s" % pb.income)
 	var count1 := b.unit_count(1)
 	var supply := b.supply
 	_check("a recruit buys one unit into that section",

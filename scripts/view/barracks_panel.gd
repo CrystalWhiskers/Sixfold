@@ -90,7 +90,9 @@ func slot_at(p: Vector2) -> Vector2i:
 func refresh() -> void:
 	if barracks == null:
 		return
-	_header.text = "BARRACKS   Supply %d   (+%.0f/s)" % [floori(barracks.supply), barracks.income]
+	var grow := barracks.next_passive_in()
+	_header.text = "BARRACKS   Supply %d   (+%.0f/s%s)" % [floori(barracks.supply), barracks.income,
+		("  ·  +%.0f in %ds" % [barracks.data.passive_income, ceili(grow)]) if not is_inf(grow) else ""]
 	_income_btn.text = "Income +%.0f/s  (%d)" % [barracks.data.income_step,
 		ceili(barracks.income_price())]
 	_income_btn.disabled = barracks.supply < barracks.income_price()
