@@ -3287,6 +3287,76 @@ and the target comes from `buff.magnitude(rarity).x` rather than a constant, so
 the number is tuned in `BUFF_TABLE` like every other buff. The description string
 reads it from the same place, so it can never drift from what the buff does.
 
+## The Powderkeg, and a unit that is dead but not gone
+
+110 health, a 7-damage swing, a shade quicker on its feet than most (0.48 a tile
+in the table against the usual 0.50). Its ability, **Slow Match**
+(`AbilityData.Kind.FUSE`), has no bar: dying is the trigger. In `_fell()`, right
+beside the Martyr's window and behind the same `frozen` gate, `_light_fuse()`
+turns the death into a fuse of `fuse_seconds_by_tier` (2.0 / 1.75 / 1.5 / 1.25 /
+1.0 / 0.75 s, a list in the ability data). Frozen when it dies, it is defused and
+simply dies.
+
+**A lit keg is the Martyr turned inside out.** The Martyr at zero health is alive
+to everything. The keg stays on its tile but is alive to nothing:
+`UnitInstance.is_alive()` returns false while `is_lit()`. That single answer keeps
+it out of every targeting sweep, every heal (`heal()` refuses the dead, and
+`_worst_hurt_ally` skips them, which covers the Hospitaller's pulse) and every
+count. The check is explicit rather than relying on the empty health bar, and
+there is a test that puts health back on a lit keg to prove it.
+
+`step()` still gives the keg a turn: `_keg_turn()` walks it at the nearest enemy at
+its own `MOVE_TIME` stat (so buff speed counts), never swings, never casts, and
+refuses any step that is not a plain move, so it never digs. Held (frozen or
+stunned) it stands still and the fuse burns on. `_check_over()` will not end the
+round while any fuse is lit, and `run()` keeps stepping past the time limit until
+it goes off.
+
+**The panic.** Everything within `flee_radius` (2, Chebyshev) of the keg when it
+lights gets `flee_from_uid`. In `_decide()` that comes before targeting:
+`_flee()` takes the step that puts the most Chebyshev distance between the unit and
+the keg's *current* tile. If no step gains anything, the unit gets its ordinary
+turn, so a cornered unit fights.
+
+**The blast** (`_blast()`) is attack x `blast_attack_multiple` (5) x tier, over the
+3x3 around the keg's current tile, and it hits both sides. Victims are gathered
+before any damage lands, so a second keg it lights does not change who else is
+hit. It then finishes the death through `_bury()`, the tail end of `_fell()`.
+
+**Saltpetre** is +100/200/300% attack and +25/50/100% movement speed. At gold the
+blast becomes a diamond of `blast_diamond_at_gold` (3) instead of the square: a
+rider, read through `TeamBuffs.blast_diamond_for()`. `BuffPool._is_live()` now
+accepts the scalar gold riders (`frenzy_seconds_at_gold`, `blast_diamond_at_gold`)
+and `disorient_bonus` as well, so a buff made only of riders is never dropped.
+
+On screen: a pulsing footprint of the blast under the lit keg that walks with it
+(`BoardView.add_fuse_mark`) and is swapped on the blast for a ring
+(`spawn_ring`), plus two chevrons on every running unit, re-aimed each frame away
+from the keg's live position (`BattlePlayer._aim_chevrons`). Measured with
+`tools/measure_powderkeg.gd`.
+
+### Its body is bent by tier
+
+On the plain doubling, front slot against a same-tier Warden (200 matches, control
+Warden-vs-Warden 45.5 / 40.5 / 48% at T1 / T3 / T6), it won 30 / 18.5 / 17.5 / 19 /
+38 / 49.5%. The middle was the problem, not the top. A flat x2 health and x1.5
+attack put tiers 2-4 at 44-50% but tier 6 at 57%, because the blast already scales
+with tier on top of attack. So the row carries two optional per-tier lists the
+builder now reads, `tier_hp` and `tier_dmg` (index 0 = tier 1):
+
+| tier        | 1    | 2   | 3   | 4    | 5    | 6    |
+|-------------|------|-----|-----|------|------|------|
+| `tier_hp`   | 2.0  | 2.0 | 2.0 | 1.75 | 1.25 | 1.0  |
+| `tier_dmg`  | 1.25 | 1.5 | 1.4 | 1.0  | 1.0  | 1.0  |
+| health      | 220  | 440 | 880 | 1540 | 2200 | 3520 |
+| attack      | 9    | 21  | 39  | 56   | 112  | 224  |
+| win rate    | 42.0 | 44.0| 46.2| 43.5 | 47.7 | 49.5 |
+
+A tougher keg lights later and less often (156 of 200 rounds at tier 3, down from
+195), which is fine: the body now holds the slot, and the fuse is what it costs to
+kill it. Saltpetre on the tier 3 keg is +16.8 / +37.8 / +49.2 points at bronze /
+silver / gold, against +37 to +48 for other gold unit-buffs in this fixture.
+
 ## Decisions the code is waiting on
 
 - **Should the board flip for Player 1 in PvP?** Right now both players use the

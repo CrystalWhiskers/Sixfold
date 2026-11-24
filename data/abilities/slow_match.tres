@@ -6,10 +6,6 @@
 script = ExtResource("1_wud4t")
 id = &"slow_match"
 display_name = "Slow Match"
-description = "It has no bar and nothing to spend. Killing it lights the fuse instead: it keeps walking at the nearest enemy, untouchable, for two seconds at tier 1 down to three quarters of a second at tier 6, and then a three-by-three square of board goes up wherever it has got to — friend, enemy, whatever was standing there. Everything within two tiles turns and runs from it the moment it starts ticking, and a unit with a wall at its back does not get out. Freezing it defuses it outright."
-kind = 24
+kind = 25
 cast_time = 0.0
-fuse_seconds = 1.5
-fuse_seconds_by_tier = PackedFloat32Array(2, 1.75, 1.5, 1.25, 1, 0.75)
-blast_damage_per_tier = 5.0
-blast_gold_range = 3
+fuse_seconds_by_tier = Array[float]([2.0, 1.75, 1.5, 1.25, 1.0, 0.75])

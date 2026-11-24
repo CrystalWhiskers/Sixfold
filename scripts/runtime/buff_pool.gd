@@ -83,11 +83,15 @@ func _is_live(b: BuffData) -> bool:
 	if not (b.bronze.is_zero_approx() and b.silver.is_zero_approx()
 			and b.gold.is_zero_approx()):
 		return true
-	if b.empowered_cap_at_gold > 0:
+	# The gold-only riders are scalars, not bronze/silver/gold triples, so they are
+	# asked separately. Each of them on its own is enough to make a buff real — a
+	# Powderkeg buff that only changed the blast's shape would still be a buff.
+	if b.empowered_cap_at_gold > 0 or b.frenzy_seconds_at_gold > 0.0 \
+			or b.blast_diamond_at_gold > 0:
 		return true
 	for rider in [b.extra_raises, b.wall_toughness, b.shield_on_hit,
 			b.extra_summons, b.stun_bonus, b.charge_bonus, b.third,
-			b.host_move, b.host_power]:
+			b.host_move, b.host_power, b.disorient_bonus]:
 		if not (rider as Vector3).is_zero_approx():
 			return true
 	return false

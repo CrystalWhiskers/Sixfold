@@ -314,7 +314,10 @@ func run(limit := -1.0) -> int:
 	## unless the flow layer set a custom round length. A caller may still pass an
 	## explicit limit; a few tests do.
 	var stop := timeout_at() if limit < 0.0 else limit
-	while not _finished and elapsed < stop:
+	# A lit fuse holds the clock as well as the wipe: the round is not over while
+	# a barrel is still burning on the board. A fuse is two seconds at most, so this
+	# can only ever run a moment past the limit.
+	while not _finished and (elapsed < stop or any_fuse_lit()):
 		step()
 	if not _finished:
 		_result = _decide_timeout()
@@ -329,6 +332,10 @@ func step() -> void:
 	for idx in _order:
 		var u := _units[idx]
 		if not u.is_alive():
+			# A lit Powderkeg is dead to every sweep but still walking. It takes its
+			# turn here, in the shuffled order, like anything else on its feet.
+			if u.is_lit():
+				_keg_turn(u)
 			continue
 		if u.is_riding():
 			# Inside a host and off the board. It gets no turn of its own — the
@@ -338,12 +345,6 @@ func step() -> void:
 			# Committed. A charge with travel time is a decision you cannot take back
 			# halfway, which is the other half of what makes it dodgeable: the runner
 			# holds its line while everything else is free to move.
-			continue
-		if u.is_fusing():
-			# Dead, and not finished. Not an ordinary turn — unlike the Martyr's
-			# window, which is a unit still fighting, this is a body with a clock in
-			# it that walks and does nothing else. _tick_fuses() below owns the clock.
-			_fuse_turn(u)
 			continue
 		match u.state:
 			UnitInstance.State.IDLE:
@@ -359,16 +360,12 @@ func step() -> void:
 	# tick is already out of it when the charge arrives. That ordering is the dodge.
 	_tick_charges()
 	_tick_disorient()
-	# After the unit loop, like the charges and for the same reason: everything on the
-	# board has already had this tick's chance to run, so a unit that stepped clear of
-	# the blast this tick is clear when it lands. That ordering is what makes the fuse
-	# an escape window rather than a countdown to a foregone conclusion.
-	_tick_fuses()
 	_tick_shields()
 	_tick_possessions()
 	_tick_dry_spells()
 	_tick_dots()
 	_tick_frenzy()
+	_tick_fuses()
 	_tick_mends()
 	_tick_regen()
 	_tick_pressure()
@@ -551,16 +548,15 @@ func _decide(u: UnitInstance) -> void:
 	# rather than spent.
 	if u.is_held():
 		return
-	if u.is_fleeing():
-		# Running from a lit fuse, and checked BEFORE disorientation: a unit can be both
-		# lost and terrified, and terror wins. It does not swing on the way out, which is
-		# most of what the bomb buys even when the blast misses.
-		_flee_step(u)
-		return
 	if u.is_disoriented():
 		# Lost. It still moves — that is the whole difference between this and a stun —
 		# but it moves somewhere arbitrary and it swings at nothing on the way.
 		_wander(u)
+		return
+	if u.flee_from_uid >= 0 and _flee(u):
+		# A lit Powderkeg nearby. Running beats whatever it was fighting, an enemy
+		# taunt's pull included. A unit that cannot step anywhere further away gets
+		# its ordinary turn instead: cornered, it fights.
 		return
 	u.target = _mark_for(u)
 	if u.is_taunting():
@@ -838,7 +834,7 @@ func _swing_at_hand(u: UnitInstance) -> void:
 	var best: UnitInstance = null
 	var best_d := 1 << 30
 	for other in _units:
-		if other.team == u.team or not other.is_alive() or other.is_untargetable():
+		if other.team == u.team or not other.is_alive() or other.is_hidden():
 			continue
 		if not BoardModel.in_reach(u.cell, other.cell, reach_against(u, other)):
 			continue
@@ -915,13 +911,13 @@ func _choose_enemy(u: UnitInstance) -> UnitInstance:
 		return near
 	var give_up := _gave_up_on_target(u)
 	if not give_up and held != null and held.is_alive() and held.team != u.team \
-			and not held.is_untargetable() \
+			and not held.is_hidden() \
 			and BoardModel.tile_distance(u.cell, held.cell) <= reach:
 		return held
 
 	var pool: Array[UnitInstance] = []
 	for other in _units:
-		if other.team == u.team or not other.is_alive() or other.is_untargetable():
+		if other.team == u.team or not other.is_alive() or other.is_hidden():
 			continue
 		# The one it just gave up on is off the list, so "pick again" cannot pick
 		# the same body and leave the unit standing exactly where it was.
@@ -1020,13 +1016,10 @@ func _shot_from(u: UnitInstance, from: Vector2i, target: UnitInstance) -> bool:
 	return BoardModel.line_of_fire(from, target.cell, u.team)
 
 
-func _begin_move(u: UnitInstance, may_dig := true) -> bool:
+func _begin_move(u: UnitInstance) -> bool:
 	# Returns whether a step was actually taken. Every `false` here used to be a
 	# silently wasted tick — the caller returned regardless, so a unit that could
 	# not move also did not attack.
-	#
-	# `may_dig` false refuses a step into stone rather than swinging at it, for the
-	# one walker that must never enter an attack: a lit Powderkeg.
 	var next := _next_step(u)
 	if next == u.cell:
 		return false
@@ -1045,8 +1038,6 @@ func _begin_move(u: UnitInstance, may_dig := true) -> bool:
 		# The route the field chose runs through stone, which only happens when
 		# going round is worse than digging — usually because there is no way
 		# round at all. Swing at it rather than step into it.
-		if not may_dig:
-			return false
 		return _hit_wall(u, next)
 	var from := u.cell
 	var dur := maxf(u.stat(StatModifier.Stat.MOVE_TIME) / pressure(), MIN_MOVE_TIME)
@@ -1402,7 +1393,7 @@ func _backline_enemy(u: UnitInstance) -> UnitInstance:
 	var deepest: UnitInstance = null
 	var best := -1
 	for other in board.units_view():
-		if not other.is_alive() or other.team == u.team or other.is_untargetable():
+		if not other.is_alive() or other.team == u.team or other.is_hidden():
 			continue
 		var depth: int = (BoardModel.HEIGHT - 1 - other.cell.y
 			if u.team == BoardModel.TEAM_B else other.cell.y)
@@ -1501,11 +1492,7 @@ func _worst_hurt_ally(u: UnitInstance, radius: int,
 	var best: UnitInstance = null
 	var worst := 2.0
 	for ally in board.units_in_range(u.cell, radius, u.team):
-		# A lit Powderkeg is on zero health, which makes it the most hurt ally on the
-		# board by any measure — and it is going to explode whatever anyone does.
-		# Without this skip a Seraph standing near one poured its whole cast into a
-		# corpse on a fuse.
-		if not ally.is_alive() or ally.is_fusing():
+		if not ally.is_alive():
 			continue
 		if skip_self and ally == u:
 			continue
@@ -2938,7 +2925,7 @@ func _thickest_cluster(u: UnitInstance, arm: int) -> UnitInstance:
 	var best_hits := -1
 	var best_d := 1 << 30
 	for other in _units:
-		if other.team == u.team or not other.is_alive() or other.is_untargetable():
+		if other.team == u.team or not other.is_alive() or other.is_hidden():
 			continue
 		var hits := 0
 		for c in cross_cells(other.cell, arm):
@@ -3074,7 +3061,7 @@ func _fattest_enemy(u: UnitInstance) -> UnitInstance:
 	var best: UnitInstance = null
 	var best_hp := -1.0
 	for other in _units:
-		if other.team == u.team or not other.is_alive() or other.is_untargetable():
+		if other.team == u.team or not other.is_alive() or other.is_hidden():
 			continue
 		var hp := other.stat(StatModifier.Stat.MAX_HP)
 		if hp > best_hp:
@@ -3501,275 +3488,213 @@ func _tick_frenzy() -> void:
 			_fell(u, u.uid)
 
 
-func fuse_seconds_of(u: UnitInstance, ab: AbilityData) -> float:
-	## Off the ability's per-tier table, so the fuse shortens as the keg climbs.
-	return maxf(ab.fuse_seconds_at(u.data.tier if u.data != null else 1), 0.0)
+static func is_keg(u: UnitInstance) -> bool:
+	return (u != null and u.data != null and u.data.ability != null
+		and u.data.ability.kind == AbilityData.Kind.FUSE)
 
 
-func blast_damage_of(u: UnitInstance, ab: AbilityData) -> float:
-	## Same shape as charge_damage_of: a multiple of the unit's own attack damage times
-	## its tier, so one AbilityData can serve all six and the number rides every buff
-	## that sharpens the unit.
-	return u.stat(StatModifier.Stat.ATTACK_DAMAGE) \
-		* maxf(ab.blast_damage_per_tier, 0.0) * float(maxi(u.data.tier, 1))
+func any_fuse_lit() -> bool:
+	for u in _units:
+		if u.is_lit():
+			return true
+	return false
 
 
-func blast_range_of(u: UnitInstance, ab: AbilityData) -> int:
-	## Zero means the ordinary square. Anything above it is the gold diamond's reach,
-	## and only a gold pick of the unit's own buff can hand it over.
+func blast_damage_of(u: UnitInstance) -> float:
+	## Attack damage as it stands — so Saltpetre's attack bonus is in it — times the
+	## ability's multiple, times the tier. The tier is on top of the attack's own
+	## doubling on purpose: it is a barrel, and a bigger one is a lot bigger.
+	var ab := u.data.ability
+	return (u.stat(StatModifier.Stat.ATTACK_DAMAGE) * maxf(ab.blast_attack_multiple, 0.0)
+		* float(u.data.tier))
+
+
+func blast_diamond_arm(u: UnitInstance) -> int:
 	var tb: TeamBuffs = team_buffs.get(u.team, null)
-	if tb == null:
-		return 0
-	return maxi(tb.blast_range_for(u), 0) if ab.blast_gold_range > 0 else 0
+	return 0 if tb == null else tb.blast_diamond_for(u)
 
 
-func blast_cells(centre: Vector2i, radius: int, diamond_range: int) -> Array[Vector2i]:
-	## The tiles a blast covers. Two shapes, and which one you get is the whole gold
-	## pick: a square measured by the larger of the two axis distances (so it keeps its
-	## corners), or a diamond measured by their sum (so it loses them and reaches
-	## further along the axes instead).
-	##
-	## Returned as cells rather than tested per unit so the view can draw exactly what
-	## the simulation hit — a blast the player sees at a different size from the one
-	## that resolved is worse than no blast drawing at all.
+func blast_cells(u: UnitInstance, at := Vector2i(-99, -99)) -> Array[Vector2i]:
+	## Every on-board tile the blast reaches if it went off at `at` (its current tile
+	## by default): the Chebyshev square of blast_radius, or — with gold Saltpetre —
+	## the diamond of the buff's arm instead.
+	var centre := u.cell if at == Vector2i(-99, -99) else at
 	var out: Array[Vector2i] = []
-	var reach: int = diamond_range if diamond_range > 0 else radius
-	for dy in range(-reach, reach + 1):
-		for dx in range(-reach, reach + 1):
-			var span: int = (absi(dx) + absi(dy) if diamond_range > 0
-				else maxi(absi(dx), absi(dy)))
-			if span > reach:
-				continue
-			var cell := centre + Vector2i(dx, dy)
-			if board.in_bounds(cell):
-				out.append(cell)
+	for off in blast_offsets(u):
+		var c: Vector2i = centre + off
+		if board.in_bounds(c) and not BoardModel.is_void(c):
+			out.append(c)
+	return out
+
+
+func blast_offsets(u: UnitInstance) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	var arm := blast_diamond_arm(u)
+	if arm > 0:
+		for dy in range(-arm, arm + 1):
+			for dx in range(-arm, arm + 1):
+				if absi(dx) + absi(dy) <= arm:
+					out.append(Vector2i(dx, dy))
+		return out
+	var r := maxi(u.data.ability.blast_radius, 0)
+	for dy in range(-r, r + 1):
+		for dx in range(-r, r + 1):
+			out.append(Vector2i(dx, dy))
 	return out
 
 
 func _light_fuse(u: UnitInstance) -> bool:
-	## Turns a death into a lit fuse, or returns false and lets the death happen.
+	## Turns a Powderkeg's death into a lit fuse, or returns false and lets it die.
 	##
-	## Intercepts _fell() exactly where the Martyr's window does, and for the same
-	## reason: that is the single funnel every death goes through, so a bomb that only
-	## armed on an ordinary swing would be a bug the first time something cast at it.
-	if u.fuse_spent or u.data == null:
+	## Not for a keg somebody else is wearing: the Usurper's possession has its own
+	## death rules, and a host that went off under the thief's colours would hand the
+	## blast to the wrong side's accounting. That keg simply dies.
+	if not is_keg(u) or u.is_possessed() or u.is_riding() or u.hp_locked:
 		return false
 	var ab := u.data.ability
-	if ab == null or ab.kind != AbilityData.Kind.DETONATE:
-		return false
-	var secs := fuse_seconds_of(u, ab)
+	var secs := ab.fuse_seconds_for(u.data.tier)
 	if secs <= 0.0:
 		return false
-	u.fuse_spent = true
 	u.fuse_left = secs
-	# Stood back up as a body, not as a fighter: take_damage() and _execute() both set
-	# DEAD before handing over, and step() skips anything fusing, so IDLE here only
-	# means "not flagged dead" — it never gets a turn.
+	# take_damage() and _execute() both set DEAD on the way in, so it is stood back up
+	# — but with nothing left: no swing in progress, no cast, no shield, no bar, no
+	# cloak. It is a barrel with a fuse in it.
 	u.state = UnitInstance.State.IDLE
 	u.state_timer = 0.0
 	u.target = null
 	u.shield = 0.0
 	u.shield_left = 0.0
-	# Stop it charging or being carried: a bomb that goes off mid-run would resolve its
-	# blast from a tile nothing was told about.
+	u.mana = 0.0
+	u.stealth_left = 0.0
+	u.taunt_left = 0.0
+	u.reflect_left = 0.0
 	u.stop_charging()
-	# It stays where it is for this tick only. From the next one it walks — see
-	# _fuse_turn — and the blast goes off on whatever tile it has reached.
-	var reach: int = maxi(ab.blast_radius, 0) + maxi(ab.flee_margin, 0)
-	var gold := blast_range_of(u, ab)
-	if gold > 0:
-		reach = gold + maxi(ab.flee_margin, 0)
-	# The fuse BEFORE the scatter, so by the time the view hears that something is
-	# running, the keg it is running from is already marked as burning and the
-	# runner's chevrons can lock on to it.
-	_emit("fuse", {
-		uid = u.uid, cell = u.cell, seconds = secs,
-		cells = blast_cells(u.cell, maxi(ab.blast_radius, 0), gold),
-	})
-	_scatter(u, reach, secs)
+	# Everything close enough to see the spark runs, both sides. Decided once, here:
+	# a unit that wanders into range later was not there when it lit.
+	var fleeing: Array[int] = []
+	for other in _units:
+		if other == u or not other.is_alive() or other.is_riding():
+			continue
+		if BoardModel.box_distance(other.cell, u.cell) > maxi(ab.flee_radius, 0):
+			continue
+		other.flee_from_uid = u.uid
+		fleeing.append(other.uid)
+	_emit("fuse_lit", {uid = u.uid, cell = u.cell, seconds = secs,
+		fleeing = fleeing, offsets = blast_offsets(u),
+		diamond = blast_diamond_arm(u) > 0})
 	return true
 
 
-func _scatter(bomb: UnitInstance, reach: int, secs: float) -> void:
-	## Everything close enough turns and runs, both sides.
-	##
-	## Indiscriminate is the point, and it is what stops the unit being a pure positive:
-	## your own line breaks around your own bomb. Measured on the SQUARE even when the
-	## blast will be a diamond, because a unit cannot see the shape any better than the
-	## player can and running from the corners is not a mistake worth modelling.
-	for other in _units:
-		if other == bomb or not other.is_alive() or other.is_riding():
-			continue
-		if other.is_fusing():
-			# Another bomb on its own clock. It is a corpse; it does not run.
-			continue
-		var d := other.cell - bomb.cell
-		if maxi(absi(d.x), absi(d.y)) > reach:
-			continue
-		other.flee_left = secs
-		other.flee_from = bomb.cell
-		other.flee_bomb_uid = bomb.uid
-		_emit("flee", {
-			uid = other.uid, cell = other.cell,
-			from = bomb.cell, seconds = secs, bomb_uid = bomb.uid,
-		})
-
-
-func _square_gap(a: Vector2i, b: Vector2i) -> int:
-	## Chebyshev distance: how many rings out of a square one tile is from another.
-	## The blast is measured this way, so the running is too.
-	return maxi(absi(a.x - b.x), absi(a.y - b.y))
-
-
-func _flee_step(u: UnitInstance) -> void:
-	## One step directly away from the fuse, if there is one to take.
-	##
-	## A unit with nowhere to go simply stands there — no re-roll, no sidestep, no
-	## clever pathing around the blast. Being cornered by a bomb is supposed to be
-	## fatal, and a unit that always found a way out would make the ability a shove
-	## rather than a threat.
-	u.target = null
-	# The keg walks while it burns, so the tile to run from is wherever it is NOW.
-	# Read live rather than pushed to every runner when the keg moves: the runner only
-	# needs it at the moment it steps, and one source of truth cannot fall out of step.
-	var bomb := _unit_by_uid(u.flee_bomb_uid) if u.flee_bomb_uid >= 0 else null
-	if bomb != null and bomb.is_fusing():
-		u.flee_from = bomb.cell
-	if not u.can_move_now():
+func _keg_turn(u: UnitInstance) -> void:
+	## A lit keg's whole turn: walk at the nearest enemy. It never swings, never
+	## casts and never digs — a wall in the way is a wall in the way. Frozen or
+	## stunned it stands where it is, and the fuse keeps burning regardless.
+	if u.is_held():
 		return
+	if u.state != UnitInstance.State.IDLE:
+		_advance_timer(u)
+		return
+	var foe := board.nearest_enemy(u)
+	if foe == null or BoardModel.box_distance(u.cell, foe.cell) <= 1:
+		return
+	u.target = foe
+	var next := _next_step(u)
+	# Off again straight away: a lit keg holding a target would be something for the
+	# view, or a later rule, to mistake for a unit that means to swing.
+	u.target = null
+	if not _neighbour_offsets().has(next - u.cell):
+		return
+	if not board.in_bounds(next) or not board.is_empty(next):
+		return
+	if BoardModel.is_blocked(next) or not BoardModel.can_climb(u.cell, next):
+		return
+	if BoardModel.blocks_between(u.cell, next):
+		return
+	var from := u.cell
+	if not board.move_unit(u, next):
+		return
+	var dur := maxf(u.stat(StatModifier.Stat.MOVE_TIME) / pressure(), MIN_MOVE_TIME)
+	u.move_from = from
+	_enter(u, UnitInstance.State.MOVING, dur)
+	_emit("move", {uid = u.uid, from = from, to = next, duration = dur})
+
+
+func _flee(u: UnitInstance) -> bool:
+	## One step that puts the most Chebyshev distance between this unit and the lit
+	## keg it is running from, measured from where the keg is NOW. Returns false —
+	## and the unit gets its ordinary turn — when no step gains any distance at all:
+	## cornered, it fights. Ties go to the step that also gains the most walking
+	## distance, then to the first in the fixed neighbour order, so a replay is exact.
+	var keg := _unit_by_uid(u.flee_from_uid)
+	if keg == null or not keg.is_lit():
+		u.flee_from_uid = -1
+		return false
+	if not u.can_move_now():
+		return false
+	var here := BoardModel.box_distance(u.cell, keg.cell)
 	var best := u.cell
-	# Chebyshev — the larger of the two axis distances — and NOT the board's own
-	# Manhattan tile_distance(), which is what this used first and it was wrong.
-	#
-	# The blast is a square. A unit at (3,4) running from a bomb at (2,4) can step to
-	# (3,3) and raise its Manhattan distance from 1 to 2 while staying inside the 3x3,
-	# so it "escaped" and then died anyway. Measuring the way the BLAST measures is the
-	# only version where running away means getting away.
-	var best_gap := _square_gap(u.cell, u.flee_from)
-	for step in _neighbour_offsets():
-		var to: Vector2i = u.cell + step
+	var best_d := here
+	var best_m := -1
+	for dir in _neighbour_offsets():
+		var to: Vector2i = u.cell + dir
 		if not board.in_bounds(to) or not board.is_empty(to):
 			continue
 		if BoardModel.is_blocked(to) or not BoardModel.can_climb(u.cell, to):
 			continue
 		if BoardModel.blocks_between(u.cell, to):
 			continue
-		var gap := _square_gap(to, u.flee_from)
-		if gap > best_gap:
-			best_gap = gap
+		var d := BoardModel.box_distance(to, keg.cell)
+		var m := BoardModel.tile_distance(to, keg.cell)
+		if d < best_d or d <= here:
+			continue
+		if d > best_d or m > best_m:
 			best = to
+			best_d = d
+			best_m = m
 	if best == u.cell:
-		return
+		return false
 	var from := u.cell
 	if not board.move_unit(u, best):
-		return
+		return false
 	var dur := maxf(u.stat(StatModifier.Stat.MOVE_TIME) / pressure(), MIN_MOVE_TIME)
 	u.move_from = from
 	_enter(u, UnitInstance.State.MOVING, dur)
-	_emit("move", {uid = u.uid, from = from, to = best, duration = dur})
-
-
-func _fuse_turn(u: UnitInstance) -> void:
-	## A lit keg's turn: walk at the nearest enemy, and nothing else.
-	##
-	## It does not swing, cast, dig or flee — a bomb that kept fighting would make the
-	## fuse a second health bar. It walks at its own pace, buffs and all, so Saltpetre's
-	## speed carries the blast further. Held (frozen or stunned) it stands still, but
-	## a freeze only DEFUSES at the moment of death; one landing later just pins it.
-	if u.state == UnitInstance.State.MOVING:
-		_advance_timer(u)
-		return
-	if u.state != UnitInstance.State.IDLE:
-		# Nothing should put a lit keg into a swing or a cast, but if something does it
-		# is dropped rather than finished.
-		u.state = UnitInstance.State.IDLE
-		u.state_timer = 0.0
-	if not u.can_move_now():
-		return
-	var mark := board.nearest_enemy(u)
-	if mark == null:
-		return
-	var was := u.cell
-	u.target = mark
-	_begin_move(u, false)
-	# Cleared again straight away: a target on a lit keg reads as "fighting" to
-	# anything that asks, and it is not.
-	u.target = null
-	if u.cell != was:
-		_moved_fuse(u)
-
-
-func _moved_fuse(bomb: UnitInstance) -> void:
-	## Tells the view the warning square has moved with the keg. The runners need no
-	## event of their own — the view points them at the keg's own node.
-	var ab: AbilityData = bomb.data.ability
-	_emit("fuse_move", {
-		uid = bomb.uid, cell = bomb.cell,
-		cells = blast_cells(bomb.cell, maxi(ab.blast_radius, 0), blast_range_of(bomb, ab)),
-	})
+	_emit("move", {uid = u.uid, from = from, to = best, duration = dur, flee = true})
+	return true
 
 
 func _tick_fuses() -> void:
-	## Two clocks: the fuses burning down, and the panic they started.
-	##
-	## The panic is ticked for everyone rather than cleared when the bomb goes off,
-	## because a unit should keep running for a moment after the blast — it does not
-	## know the danger has passed any faster than it knew it was coming.
 	for u in _units:
-		if u.flee_left > 0.0:
-			u.flee_left = maxf(u.flee_left - TICK, 0.0)
-			if u.flee_left <= 0.0:
-				u.flee_from = Vector2i(-1, -1)
-				u.flee_bomb_uid = -1
-				_emit("flee_end", {uid = u.uid, cell = u.cell})
-	for u in _units:
-		if u.fuse_left <= 0.0:
+		if not u.is_lit():
 			continue
 		u.fuse_left = maxf(u.fuse_left - TICK, 0.0)
-		if u.fuse_left > 0.0:
-			continue
-		_detonate(u)
+		if u.fuse_left <= 0.0:
+			_blast(u)
 
 
-func _detonate(bomb: UnitInstance) -> void:
-	## The blast, and then the death that was owed since the fuse was lit.
-	var ab: AbilityData = bomb.data.ability
-	var gold := blast_range_of(bomb, ab)
-	var cells := blast_cells(bomb.cell, maxi(ab.blast_radius, 0), gold)
-	var hurt := blast_damage_of(bomb, ab)
-	_emit("detonate", {
-		uid = bomb.uid, cell = bomb.cell, cells = cells, amount = hurt,
-	})
-	# Collected before any of it lands. Damaging as we walk the cells would let the
-	# first casualty's own death — a second Powderkeg, a Corpse-feeder, a revive —
-	# reshuffle the board underneath the loop, and which units a blast hits must be
-	# decided by where they were standing when it went off.
-	var caught: Array[UnitInstance] = []
-	for cell in cells:
-		var other := board.unit_at(cell)
-		if other == null or other == bomb or not other.is_alive():
-			continue
-		if other.is_fusing():
-			# Another bomb mid-fuse is already a corpse. It cannot be killed twice, and
-			# chaining one blast into another's would make a pile of them a single
-			# button that deletes the board.
-			continue
-		caught.append(other)
-	for other in caught:
-		if not other.is_alive():
-			# Something earlier in the list took it with them.
-			continue
-		# is_spell true, hp_bonus false: it is not a swing, so it does not crit and it
-		# is not sharpened by the percent-max-health riders that attach to attacks. The
-		# same call the Breaker's charge makes, for the same reasons.
-		_damage(other, hurt, bomb, true, false)
-	# The death it was owed. fuse_spent is already set, so _fell cannot light it again
-	# and this one goes all the way through: the body pile, the revive roll, the
-	# scavengers' mana.
-	bomb.fuse_left = 0.0
-	bomb.state = UnitInstance.State.DEAD
-	bomb.target = null
-	_fell(bomb, bomb.uid)
+func _blast(u: UnitInstance) -> void:
+	## The fuse ran out. Everything inside the blast takes it, whichever side it is
+	## on, and then the keg finishes the death it put off.
+	u.fuse_left = 0.0
+	u.state = UnitInstance.State.DEAD
+	u.target = null
+	var cells := blast_cells(u)
+	var dmg := blast_damage_of(u)
+	_emit("fuse_blast", {uid = u.uid, cell = u.cell, cells = cells, damage = dmg,
+		diamond = blast_diamond_arm(u) > 0})
+	for other in _units:
+		if other.flee_from_uid == u.uid:
+			other.flee_from_uid = -1
+	# Victims gathered before any damage lands, so a unit killed by the blast — or a
+	# second keg lit by it — does not change who else is in the blast.
+	var victims: Array[UnitInstance] = []
+	for c in cells:
+		var v := board.unit_at(c)
+		if v != null and v != u and v.is_alive():
+			victims.append(v)
+	for v in victims:
+		_damage(v, dmg, u, true)
+	_bury(u, u.uid, false)
 
 
 func displace(u: UnitInstance, dir: Vector2i, tiles: int) -> int:
@@ -3787,8 +3712,6 @@ func displace(u: UnitInstance, dir: Vector2i, tiles: int) -> int:
 		uid = u.uid, from = from, to = u.cell,
 		tiles = moved, duration = DISPLACE_TIME,
 	})
-	if u.is_fusing():
-		_moved_fuse(u)
 	return moved
 
 
@@ -3871,10 +3794,18 @@ func _fell(victim: UnitInstance, killer_uid: int, overkill := false) -> void:
 		# have done on death.
 		return
 	if not frozen and _light_fuse(victim):
-		# A Powderkeg does not die when it is killed — it starts ticking. Same funnel,
-		# same frozen gate: a bomb frozen solid is defused, which is the one clean
-		# answer to it in the game and the reason the Stasis is worth holding.
+		# A Powderkeg does not die either: it lights. Same funnel and same gate as the
+		# Martyr above, for the same reasons — and the gate is the whole counter to
+		# the unit. Freeze it before the killing blow and it is just a dead barrel.
 		return
+	_bury(victim, killer_uid, frozen, overkill)
+
+
+func _bury(victim: UnitInstance, killer_uid: int, frozen: bool,
+		overkill := false) -> void:
+	## The death itself, once nothing has intercepted it. Split out of _fell so a
+	## Powderkeg's blast can finish the death its fuse put off, through exactly the
+	## same steps as everything else — the pile, the scavengers, the possession.
 	_emit("death", {uid = victim.uid, cell = victim.cell,
 		killer_uid = killer_uid, frozen = frozen, overkill = overkill})
 	board.remove(victim)
@@ -4297,6 +4228,11 @@ func _neighbour_offsets() -> Array[Vector2i]:
 
 
 func _check_over() -> void:
+	# Not while a Powderkeg is lit. Its side may be down to nothing — the keg is not
+	# counted, it is already dead — but the blast is still to come and can change the
+	# answer, up to and including taking the other side's last unit with it.
+	if any_fuse_lit():
+		return
 	var a := board.living_count_of(BoardModel.TEAM_A) + pending_respawns(BoardModel.TEAM_A)
 	var b := board.living_count_of(BoardModel.TEAM_B) + pending_respawns(BoardModel.TEAM_B)
 	if a > 0 and b > 0:

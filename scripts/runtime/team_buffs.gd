@@ -123,20 +123,19 @@ func frenzy_seconds_for(u: UnitInstance) -> float:
 	return secs
 
 
-func blast_range_for(u: UnitInstance) -> int:
-	# MAXed rather than summed, like frenzy_seconds_for and for the same reason: this
-	# one replaces a shape instead of adding to a number, and two picks cannot make the
-	# diamond more diamond. Zero means no pick has anything to say and the ability's own
-	# square stands.
-	var reach := 0
+func blast_diamond_for(u: UnitInstance) -> int:
+	# The Powderkeg's gold rider: the arm of the diamond its blast becomes, or 0 for
+	# the ordinary square. Maxed, like the frenzy window, because it replaces a shape
+	# rather than adding to one.
+	var arm := 0
 	for p in picks:
 		var buff: BuffData = p.buff
-		if buff.blast_range_at_gold <= 0 or p.rarity != BuffData.Rarity.GOLD:
+		if buff.blast_diamond_at_gold <= 0 or p.rarity != BuffData.Rarity.GOLD:
 			continue
 		if buff.kind != BuffData.Kind.STAT or not buff.applies_to(u):
 			continue
-		reach = maxi(reach, buff.blast_range_at_gold)
-	return reach
+		arm = maxi(arm, buff.blast_diamond_at_gold)
+	return arm
 
 
 func extra_raises_for(u: UnitInstance) -> int:

@@ -840,16 +840,6 @@ const UNIT_TABLE := [
 		note = "Shoots from the back of the board, constantly, for almost nothing. The damage is not the point — the rate is: every shot is a fraction of the next bar, and every bar sends an enemy reeling. A disoriented unit wanders off and stops swinging entirely, so the Siren does not kill things, it takes them out of the fight for a moment and hands the moment to everyone else. Fragile, and worthless on its own.",
 	},
 	{
-		# A body priced to die: the health of a caster, a swing worth almost nothing,
-		# and legs a shade quicker than most so it can reach something worth standing
-		# next to. Everything it is for happens after it stops moving.
-		id = &"powderkeg", name = "Powderkeg", hp = 110.0, dmg = 7.0, spd = 0.7,
-		move = 0.40, range = "MELEE", sight = 4, type = "MELEE",
-		accent = Color(0.82, 0.58, 0.24),
-		ability = &"slow_match", mana = 0.0,
-		note = "A walking mistake waiting to happen, to whoever is nearest when it goes. Killing it is the easy part and also the problem: it gets back up with the fuse burning and keeps walking at you — longer at tier 1, barely a breath at tier 6 — and then it takes a three-by-three square of board with it — yours, theirs, it does not read banners. Everything close enough to be hurt turns and runs the moment it starts ticking, which is most of what you are buying: it does not have to kill anything to break a line in half. Freeze it and the fuse never lights at all.",
-	},
-	{
 		# A second healer that is NOT a second Seraph: no bar, no burst, no cleanse.
 		# A steady trickle from the middle of the line, and a reason to leave it alone.
 		# 162.5 is 130 x 1.25, measured: the heal size barely moves its win rate, its
@@ -859,6 +849,27 @@ const UNIT_TABLE := [
 		accent = Color(0.84, 0.74, 0.60),
 		ability = &"triage", mana = 0.0,
 		note = "Stands a couple of tiles behind the front and keeps it standing: every second it mends whichever ally nearby is hurt worst — never itself — for a small slice of their health. There is no bar and nothing to cleanse with; the Seraph is still the only answer to poison. Step next to it, though, and it drops the bandages: while anything is adjacent it stops mending and hits that thing for four times its ordinary swing, and only goes back to work once nothing is.",
+	},
+	{
+		# A body that is worth more dead. 110 and a 7-damage swing is a poor fighter
+		# on purpose — the Martyr's lesson again: a keg that won its fights would
+		# never get to light. A shade quicker on its feet than the 0.50 most units
+		# walk at, so the lit walk is a threat and not a stroll.
+		#
+		# Then bent by tier, measured. On the plain doubling it won 30 / 18.5 / 17.5 /
+		# 19 / 38 / 49.5% front-slot against a same-tier Warden (control 40-48%). The
+		# middle was the problem and the top was not: a flat x2 health x1.5 attack put
+		# tiers 2-4 at 44-50% but pushed tier 6 to 57%, because the blast already
+		# scales with tier on top of attack. So the body is bent instead — twice the
+		# health through tier 3, tapering to none at tier 6, and a little more swing in
+		# the middle (which also feeds the blast there, where it was weakest).
+		id = &"powderkeg", name = "Powderkeg", hp = 110.0, dmg = 7.0, spd = 0.9,
+		tier_hp = [2.0, 2.0, 2.0, 1.75, 1.25, 1.0],
+		tier_dmg = [1.25, 1.5, 1.4, 1.0, 1.0, 1.0],
+		move = 0.48, range = "MELEE", sight = 4, type = "MELEE",
+		accent = Color(0.72, 0.38, 0.22),
+		ability = &"slow_match", mana = 0.0,
+		note = "A barrel with legs and a short temper. It fights badly, and that is fine, because killing it is the mistake: it does not fall over, it lights. For a second or two it walks at the nearest enemy with the fuse fizzing — nothing can target it, hit it or heal it, and everything near it, yours included, scatters — and then it goes off over the 3x3 around wherever it got to. The bigger it is the shorter the fuse. Freeze it before it dies and it never lights at all.",
 	},
 	{
 		id = &"wisp", name = "Wisp", hp = 38.0, dmg = 5.0, spd = 1.3,
@@ -935,6 +946,12 @@ const ABILITY_TABLE := [
 		desc = "",
 		mend_percent = 0.05, heal_percent_per_tier = 0.20, heal_radius = 3,
 		mend_interval = 1.0, mend_melee_mult = 4.0,
+	},
+	{
+		id = &"slow_match", name = "Slow Match", kind = "FUSE", cast_time = 0.0,
+		desc = "",
+		fuse_seconds_by_tier = [2.0, 1.75, 1.5, 1.25, 1.0, 0.75],
+		blast_attack_multiple = 5.0, blast_radius = 1, flee_radius = 2,
 	},
 	{
 		id = &"call_wisp", name = "Call Wisp", kind = "SUMMON", cast_time = 0.5,
@@ -1062,27 +1079,6 @@ const ABILITY_TABLE := [
 		frenzy_pierce = 3,
 	},
 	{
-		id = &"slow_match", name = "Slow Match", kind = "DETONATE", cast_time = 0.0,
-		desc = "It has no bar and nothing to spend. Killing it lights the fuse instead: it keeps walking at the nearest enemy, untouchable, for two seconds at tier 1 down to three quarters of a second at tier 6, and then a three-by-three square of board goes up wherever it has got to — friend, enemy, whatever was standing there. Everything within two tiles turns and runs from it the moment it starts ticking, and a unit with a wall at its back does not get out. Freezing it defuses it outright.",
-		# 1.5s is the window everything else hangs off, and it is where tier 3 sits.
-		# Shorter and nothing gets clear, which makes the flee a decoration; much longer
-		# and the board has rearranged itself so completely by the time it lands that the
-		# blast is decided by traffic rather than by where the unit chose to die.
-		#
-		# Per tier, a quarter of a second apiece: the low tiers had too long a window to
-		# catch anything and the top two had a blast big enough not to need catching, so
-		# the fuse is the dial that moves both ends toward the middle. fuse_seconds stays
-		# as the fallback for anything that does not read the table.
-		fuse_seconds = 1.5,
-		fuse_seconds_by_tier = [2.0, 1.75, 1.5, 1.25, 1.0, 0.75],
-		# 7 damage a swing x 5.0 x tier is 35 at tier 1 and 210 at tier 6, before any
-		# buff, to every tile in the square. Measured, not guessed — see the numbers in
-		# the report. It reads high next to a swing because it is the only thing the
-		# unit ever does, and half the time some of it lands on your own units.
-		blast_damage_per_tier = 5.0,
-		blast_radius = 1, blast_gold_range = 3, flee_margin = 1,
-	},
-	{
 		id = &"overflow", name = "Overflow", kind = "MANA_AURA", cast_time = 0.4,
 		desc = "Floods the three-by-three around it. Allies standing inside gain extra mana every second, for the rest of the battle.",
 		mana_aura_radius = 1,
@@ -1155,6 +1151,10 @@ const BUFF_TABLE = [
 	{id = &"sanctuary", name = "Sanctuary", kind = "STAT", weight = 1.0,
 		unit = &"hospitaller", stat_a = "HEAL_POWER", stat_b = "MAX_HP", two = true,
 		b = Vector2(0.25, 0.25), s = Vector2(0.50, 0.50), g = Vector2(1.00, 1.00)},
+	{id = &"saltpetre", name = "Saltpetre", kind = "STAT", weight = 1.0,
+		unit = &"powderkeg", stat_a = "ATTACK_DAMAGE", stat_b = "MOVE_TIME", two = true,
+		blast_diamond_at_gold = 3,
+		b = Vector2(1.00, 0.25), s = Vector2(2.00, 0.50), g = Vector2(3.00, 1.00)},
 	{id = &"covenant", name = "Covenant", kind = "STAT", weight = 1.0,
 		unit = &"conjurer", also = [&"wisp"],
 		stat_a = "MAX_HP", stat_b = "ATTACK_DAMAGE", two = true,
@@ -1226,10 +1226,6 @@ const BUFF_TABLE = [
 		unit = &"siren", stat_a = "ATTACK_SPEED",
 		disorient_bonus = Vector3(0.5, 1.0, 2.0),
 		b = Vector2(0.20, 0.0), s = Vector2(0.40, 0.0), g = Vector2(0.60, 0.0)},
-	{id = &"saltpetre", name = "Saltpetre", kind = "STAT", weight = 1.0,
-		unit = &"powderkeg", stat_a = "ATTACK_DAMAGE", stat_b = "MOVE_TIME",
-		two = true, blast_range_at_gold = 3,
-		b = Vector2(1.00, 0.25), s = Vector2(2.00, 0.50), g = Vector2(3.00, 1.00)},
 	{id = &"rapture", name = "Rapture", kind = "STAT", weight = 1.0,
 		unit = &"martyr", stat_a = "ATTACK_DAMAGE", stat_b = "ATTACK_SPEED",
 		two = true, frenzy_seconds_at_gold = 5.0,
@@ -1502,15 +1498,15 @@ func _make_abilities() -> Dictionary:
 				"rage_per_missing", "frenzy_threshold", "frenzy_decay",
 				"frenzy_seconds", "frenzy_damage", "frenzy_attack_speed",
 				"frenzy_move", "frenzy_pierce",
-				"fuse_seconds", "blast_damage_per_tier", "blast_radius",
-				"blast_gold_range", "flee_margin",
-				"mend_percent", "mend_interval", "mend_melee_mult"]:
+				"mend_percent", "mend_interval", "mend_melee_mult",
+				"blast_attack_multiple", "blast_radius", "flee_radius"]:
 			if row.has(key):
 				a.set(key, row[key])
-		# A plain array in the table, because a const table cannot hold a packed one;
-		# converted here so the resource carries the type its export declares.
 		if row.has("fuse_seconds_by_tier"):
-			a.fuse_seconds_by_tier = PackedFloat32Array(row.fuse_seconds_by_tier)
+			var fuse: Array[float] = []
+			for s in row.fuse_seconds_by_tier:
+				fuse.append(float(s))
+			a.fuse_seconds_by_tier = fuse
 		_save(a, "%s/%s.tres" % [ABILITY_DIR, row.id])
 		out[row.id] = a
 	return out
@@ -1561,6 +1557,14 @@ func _make_units(abilities: Dictionary) -> LoadoutData:
 			u.id = row.id
 			u.display_name = row.name if t == 1 else "%s %s" % [row.name, _numeral(t)]
 			u.tier = t
+			# An optional per-tier bend on top of the doubling, index 0 = tier 1. For a
+			# unit whose strength does not climb in step with everyone else's — see the
+			# Powderkeg — rather than one flat number that fixes the middle of the
+			# ladder by breaking its top.
+			if row.has("tier_hp"):
+				mult_hp *= float(row.tier_hp[t - 1])
+			if row.has("tier_dmg"):
+				mult_dmg *= float(row.tier_dmg[t - 1])
 			u.max_hp = snappedf(row.hp * mult_hp, 1.0)
 			u.attack_damage = snappedf(row.dmg * mult_dmg, 0.5)
 			u.attack_speed = row.spd
@@ -1685,8 +1689,8 @@ func _make_buffs() -> void:
 		b.host_move = row.get("host_move", Vector3.ZERO)
 		b.host_power = row.get("host_power", Vector3.ZERO)
 		b.frenzy_seconds_at_gold = row.get("frenzy_seconds_at_gold", 0.0)
+		b.blast_diamond_at_gold = row.get("blast_diamond_at_gold", 0)
 		b.disorient_bonus = row.get("disorient_bonus", Vector3.ZERO)
-		b.blast_range_at_gold = row.get("blast_range_at_gold", 0)
 		_save(b, "%s/%s.tres" % [BUFF_DIR, row.id])
 	_write_buff_index()
 

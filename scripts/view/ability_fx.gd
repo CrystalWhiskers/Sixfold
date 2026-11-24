@@ -82,8 +82,8 @@ const KIND_GLYPHS := {
 	AbilityData.Kind.POSSESS: "eye",
 	AbilityData.Kind.FRENZY: "heart",
 	AbilityData.Kind.DISORIENT: "spiral",
-	AbilityData.Kind.DETONATE: "bomb",
 	AbilityData.Kind.MEND: "plus",
+	AbilityData.Kind.FUSE: "bomb",
 }
 
 ## Every shape _draw_shape knows how to draw. The tests hold the tables above to it.

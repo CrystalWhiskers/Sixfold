@@ -27,8 +27,8 @@ enum Kind {
 	FRENZY,
 	DISORIENT,
 	## Appended, never inserted: the .tres files store this as a number.
-	DETONATE,
 	MEND,
+	FUSE,
 }
 
 @export var id: StringName = &""
@@ -390,57 +390,6 @@ enum Kind {
 ## immunity is the difference between a tempo tool and a disable.
 @export var disorient_immunity: float = 5.0
 
-@export_group("Detonate")
-## Seconds between the killing blow and the blast.
-##
-## The fuse is the entire ability. A bomb that goes off the instant it dies is a
-## damage number attached to a death — nobody makes a decision about it, on either
-## side. A bomb that ticks for a second and a half is a piece of ground that stops
-## being usable, and both armies have to answer it.
-##
-## It is also why the unit is worth killing CAREFULLY rather than killing fast, which
-## is the shape nothing else in the roster has.
-@export var fuse_seconds: float = 0.0
-
-## The fuse per tier, tier 1 first. Empty means every tier uses `fuse_seconds`.
-##
-## Shorter as the tier climbs. A long fuse is a weak bomb — the board has time to walk
-## clear — and a short one is a strong bomb, so the ladder buys a fuse that leaves less
-## room to get out rather than only a bigger number. It is a table rather than a slope
-## because one AbilityData serves all six tiers and the curve is a tuning decision, not
-## a formula anyone needs to derive. A tier past the end of the table takes the last
-## entry.
-@export var fuse_seconds_by_tier: PackedFloat32Array = PackedFloat32Array()
-
-## The blast, as a multiple of the unit's own attack damage times its tier — the same
-## shape as the Breaker's charge, and for the same reason: one AbilityData is shared by
-## all six tiers, so a flat figure here would leave a tier 6 detonating for exactly
-## what a tier 1 does. Off attack rather than a flat number so it rides every buff that
-## sharpens the unit.
-@export var blast_damage_per_tier: float = 0.0
-
-## The square half-width of the blast: 1 is the 3x3 the unit is specified to cover.
-##
-## Chebyshev, not Manhattan — a 3x3 includes its corners and the board's own
-## tile_distance() does not, so this shape is measured on its own terms rather than
-## borrowed from the movement rule.
-@export var blast_radius: int = 1
-
-## What a gold pick of the unit's own buff turns the square into: a DIAMOND of this
-## many tiles, measured the way range is, so it reaches further along the axes and
-## drops the corners entirely. Zero means no pick changes the shape.
-##
-## A different shape rather than a bigger square, because the interesting question the
-## bomb asks is "where is it safe to stand", and widening a square only ever answers
-## "further away". A diamond moves the safe ground to the corners instead.
-@export var blast_gold_range: int = 0
-
-## How far OUTSIDE the blast a unit still turns and runs. One tile of margin, so the
-## units that flee include some that were never going to be hit — they cannot measure
-## it any better than the player can, and a scatter that exactly traced the damage
-## would be a free map of the blast drawn for both sides.
-@export var flee_margin: int = 1
-
 @export_group("Mend")
 ## A passive, not a cast: the Hospitaller has no mana bar to fill. Every
 ## `mend_interval` seconds it heals the worst-hurt OTHER ally within
@@ -454,6 +403,26 @@ enum Kind {
 ## takes at that enemy is worth this many of its ordinary ones. The pulse resumes
 ## the moment nothing is adjacent any more.
 @export var mend_melee_mult: float = 1.0
+
+@export_group("Fuse")
+## The Powderkeg's passive (Kind.FUSE). No bar: dying is the trigger. Instead of
+## falling over it lights a fuse that burns for this many seconds, read by TIER —
+## index 0 is tier 1. A list rather than a base and a step, because the ladder is
+## the design ("a tier 6 gives you under a second to get clear") and a formula
+## would make the reader do arithmetic to find out what the unit does. A tier past
+## the end of the list uses the last entry.
+@export var fuse_seconds_by_tier: Array[float] = []
+
+## The blast at the end of the fuse: this many times the keg's attack damage (buffs
+## included), times its tier, to everything inside `blast_radius` of the tile it is
+## standing on when the fuse runs out — BOTH sides. Chebyshev radius, so 1 is the
+## 3x3 around it.
+@export var blast_attack_multiple: float = 5.0
+@export var blast_radius: int = 1
+
+## Everything within this many tiles (Chebyshev) of the keg at the moment it lights
+## runs from it, friend and foe alike, until it goes off.
+@export var flee_radius: int = 2
 
 @export_group("Mana aura")
 @export var mana_aura_radius: int = 1
@@ -500,12 +469,12 @@ enum Kind {
 @export var frenzy_pierce: int = 1
 
 
-func fuse_seconds_at(tier: int) -> float:
-	## The fuse a unit of this tier burns. The table when there is one, clamped at
-	## both ends, and the flat figure when there is not.
+func fuse_seconds_for(tier: int) -> float:
+	## The fuse for a keg of this tier. Past the end of the list, the last entry.
 	if fuse_seconds_by_tier.is_empty():
-		return fuse_seconds
-	return fuse_seconds_by_tier[clampi(tier - 1, 0, fuse_seconds_by_tier.size() - 1)]
+		return 0.0
+	var i := clampi(tier - 1, 0, fuse_seconds_by_tier.size() - 1)
+	return maxf(fuse_seconds_by_tier[i], 0.0)
 
 
 func describe() -> String:
@@ -560,6 +529,13 @@ func describe() -> String:
 			return "No bar to fill. Every %.0fs it mends the worst-hurt ally within %d tiles for %.0f%% of their max health, +%d%% of that per tier. It never mends itself and lifts nothing. The moment an enemy steps next to it the mending stops, and it hits whatever is adjacent for %.0fx its ordinary swing until nothing is." % [
 				mend_interval, heal_radius, mend_percent * 100.0,
 				roundi(heal_percent_per_tier * 100.0), mend_melee_mult]
+		Kind.FUSE:
+			var secs: PackedStringArray = []
+			for s in fuse_seconds_by_tier:
+				secs.append(("%.2f" % s).trim_suffix("0").trim_suffix(".0"))
+			var side := blast_radius * 2 + 1
+			return "No bar to fill — dying is the trigger. When it would die it lights a fuse instead (%ss by tier) and walks at the nearest enemy, swinging at nothing and impossible to target, hit or heal. Everything within %d tiles runs from it, both sides. When the fuse runs out it goes off: %.0fx its attack damage, times its tier, to everything in the %dx%d around it — yours as well. Killed while frozen, it never lights at all." % [
+				"/".join(secs), flee_radius, blast_attack_multiple, side, side]
 		Kind.SUMMON:
 			if summon_random:
 				var tail := (" They stay with you for the rest of the match."
@@ -607,20 +583,6 @@ func describe() -> String:
 				frenzy_decay * 100.0, frenzy_seconds,
 				roundi(frenzy_damage * 100.0), roundi(frenzy_attack_speed * 100.0),
 				roundi(frenzy_move * 100.0), frenzy_pierce]
-		Kind.DETONATE:
-			var shape := "a %dx%d square" % [
-				blast_radius * 2 + 1, blast_radius * 2 + 1]
-			var gold := ""
-			if blast_gold_range > 0:
-				gold = " A gold pick of its own buff trades the square for a diamond %d tiles across each arm." % blast_gold_range
-			var fuse := "%.1fs" % fuse_seconds
-			if not fuse_seconds_by_tier.is_empty():
-				fuse = "%.2fs at tier 1, falling to %.2fs at tier %d," % [
-					fuse_seconds_at(1), fuse_seconds_at(fuse_seconds_by_tier.size()),
-					fuse_seconds_by_tier.size()]
-			return "Killing it does not finish it. The fuse burns for %s while it keeps walking at the nearest enemy, untouchable, and then it goes off where it stands, hitting %s for %.0fx its own attack per tier — friend and enemy alike, with no regard for whose side anything is on. Everything within %d tile(s) of it turns and runs the moment the fuse is lit, away from wherever it has got to.%s" % [
-				fuse, shape, blast_damage_per_tier,
-				blast_radius + flee_margin, gold]
 		Kind.ASCEND:
 			return "The first full bar changes it: %.1fx health, %.0f%% faster swings, %.0f%% faster on its feet. Every bar after that arms the next swing to kill outright, whatever it hits." % [
 				ascend_hp_mult,

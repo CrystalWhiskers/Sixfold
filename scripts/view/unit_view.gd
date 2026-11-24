@@ -99,32 +99,22 @@ var reeling := false
 var reeling_secs := 0.0
 var reeling_t := 0.0
 
-## Fusing: dead, lying there, about to go off. The clock is the mark — a fuse that
-## looked the same at 1.5 seconds and at 0.1 would tell you there is danger without
-## telling you the one thing you need, which is how long you have.
-var fusing := false
-var fuse_secs := 0.0
-var fuse_total := 0.0
-var fuse_t := 0.0
-
-## Running from one. Quieter than the rest on purpose: half the board can be fleeing at
-## once, and a loud mark on each of them would bury the bomb that caused it.
-var fleeing := false
-var fleeing_secs := 0.0
-var fleeing_t := 0.0
-## Which way it is running, as a unit vector away from the bomb. The mark points this
-## way, so a glance at a scattering line shows where the danger is without looking for
-## the keg itself.
-var fleeing_dir := Vector2.DOWN
-## The keg it is running from, while that keg is still burning. A lit keg walks, so
-## the direction is re-read off both nodes every frame; once the keg has gone off (or
-## its node is gone) the last direction stands.
-var fleeing_from: UnitView = null
-
 ## The Hospitaller in melee mode: an enemy is next to it, the mending has stopped
 ## and its swings are heavy. Event-driven ("mend_mode"), because during playback
 ## `unit.mend_engaged` is the END-of-round value.
 var engaged := false
+
+## Running from a lit Powderkeg: the direction away from the keg's CURRENT tile, or
+## zero when not fleeing. Set by BattlePlayer every frame off the views' live
+## positions rather than off the model, which during playback is end-of-round state.
+var flee_dir := Vector2.ZERO
+
+
+func set_flee_dir(dir: Vector2) -> void:
+	if dir.is_equal_approx(flee_dir):
+		return
+	flee_dir = dir
+	queue_redraw()
 
 ## Whether an Usurper is currently inside this unit.
 ##
@@ -218,22 +208,6 @@ func _process(delta: float) -> void:
 		if reeling_secs <= 0.0:
 			end_reeling()
 		queue_redraw()
-	if fusing:
-		fuse_secs -= delta
-		# Accelerating: the blink rate is driven by how much is LEFT, so the mark gets
-		# more frantic as the moment approaches instead of ticking evenly.
-		var urgency: float = 1.0 - clampf(fuse_secs / maxf(fuse_total, 0.01), 0.0, 1.0)
-		fuse_t = fmod(fuse_t + delta * (6.0 + urgency * 18.0), TAU)
-		if fuse_secs <= 0.0:
-			end_fuse()
-		queue_redraw()
-	if fleeing:
-		fleeing_secs -= delta
-		fleeing_t = fmod(fleeing_t + delta * 7.0, TAU)
-		_track_keg()
-		if fleeing_secs <= 0.0:
-			end_fleeing()
-		queue_redraw()
 	if possessed:
 		possessed_t = fmod(possessed_t + delta * 2.2, TAU)
 		queue_redraw()
@@ -317,57 +291,6 @@ func begin_frenzy(seconds: float) -> void:
 func end_frenzy() -> void:
 	frenzied = false
 	frenzy_secs = 0.0
-	queue_redraw()
-
-
-func begin_fuse(seconds: float) -> void:
-	## Lights it. `seconds` is already playback time, like every other mark here.
-	if seconds <= 0.0:
-		return
-	fusing = true
-	fuse_secs = seconds
-	# Kept so _process can work out how far through the fuse is. Without it the mark
-	# can only blink at a constant rate, and a constant blink says "danger" where an
-	# accelerating one says "danger, soon" — which is the actual information.
-	fuse_total = seconds
-	queue_redraw()
-
-
-func end_fuse() -> void:
-	fusing = false
-	fuse_secs = 0.0
-	queue_redraw()
-
-
-func begin_fleeing(seconds: float, away := Vector2.ZERO, from: UnitView = null) -> void:
-	if seconds <= 0.0:
-		return
-	fleeing = true
-	fleeing_secs = seconds
-	fleeing_from = from if from != self else null
-	if away.length() > 0.01:
-		fleeing_dir = away.normalized()
-	_track_keg()
-	queue_redraw()
-
-
-func _track_keg() -> void:
-	## Points the chevrons away from where the keg is NOW, positions and all, so a keg
-	## mid-stride and a runner mid-stride still read correctly against each other.
-	if fleeing_from == null:
-		return
-	if not is_instance_valid(fleeing_from) or not fleeing_from.fusing:
-		fleeing_from = null
-		return
-	var d := position - fleeing_from.position
-	if d.length() > 0.01:
-		fleeing_dir = d.normalized()
-
-
-func end_fleeing() -> void:
-	fleeing = false
-	fleeing_secs = 0.0
-	fleeing_from = null
 	queue_redraw()
 
 
@@ -683,27 +606,6 @@ func _draw() -> void:
 			draw_line(dir * (half - 2.0), dir * (half + 5.0 + beat * 3.0),
 				Color(1.00, 0.46, 0.30, 0.9 * alpha), 2.5)
 
-	if fusing:
-		# A body with a clock in it, still walking. Two things have to read at a glance:
-		# that this tile is about to become lethal, and roughly how long you have.
-		var left: float = clampf(fuse_secs / maxf(fuse_total, 0.01), 0.0, 1.0)
-		var blink: float = 0.5 + 0.5 * sin(fuse_t)
-		draw_rect(body.grow(2.0 + blink * 3.0),
-			Color(1.00, 0.52, 0.16, (0.55 + 0.40 * blink) * alpha), false, 3.0)
-		draw_rect(body, Color(1.00, 0.44, 0.12, 0.28 * blink * alpha), true)
-		# The fuse itself: an arc that burns down anticlockwise from the top. This is
-		# the part that says HOW LONG, and it is drawn from the remaining fraction
-		# rather than from a pulse, so it cannot lie about the time left.
-		if left > 0.0:
-			draw_arc(Vector2.ZERO, half + 5.0, -PI * 0.5,
-				-PI * 0.5 + TAU * left, 24,
-				Color(1.00, 0.76, 0.34, 0.95 * alpha), 3.0)
-		# The spark at the burning end, so the eye lands on the clock rather than the
-		# body underneath it.
-		var tip: float = -PI * 0.5 + TAU * left
-		draw_circle(Vector2(cos(tip), sin(tip)) * (half + 5.0),
-			2.6 + blink * 1.6, Color(1.00, 0.92, 0.62, alpha))
-
 	if hidden_unit:
 		draw_rect(body.grow(3.0), Color(0.62, 0.52, 0.85, 0.75 * alpha), false, 2.0)
 	if engaged and not dying:
@@ -780,28 +682,21 @@ func _draw() -> void:
 				Color(0.08, 0.07, 0.04, 0.70 * alpha))
 			draw_circle(at, maxf(tile_size * 0.055, 2.5), swirl)
 
-	if fleeing:
-		# Running from a lit fuse. Across the BODY, beside the reeling motes and for the
-		# same reason: the first version drew these chevrons above the tile, where the
-		# health bar and its number are painted afterwards, and a screenshot showed a
-		# fleeing Warden with no mark on it at all.
-		#
-		# Two chevrons pointing AWAY from the bomb, sliding the way the unit is going.
-		# Direction is the information: a whole line with its arrows pointing out from
-		# one tile tells you where the keg is without having to find it.
-		var d := fleeing_dir
-		var side := Vector2(-d.y, d.x)
-		var slide: float = fmod(fleeing_t / TAU, 1.0) * tile_size * 0.10
-		var arm := tile_size * 0.13
+	if flee_dir != Vector2.ZERO and not dying:
+		# Running from a lit keg: two chevrons on the body, stacked one behind the
+		# other and pointing AWAY from the keg's current tile, which BattlePlayer
+		# re-aims every frame as the keg walks. Drawn on the body, late, for the same
+		# reason the reeling motes are — up top is where the bar and the numbers go.
+		var fwd := flee_dir.normalized()
+		var side := Vector2(-fwd.y, fwd.x)
+		var arm := tile_size * 0.16
+		var ink := Color(1.00, 0.62, 0.26, 0.95 * alpha)
 		for i in 2:
-			var tip := body.get_center() + d * (tile_size * (0.02 + 0.14 * float(i)) + slide)
-			var a := tip - d * arm + side * arm
-			var b := tip - d * arm - side * arm
-			var fade: float = (0.95 - 0.35 * float(i)) * alpha
-			draw_polyline(PackedVector2Array([a, tip, b]),
-				Color(0.08, 0.06, 0.03, 0.75 * fade), maxf(tile_size * 0.075, 4.0))
-			draw_polyline(PackedVector2Array([a, tip, b]),
-				Color(1.00, 0.84, 0.46, fade), maxf(tile_size * 0.04, 2.2))
+			var tip := body.get_center() + fwd * (tile_size * (0.04 + 0.17 * float(i)))
+			var back := tip - fwd * arm
+			for p in [back + side * arm, back - side * arm]:
+				draw_line(p, tip, Color(0.06, 0.04, 0.02, 0.75 * alpha), 6.0)
+				draw_line(p, tip, ink, 3.0)
 
 	if dying:
 		var k := body.grow(-body.size.x * 0.28)
