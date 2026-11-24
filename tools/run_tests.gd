@@ -13578,10 +13578,13 @@ func _test_boss_defence() -> void:
 	for i in 20:
 		if ib.upgrade_income():
 			bought += 1
-	_check("income upgrades stop at %d" % data.income_max_level,
-		bought == data.income_max_level and ib.income_maxed() and is_inf(ib.income_price())
-		and is_equal_approx(ib.income, data.base_income + data.income_step * data.income_max_level),
-		"%d bought, %.0f/s" % [bought, ib.income])
+	var income_want := data.base_income
+	for k in 20:
+		income_want += data.income_step * pow(data.income_step_growth, k)
+	_check("income has no cap, and each upgrade gives x%.1f the last" % data.income_step_growth,
+		data.income_max_level == 0 and bought == 20 and not ib.income_maxed()
+		and is_equal_approx(ib.income, income_want),
+		"%d bought, %.0f/s against %.0f" % [bought, ib.income, income_want])
 	b.supply = 1000.0
 	var r_price := b.recruit_price()
 	b.recruit(0)
@@ -13662,8 +13665,14 @@ func _test_boss_defence() -> void:
 	for i in range(1, lv_prices.size()):
 		rising = rising and lv_prices[i] > lv_prices[i - 1]
 	_check("each level costs more than the last", rising, str(lv_prices))
-	_check("and the top is Lv5", ub.level_of(&"lancer") == 5 and not ub.upgrade_type(&"lancer")
-		and is_inf(ub.upgrade_price(&"lancer")))
+	for i in 10:
+		ub.upgrade_type(&"lancer")
+	_check("and the top is Lv%d" % ub.max_level(), ub.level_of(&"lancer") == ub.max_level()
+		and not ub.upgrade_type(&"lancer") and is_inf(ub.upgrade_price(&"lancer")),
+		"Lv%d" % ub.level_of(&"lancer"))
+	_check("prices and health both grow exponentially",
+		is_equal_approx(lv_prices[1] / lv_prices[0], data.upgrade_cost_growth) or absf(lv_prices[1] / lv_prices[0] - data.upgrade_cost_growth) < 0.05,
+		str(lv_prices))
 	var top := ub.field_data(lancer)
 	_check("a Lv5 Lancer pierces 7 deep, where it started at 2",
 		lancer.pierce_targets == 2 and top.pierce_targets == 7,

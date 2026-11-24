@@ -93,9 +93,11 @@ func refresh() -> void:
 	var grow := barracks.next_passive_in()
 	_header.text = "BARRACKS   Supply %d   (+%.0f/s%s)" % [floori(barracks.supply), barracks.income,
 		("  ·  +%.0f in %ds" % [barracks.data.passive_income, ceili(grow)]) if not is_inf(grow) else ""]
-	_income_btn.text = ("Income MAX  (%d/%d)" % [barracks.income_level, barracks.data.income_max_level]
-		if barracks.income_maxed() else "Income +%.0f/s  (%d)  %d/%d" % [barracks.data.income_step,
-		ceili(barracks.income_price()), barracks.income_level, barracks.data.income_max_level])
+	if barracks.income_maxed():
+		_income_btn.text = "Income MAX  (%d/%d)" % [barracks.income_level, barracks.data.income_max_level]
+	else:
+		_income_btn.text = "Income +%s/s  (%d)  Lv%d" % [_amount(barracks.next_income_gain()),
+			ceili(barracks.income_price()), barracks.income_level]
 	_income_btn.disabled = barracks.supply < barracks.income_price()
 	for s in Barracks.SECTIONS:
 		_recruit_btns[s].text = "Recruit\n%d" % ceili(barracks.recruit_price())
@@ -110,8 +112,8 @@ func refresh() -> void:
 		_type_btns[i].disabled = is_inf(price) or barracks.supply < price
 		var tip := "%s — Lv%d" % [t.display_name, lv]
 		if lv < barracks.max_level():
-			tip += "\nNext, Lv%d (and +%d%% health and attack):" % [lv + 1,
-				roundi(barracks.data.upgrade_stat_per_level * 100.0)]
+			tip += "\nNext, Lv%d (health and attack x%.2f, from x%.2f):" % [lv + 1,
+				barracks.stat_bump(lv + 1), barracks.stat_bump(lv)]
 			for line in barracks.level_changes(t, lv + 1):
 				tip += "\n  • " + line
 		else:
@@ -243,3 +245,8 @@ func _on_upgrade(index: int) -> void:
 		changed.emit("%s upgraded to Lv%d — every %s on the field and in every wave." % [
 			t.display_name, barracks.level_of(t.id), t.display_name])
 	refresh()
+
+
+static func _amount(v: float) -> String:
+	## 2, 4.5, 15 — whole numbers when they are whole, one decimal when they are not.
+	return str(roundi(v)) if is_equal_approx(v, roundf(v)) else "%.1f" % v

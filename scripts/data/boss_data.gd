@@ -50,7 +50,11 @@ extends Resource
 @export var income_cost: float = 30.0
 @export var income_growth: float = 1.6
 ## The most income upgrades that can be bought. 0 for no limit.
-@export var income_max_level: int = 9
+@export var income_max_level: int = 0
+## Each income upgrade gives `income_step_growth` times what the last one gave: +2,
+## +3, +4.5, +6.75... Its price climbs faster (income_growth), so every next one is
+## still worth less per Supply spent. 1 for a flat `income_step` every time.
+@export var income_step_growth: float = 1.5
 ## Passive growth: every `passive_income_every` seconds of the fight, income rises by
 ## `passive_income` on its own, with nothing bought — so the longer you hold, the more
 ## you have to answer her enrage with. 0 for none.
@@ -68,6 +72,16 @@ extends Resource
 @export var upgrades: BossUpgrades = null
 @export var upgrade_costs: PackedFloat32Array = PackedFloat32Array([30, 50, 80, 120, 180])
 @export var upgrade_stat_per_level: float = 0.08
+## Exponential upgrades. With `upgrade_cost_growth` above 0 a level costs
+## `upgrade_cost_base` times it to the power of the level already held, up to
+## `upgrade_max_level` (the ability table tops out at Lv5; past it the stat growth
+## carries on), and `upgrade_costs` is not used. With `upgrade_stat_growth` above 0
+## every level multiplies health and attack by it instead of adding
+## `upgrade_stat_per_level`.
+@export var upgrade_cost_base: float = 30.0
+@export var upgrade_cost_growth: float = 0.0
+@export var upgrade_max_level: int = 5
+@export var upgrade_stat_growth: float = 0.0
 
 @export_group("Summons")
 ## The boss's adds: one original minion shape, scaled per phase by the phase's

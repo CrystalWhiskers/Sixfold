@@ -99,6 +99,18 @@ func next_passive_in() -> float:
 
 # --- Prices -------------------------------------------------------------------
 
+func next_income_gain() -> float:
+	## What the next income upgrade adds: each one `income_step_growth` times the last.
+	return data.income_step * pow(maxf(data.income_step_growth, 0.0001), income_level)
+
+
+func stat_bump(lv: int) -> float:
+	## How much a unit type's health and attack are multiplied by at upgrade level `lv`.
+	if data.upgrade_stat_growth > 0.0:
+		return pow(data.upgrade_stat_growth, lv)
+	return 1.0 + data.upgrade_stat_per_level * float(lv)
+
+
 func income_maxed() -> bool:
 	return data.income_max_level > 0 and income_level >= data.income_max_level
 
@@ -119,6 +131,8 @@ func level_of(id: StringName) -> int:
 
 
 func max_level() -> int:
+	if data.upgrade_cost_growth > 0.0:
+		return maxi(data.upgrade_max_level, 1)
 	return data.upgrade_costs.size()
 
 
@@ -127,6 +141,8 @@ func upgrade_price(id: StringName) -> float:
 	var lv := level_of(id)
 	if lv >= max_level():
 		return INF
+	if data.upgrade_cost_growth > 0.0:
+		return roundf(data.upgrade_cost_base * pow(data.upgrade_cost_growth, lv))
 	return data.upgrade_costs[lv]
 
 
@@ -155,8 +171,8 @@ func recruit(section: int) -> bool:
 func upgrade_income() -> bool:
 	if not _pay(income_price()):
 		return false
+	income += next_income_gain()
 	income_level += 1
-	income += data.income_step
 	return true
 
 
@@ -196,7 +212,7 @@ func field_data_at(d: UnitData, lv: int) -> UnitData:
 	var out: UnitData = d.duplicate()
 	if d.ability != null:
 		out.ability = d.ability.duplicate()
-	var bump := 1.0 + data.upgrade_stat_per_level * float(lv)
+	var bump := stat_bump(lv)
 	out.max_hp = d.max_hp * bump
 	out.attack_damage = d.attack_damage * bump
 	if data.upgrades != null:
@@ -237,6 +253,9 @@ func level_changes(d: UnitData, lv: int) -> PackedStringArray:
 		var a = obj_a.get(field)
 		var b = obj_b.get(field)
 		if a == null or b == null:
+			continue
+		if typeof(a) == typeof(b) and a == b:
+			# Past Lv5 the ability table holds still; only health and attack grow.
 			continue
 		out.append(describe_change(field, a, b, k.begins_with("u.") and k.ends_with("*"),
 			d.get(field) if k.begins_with("u.") else null))

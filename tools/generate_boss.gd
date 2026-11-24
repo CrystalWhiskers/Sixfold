@@ -167,8 +167,8 @@ func _upgrades() -> BossUpgrades:
 		&"culverin": _lv({"a.shell_arm": [1, 2, 2, 3, 4], "a.field_seconds": [6.0, 7.0, 8.0, 9.0, 12.0],
 			"u.mana_per_attack*": [1.1, 1.2, 1.3, 1.4, 1.6]}),
 		# Siphon: drinks faster, and keeps more of what it takes.
-		&"leech": _lv({"a.drain_percent_per_tier": [0.006, 0.007, 0.008, 0.01, 0.015],
-			"u.lifesteal": [0.3, 0.35, 0.4, 0.45, 0.6],
+		&"leech": _lv({"a.drain_percent_per_tier": [0.005, 0.0055, 0.006, 0.007, 0.009],
+			"u.lifesteal": [0.25, 0.27, 0.29, 0.32, 0.38],
 			"u.attack_speed*": [1.05, 1.1, 1.15, 1.2, 1.3]}),
 		# Usurpation: holds its host longer.
 		&"usurper": _lv({"a.possess_seconds_per_tier": [3.0, 3.5, 4.0, 4.5, 6.0],
@@ -188,7 +188,8 @@ func _upgrades() -> BossUpgrades:
 			"u.move_time*": [0.95, 0.9, 0.85, 0.8, 0.7]}),
 		# Lament: calls back more of the fallen, at fuller health.
 		&"vigil": _lv({"a.raise_per_tier": [1, 2, 2, 3, 4], "a.raise_hp_percent": [0.9, 0.95, 1.0, 1.0, 1.0],
-			"u.attack_speed*": [1.05, 1.1, 1.15, 1.2, 1.3]}),
+			# And at its last level it grows sturdier itself.
+			"u.max_hp*": [1.0, 1.0, 1.0, 1.0, 1.5]}),
 		# Last Stand: pulls from further, and holds longer.
 		&"paragon": _lv({"a.taunt_radius": [3, 4, 4, 5, 6], "a.taunt_duration": [4.5, 5.0, 5.5, 6.0, 8.0],
 			"u.mana_per_attack*": [1.1, 1.2, 1.3, 1.4, 1.6]}),
@@ -288,6 +289,15 @@ func _initialize() -> void:
 	b.recruit_growth = 1.0
 	b.upgrade_costs = PackedFloat32Array([30, 50, 80, 120, 180])
 	b.upgrade_stat_per_level = 0.15
+	# Exponential upgrades: up to Lv10, each level x1.7 the price of the last and x1.2
+	# health and attack (Lv5 x2.5, Lv10 x6.2). The ability table tops out at Lv5.
+	b.upgrade_cost_base = 30.0
+	b.upgrade_cost_growth = 1.7
+	b.upgrade_max_level = 10
+	b.upgrade_stat_growth = 1.2
+	# Income: no cap, each upgrade x1.5 the last one's gain (+2, +3, +4.5...).
+	b.income_max_level = 0
+	b.income_step_growth = 1.5
 	b.start_draws = 6
 	b.section_cols = 3
 	b.section_rows = 4
