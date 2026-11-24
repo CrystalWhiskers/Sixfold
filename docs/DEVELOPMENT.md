@@ -3380,7 +3380,7 @@ board's merge lottery), onto anything else to swap. Supply ticks up in real time
 | | Cost | Effect |
 |---|---|---|
 | Recruit | 10, then +2 per recruit (10, 12, 14...) | a random tier-1 draw from your loadout into that section |
-| Income | 30, x1.6 per upgrade | +2 Supply a second (from a base of 4) |
+| Income | 30, x1.6 per upgrade, at most 9 (`income_max_level`) | +2 Supply a second (from a base of 4) |
 | Unit upgrade | 30 / 50 / 80 / 120 / 180 | one unit TYPE up a level, Lv1-Lv5: its own ability grows (table below) and +15% health and attack per level |
 
 You start with 20 Supply and six free draws. The upgrade bar along the bottom of the

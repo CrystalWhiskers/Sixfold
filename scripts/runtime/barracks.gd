@@ -99,7 +99,14 @@ func next_passive_in() -> float:
 
 # --- Prices -------------------------------------------------------------------
 
+func income_maxed() -> bool:
+	return data.income_max_level > 0 and income_level >= data.income_max_level
+
+
 func income_price() -> float:
+	## The price of the next income upgrade, or INF once the last has been bought.
+	if income_maxed():
+		return INF
 	return data.income_cost * pow(data.income_growth, income_level)
 
 

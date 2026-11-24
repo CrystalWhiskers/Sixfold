@@ -13514,6 +13514,17 @@ func _test_boss_defence() -> void:
 		"%.0f then %.0f" % [price, b.income_price()])
 	b.supply = price - 1.0
 	_check("and it, too, cannot be bought on credit", not b.upgrade_income())
+	var ib := Barracks.new()
+	ib.setup(data, load("res://data/loadouts/starter.tres") as LoadoutData, 9)
+	ib.supply = 1.0e9
+	var bought := 0
+	for i in 20:
+		if ib.upgrade_income():
+			bought += 1
+	_check("income upgrades stop at %d" % data.income_max_level,
+		bought == data.income_max_level and ib.income_maxed() and is_inf(ib.income_price())
+		and is_equal_approx(ib.income, data.base_income + data.income_step * data.income_max_level),
+		"%d bought, %.0f/s" % [bought, ib.income])
 	b.supply = 1000.0
 	var r_price := b.recruit_price()
 	b.recruit(0)

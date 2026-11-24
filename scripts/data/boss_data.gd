@@ -49,6 +49,8 @@ extends Resource
 @export var income_step: float = 1.0
 @export var income_cost: float = 30.0
 @export var income_growth: float = 1.6
+## The most income upgrades that can be bought. 0 for no limit.
+@export var income_max_level: int = 9
 ## Passive growth: every `passive_income_every` seconds of the fight, income rises by
 ## `passive_income` on its own, with nothing bought — so the longer you hold, the more
 ## you have to answer her enrage with. 0 for none.

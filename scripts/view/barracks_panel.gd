@@ -93,8 +93,9 @@ func refresh() -> void:
 	var grow := barracks.next_passive_in()
 	_header.text = "BARRACKS   Supply %d   (+%.0f/s%s)" % [floori(barracks.supply), barracks.income,
 		("  ·  +%.0f in %ds" % [barracks.data.passive_income, ceili(grow)]) if not is_inf(grow) else ""]
-	_income_btn.text = "Income +%.0f/s  (%d)" % [barracks.data.income_step,
-		ceili(barracks.income_price())]
+	_income_btn.text = ("Income MAX  (%d/%d)" % [barracks.income_level, barracks.data.income_max_level]
+		if barracks.income_maxed() else "Income +%.0f/s  (%d)  %d/%d" % [barracks.data.income_step,
+		ceili(barracks.income_price()), barracks.income_level, barracks.data.income_max_level])
 	_income_btn.disabled = barracks.supply < barracks.income_price()
 	for s in Barracks.SECTIONS:
 		_recruit_btns[s].text = "Recruit\n%d" % ceili(barracks.recruit_price())
