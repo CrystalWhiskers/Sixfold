@@ -30,6 +30,9 @@ var types: Array[UnitData] = []
 var level: Dictionary = {}
 ## Goes up on every upgrade, so whoever holds units of an upgraded type can notice.
 var revision := 0
+## How far the ability table runs: Lv10 (carrying each unit's Lv4->Lv5 step on), or
+## Lv5 and no further, past which only health and attack grow. Settings decides.
+var ability_cap := 10
 
 var _loadout: LoadoutData = null
 var _rng := RandomNumberGenerator.new()
@@ -216,7 +219,7 @@ func field_data_at(d: UnitData, lv: int) -> UnitData:
 	out.max_hp = d.max_hp * bump
 	out.attack_damage = d.attack_damage * bump
 	if data.upgrades != null:
-		var vals := data.upgrades.level_values(d.id, lv)
+		var vals := data.upgrades.level_values(d.id, lv, ability_cap)
 		for raw in vals:
 			var k := String(raw)
 			var value = vals[raw]
@@ -242,7 +245,7 @@ func level_changes(d: UnitData, lv: int) -> PackedStringArray:
 		return out
 	var before := field_data_at(d, lv - 1)
 	var after := field_data_at(d, lv)
-	var vals := data.upgrades.level_values(d.id, lv)
+	var vals := data.upgrades.level_values(d.id, lv, ability_cap)
 	for raw in vals:
 		var k := String(raw)
 		var field := k.substr(2).trim_suffix("*")

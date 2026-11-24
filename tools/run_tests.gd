@@ -13675,7 +13675,16 @@ func _test_boss_defence() -> void:
 	_check("prices and health both grow exponentially",
 		is_equal_approx(lv_prices[1] / lv_prices[0], data.upgrade_cost_growth) or absf(lv_prices[1] / lv_prices[0] - data.upgrade_cost_growth) < 0.05,
 		str(lv_prices))
-	var top := ub.field_data(lancer)
+	var top := ub.field_data_at(lancer, 5)
+	var ten := ub.field_data_at(lancer, 10)
+	_check("past Lv5 the ability keeps growing the way it was going, to Lv10",
+		ten.pierce_targets > top.pierce_targets, "%d -> %d" % [top.pierce_targets, ten.pierce_targets])
+	ub.ability_cap = BossUpgrades.MAX_LEVEL
+	ub._field_cache.clear()
+	_check("and with the setting off it stops at Lv5",
+		ub.field_data_at(lancer, 10).pierce_targets == top.pierce_targets)
+	ub.ability_cap = 10
+	ub._field_cache.clear()
 	_check("a Lv5 Lancer pierces 7 deep, where it started at 2",
 		lancer.pierce_targets == 2 and top.pierce_targets == 7,
 		"%d -> %d" % [lancer.pierce_targets, top.pierce_targets])
@@ -13685,7 +13694,7 @@ func _test_boss_defence() -> void:
 	for u in usim._units:
 		if u.is_alive() and u.data.id == &"lancer":
 			fielded += 1
-			all_upgraded = all_upgraded and u.data.pierce_targets == 7
+			all_upgraded = all_upgraded and u.data.pierce_targets == ten.pierce_targets
 	_check("an upgrade reaches every copy already on the field", fielded == 2 and all_upgraded,
 		"%d lancers" % fielded)
 	ubf.send_wave()
@@ -13693,7 +13702,7 @@ func _test_boss_defence() -> void:
 	var fresh_ok := true
 	for u in usim._pending_units + usim._units:
 		if u.is_alive() and u.data.id == &"lancer":
-			fresh_ok = fresh_ok and u.data.pierce_targets == 7
+			fresh_ok = fresh_ok and u.data.pierce_targets == ten.pierce_targets
 	_check("and every wave after it", fresh_ok)
 	BoardModel.reset_map()
 	# Every unit in the roster has five levels, and every level changes its ability.

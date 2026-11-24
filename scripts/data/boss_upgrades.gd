@@ -24,13 +24,32 @@ func has_unit(id: StringName) -> bool:
 	return levels.has(id)
 
 
-func level_values(id: StringName, level: int) -> Dictionary:
+func level_values(id: StringName, level: int, cap := MAX_LEVEL) -> Dictionary:
+	## A level's values. Past the written table (Lv5) and up to `cap`, each number
+	## carries on the way it was going from Lv4 to Lv5, one step per level — so Lv10 is
+	## five more of the last step. A number that was falling is not let below half its
+	## Lv5 value, and a chance never above 1.
 	if level <= 0 or not levels.has(id):
 		return {}
 	var rows: Array = levels[id]
 	if rows.is_empty():
 		return {}
-	return rows[clampi(level, 1, rows.size()) - 1]
+	if level <= rows.size() or cap <= rows.size() or rows.size() < 2:
+		return rows[clampi(level, 1, rows.size()) - 1]
+	var past := mini(level, cap) - rows.size()
+	var last: Dictionary = rows[rows.size() - 1]
+	var before: Dictionary = rows[rows.size() - 2]
+	var out := {}
+	for key in last:
+		var v = last[key]
+		var step := float(v) - float(before.get(key, v))
+		var x := float(v) + step * float(past)
+		if step < 0.0:
+			x = maxf(x, float(v) * 0.5)
+		if String(key).contains("chance"):
+			x = minf(x, 1.0)
+		out[key] = roundi(x) if v is int else x
+	return out
 
 
 func describe(id: StringName, level: int) -> String:

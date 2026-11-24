@@ -31,6 +31,7 @@ var _interrupted := ""
 var _portrait_button: Button = null
 var _tier_button: Button = null
 var _army_button: Button = null
+var _ability_button: Button = null
 var _volume_slider: HSlider = null
 var _volume_label: Label = null
 
@@ -597,7 +598,7 @@ func _build_army_limit_toggle() -> Control:
 	var box := VBoxContainer.new()
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.add_theme_constant_override("separation", 6)
-	box.add_child(_heading("Boss defence: army size on the field"))
+	box.add_child(_heading("Boss defence: army size on the field, ability upgrades"))
 	_army_button = Button.new()
 	_army_button.custom_minimum_size = Vector2(PANEL_WIDTH * 0.52, 34.0)
 	_army_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -608,6 +609,16 @@ func _build_army_limit_toggle() -> Control:
 		GameSetup.boss_army_limit = not GameSetup.boss_army_limit
 		_refresh_army_limit())
 	box.add_child(_army_button)
+	_ability_button = Button.new()
+	_ability_button.custom_minimum_size = Vector2(PANEL_WIDTH * 0.52, 34.0)
+	_ability_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_ability_button.add_theme_font_size_override("font_size", 15)
+	_ability_button.toggle_mode = true
+	_ability_button.pressed.connect(Audio.play_confirm)
+	_ability_button.pressed.connect(func():
+		GameSetup.boss_ability_lv10 = not GameSetup.boss_ability_lv10
+		_refresh_army_limit())
+	box.add_child(_ability_button)
 	_refresh_army_limit()
 	return box
 
@@ -620,3 +631,9 @@ func _refresh_army_limit() -> void:
 	_army_button.button_pressed = not on
 	_army_button.add_theme_color_override("font_color",
 		Color(0.86, 0.90, 0.96) if not on else Color(0.48, 0.52, 0.60))
+	if _ability_button != null:
+		var ten := GameSetup.boss_ability_lv10
+		_ability_button.text = "Ability upgrades to Lv10" if ten else "Ability upgrades stop at Lv5"
+		_ability_button.button_pressed = ten
+		_ability_button.add_theme_color_override("font_color",
+			Color(0.86, 0.90, 0.96) if ten else Color(0.48, 0.52, 0.60))

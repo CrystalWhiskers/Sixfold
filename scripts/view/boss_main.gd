@@ -100,6 +100,7 @@ func _ready() -> void:
 	fight.place_structures(board, boss_data)
 	barracks = Barracks.new()
 	barracks.setup(boss_data, GameSetup.loadout_for(BoardModel.TEAM_B), _rng.seed)
+	barracks.ability_cap = 10 if GameSetup.boss_ability_lv10 else BossUpgrades.MAX_LEVEL
 
 	_view = BoardView.new()
 	_view.player_team = BoardModel.TEAM_B
