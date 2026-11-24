@@ -1383,6 +1383,11 @@ func minions_alive() -> int:
 
 func _tick_summons() -> void:
 	var p := _phase()
+	if data.swarm_kind != null and data.swarm_every > 0.0 and boss.is_alive():
+		swarm_left -= CombatSim.TICK
+		if swarm_left <= 0.0:
+			swarm_left += data.swarm_every
+			_swarm()
 	if p != null and p.summon_every > 0.0 and boss.is_alive():
 		summon_left -= CombatSim.TICK
 		if summon_left <= 0.0:
@@ -1475,6 +1480,49 @@ func _refresh_ward() -> void:
 
 
 var _pool_n := 0
+## Seconds until her next swarm of fodder.
+var swarm_left := 30.0
+
+
+func _free_tile_near(want: Vector2i, taken: Array[Vector2i]) -> Vector2i:
+	## The free field tile (below the hub) nearest `want`, not already in `taken`.
+	for r in 6:
+		var best := NO_AIM
+		var best_d := 1 << 30
+		for dy in range(-r, r + 1):
+			for dx in range(-r, r + 1):
+				if maxi(absi(dx), absi(dy)) != r:
+					continue
+				var c := want + Vector2i(dx, dy)
+				if c.y < HUB_ROWS or not sim.board.in_bounds(c) or not sim.board.is_empty(c):
+					continue
+				if BoardModel.is_blocked(c) or taken.has(c):
+					continue
+				var d := absi(dx) + absi(dy)
+				if d < best_d:
+					best = c
+					best_d = d
+		if best != NO_AIM:
+			return best
+	return NO_AIM
+
+
+func _swarm() -> void:
+	## A crowd of fodder at once, in circles spread round her.
+	var cells: Array[Vector2i] = []
+	for i in data.swarm_count:
+		var ang := TAU * float(i) / float(maxi(data.swarm_count, 1))
+		var r := 2.0 + float(i % 3)
+		var want := boss.cell + Vector2i(roundi(cos(ang) * r), roundi(sin(ang) * r) + 3)
+		var c := _free_tile_near(want, cells)
+		if c == NO_AIM:
+			continue
+		cells.append(c)
+		_summon_marks.append({cell = c, left = data.summon_warning, power = 1.0,
+			kind = data.swarm_kind})
+	if not cells.is_empty():
+		sim._emit("boss_summon", {uid = boss.uid, cells = cells, seconds = data.summon_warning,
+			cell = boss.cell, swarm = true})
 ## uid -> how one of her summons picks its target (BossMinion.Targeting).
 var _targeting: Dictionary = {}
 

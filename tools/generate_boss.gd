@@ -388,6 +388,12 @@ func _initialize() -> void:
 	berserker.targeting = BossMinion.Targeting.CROWD
 	berserker.cleave_radius = 1
 	b.summon_pool = [shade, hunter, shade, berserker, thorn] as Array[BossMinion]
+	# Fodder: weak bodies, a crowd of fourteen every forty seconds.
+	var thrall := _minion(&"thrall", "Crimson Thrall", 120.0, 12.0, 1.0, 0.6, 1,
+		Color(0.55, 0.12, 0.12))
+	b.swarm_kind = thrall
+	b.swarm_every = 40.0
+	b.swarm_count = 14
 	var retreat := _move(&"crimson_retreat", "Crimson Retreat", S.RETREAT, 0, 0, 0.0, 0.5)
 	retreat.windup = 1.5
 	retreat.retreat_summons = [shade, shade, hunter, berserker, thorn, thorn, chalice, chalice] as Array[BossMinion]

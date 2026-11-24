@@ -97,6 +97,12 @@ extends Resource
 ## phase after, and one more for every two enrage surges — up to tier 6.
 @export var summon_pool: Array[BossMinion] = []
 @export var minion_base_tier: int = 1
+## Fodder: every `swarm_every` seconds she calls `swarm_count` of `swarm_kind` at once —
+## weak bodies in a crowd, to soak blows and clog the field. Not held to the ordinary
+## cap. 0 seconds for none.
+@export var swarm_kind: BossMinion = null
+@export var swarm_every: float = 0.0
+@export var swarm_count: int = 12
 ## A shade arrives with a blast: this many of its own hits to every one of the army
 ## standing within `minion_burst_radius` tiles of the circle. 0 for a quiet arrival.
 @export var minion_burst_mult: float = 0.0

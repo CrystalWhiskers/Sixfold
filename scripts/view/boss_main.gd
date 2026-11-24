@@ -375,7 +375,7 @@ func _on_event(e: Dictionary) -> void:
 			_stance_need = 0.0
 			_status.text = "%s is empowered — and lets loose!" % boss_data.display_name
 		"boss_summon":
-			_status.text = "%s calls her shades — stay out of the circles!" % boss_data.display_name
+			_status.text = ("%s calls a swarm of thralls!" if bool(e.get("swarm", false)) else "%s calls her shades — stay out of the circles!") % boss_data.display_name
 		"boss_retreat":
 			_status.text = "%s retreats to heal and calls everything she has — she takes %d%% more damage now. Hit her!" % [
 				boss_data.display_name, roundi(float(e.vulnerability) * 100.0)]

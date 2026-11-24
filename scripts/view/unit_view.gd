@@ -103,10 +103,11 @@ const THORN_ID := &"scarlet_thorn"
 const CHALICE_ID := &"blood_chalice"
 const HEADHUNTER_ID := &"headhunter"
 const BERSERKER_ID := &"berserker"
+const THRALL_ID := &"thrall"
 
 
 static func is_summon_icon(id: StringName) -> bool:
-	return id in [SHADE_ID, THORN_ID, CHALICE_ID, HEADHUNTER_ID, BERSERKER_ID]
+	return id in [SHADE_ID, THORN_ID, CHALICE_ID, HEADHUNTER_ID, BERSERKER_ID, THRALL_ID]
 
 
 func _draw_summon_tier(body: Rect2, alpha: float) -> void:
@@ -136,6 +137,21 @@ func _draw_headhunter(body: Rect2, alpha: float) -> void:
 	for dir in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
 		draw_line(c + dir * s * 0.25, c + dir * s * 0.8, red, maxf(s * 0.08, 1.5))
 	draw_circle(c, s * 0.1, Color(1.0, 0.85, 0.6, alpha))
+
+
+func _draw_thrall(body: Rect2, alpha: float) -> void:
+	## Crimson Thrall, her fodder: a small horned head, two pinprick eyes — one of many.
+	var c := body.get_center() + Vector2(0, body.size.y * 0.05)
+	var s := body.size.x * 0.5 * 0.75
+	var skin := Color(0.45, 0.08, 0.10, 0.95 * alpha)
+	for side in [-1.0, 1.0]:
+		draw_colored_polygon(PackedVector2Array([c + Vector2(0.35 * side, -0.45) * s,
+			c + Vector2(0.75 * side, -1.05) * s, c + Vector2(0.6 * side, -0.25) * s]),
+			Color(0.85, 0.75, 0.6, alpha))
+	draw_circle(c, s * 0.7, skin)
+	for side in [-1.0, 1.0]:
+		draw_circle(c + Vector2(0.25 * side, -0.1) * s, s * 0.1, Color(1.0, 0.85, 0.3, alpha))
+	draw_line(c + Vector2(-0.25, 0.3) * s, c + Vector2(0.25, 0.3) * s, Color(0.1, 0, 0, alpha), maxf(s * 0.08, 1.0))
 
 
 func _draw_berserker(body: Rect2, alpha: float) -> void:
@@ -888,6 +904,9 @@ func _draw() -> void:
 		_draw_summon_tier(body, alpha)
 	elif unit.data.id == BERSERKER_ID:
 		_draw_berserker(body, alpha)
+		_draw_summon_tier(body, alpha)
+	elif unit.data.id == THRALL_ID:
+		_draw_thrall(body, alpha)
 		_draw_summon_tier(body, alpha)
 	else:
 		# Its short name, not an initial: with seven units starting "S" a single

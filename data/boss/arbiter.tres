@@ -501,6 +501,15 @@ span = 3
 damage_mult = 3.5
 windup = 1.5
 
+[sub_resource type="Resource" id="Resource_o2ewg"]
+script = ExtResource("3_xxu2h")
+id = &"thrall"
+display_name = "Crimson Thrall"
+max_hp = 120.0
+attack_damage = 12.0
+move_time = 0.6
+accent = Color(0.55, 0.12, 0.12, 1)
+
 [resource]
 script = ExtResource("4_78baq")
 id = &"arbiter"
@@ -525,6 +534,9 @@ minion_hp = 420.0
 minion_attack = 35.0
 minion_cap = 16
 summon_pool = Array[ExtResource("3_xxu2h")]([SubResource("Resource_u30k6"), SubResource("Resource_w30pm"), SubResource("Resource_u30k6"), SubResource("Resource_3eth5"), SubResource("Resource_ritdj")])
+swarm_kind = SubResource("Resource_o2ewg")
+swarm_every = 40.0
+swarm_count = 14
 minion_burst_mult = 2.5
 minion_ward_per_shade = 0.06
 max_hit_percent = 0.012

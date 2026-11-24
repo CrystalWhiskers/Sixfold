@@ -14420,6 +14420,20 @@ func _test_boss_attacks(data: BossData) -> void:
 					and m.windup <= 0.0:
 				stepping += 1
 				break
+	var sw := _boss_board()
+	var bfs: BossFight = sw.bf
+	var sims: CombatSim = sw.sim
+	bfs._swarm()
+	for i in int((data.summon_warning + 0.2) / CombatSim.TICK):
+		sims.step()
+	var thralls := 0
+	for u in sims._units:
+		if u.is_alive() and u.data.id == &"thrall":
+			thralls += 1
+	_check("now and then she calls a swarm of weak fodder, far past her ordinary cap",
+		data.swarm_kind != null and data.swarm_kind.max_hp < data.minion_hp and thralls >= 8
+		and thralls > 0, "%d thralls" % thralls)
+	BoardModel.reset_map()
 	_check("every phase has a quick short dash that just moves her",
 		stepping == data.phases.size(), "%d of %d phases" % [stepping, data.phases.size()])
 	var s := _boss_board([["warden", "warden", "warden", "warden", "warden", "warden"], [], []])
