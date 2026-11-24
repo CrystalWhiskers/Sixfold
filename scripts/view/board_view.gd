@@ -46,6 +46,9 @@ var _flashes: Array[Dictionary] = []
 ## a mana aura lasts from the cast until the caster dies, so it is keyed by uid
 ## and removed by name rather than counted down.
 var _aura_zones: Dictionary = {}
+## The ability icons and shapes, on their own node so they draw ABOVE the units.
+## Made on first use — see effects().
+var _fx: AbilityFx = null
 var _floaters: Array[Dictionary] = []
 var _shots: Array[Dictionary] = []
 var _beams: Array[Dictionary] = []
@@ -265,6 +268,8 @@ func rebuild() -> void:
 	_floaters.clear()
 	_shots.clear()
 	_beams.clear()
+	if _fx != null:
+		_fx.clear()
 	if board == null:
 		return
 	for u in board.all_units():
@@ -487,6 +492,17 @@ func _draw_rings() -> void:
 		var a := 1.0 - t
 		draw_arc(r.pos, radius, 0.0, TAU, 48, Color(COL_RING, 0.95 * a), 6.0 * a + 2.0)
 		draw_arc(r.pos, radius * 0.82, 0.0, TAU, 40, Color(1, 1, 1, 0.45 * a), 2.0)
+
+
+func effects() -> AbilityFx:
+	## The layer ability icons are drawn on. Kept in step with the tile size every
+	## time it is asked for, so a zoom between two casts cannot leave it drawing
+	## icons for a board of a different size.
+	if _fx == null or not is_instance_valid(_fx):
+		_fx = AbilityFx.new()
+		add_child(_fx)
+	_fx.tile_size = tile_size
+	return _fx
 
 
 func flash_cells(cells: Array, color: Color, duration: float) -> void:

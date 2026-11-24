@@ -4354,6 +4354,11 @@ func _finish(reason: String) -> void:
 
 func _emit(kind: String, payload: Dictionary) -> void:
 	payload["t"] = elapsed
+	# An "ability" event names the ability's own kind in `kind` too, and the event type
+	# below overwrites it. Kept under its own key first: without it the view read
+	# int("ability"), which is 0, and drew every ability in the game as a Haste.
+	if payload.has("kind") and not payload.has("ability_kind"):
+		payload["ability_kind"] = payload["kind"]
 	payload["kind"] = kind
 	events.append(payload)
 

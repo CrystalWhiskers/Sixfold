@@ -11,14 +11,50 @@ extends SceneTree
 ## So the count itself is asserted. If it drops, something died quietly and the
 ## run says so. Raise this when you add tests — it is a ratchet, and the number
 ## only ever goes up.
+##
+## It is a backstop now, not the guard. It only works if somebody remembers to raise
+## it, and nobody did: it sat at 2555 while the suite grew past 2600, so when three
+## Powderkeg tests died in one sitting the run was still a hundred checks above the
+## floor and reported green. The ErrorWatch below is what actually catches it.
 const MIN_CHECKS := 2766
+
+## Counts runtime script errors while the suite runs, and fails the run if there are
+## any.
+##
+## A runtime error aborts the one test function it happens in and hands control back
+## to _initialize, which carries on to the next test — so the run completes, prints a
+## total, and that total is green. Godot does report the error, but only as a line in
+## the log that scrolls past; nothing in the suite ever sees it. A Logger registered
+## with the engine sees every error as it happens, which turns "scroll up and look for
+## SCRIPT ERROR" into a failure the run reports on its own.
+##
+## Only RUNTIME script errors are counted — the ones with a backtrace. Running this
+## file in --script mode also compiles the View-layer scripts, which reference
+## autoloads that do not exist outside the game and fail to compile; those errors
+## have no backtrace, predate this guard, and are not a test dying.
+class ErrorWatch extends Logger:
+	var count := 0
+	var first := ""
+
+	func _log_error(_function: String, file: String, line: int, code: String,
+			rationale: String, _editor_notify: bool, error_type: int,
+			script_backtraces: Array[ScriptBacktrace]) -> void:
+		if error_type != ERROR_TYPE_SCRIPT or script_backtraces.is_empty():
+			return
+		count += 1
+		if first.is_empty():
+			first = "%s (%s:%d)" % [rationale if not rationale.is_empty() else code,
+				file.get_file(), line]
+
 
 var _passed := 0
 var _failed := 0
 var _loadout: LoadoutData
+var _watch := ErrorWatch.new()
 
 
 func _initialize() -> void:
+	OS.add_logger(_watch)
 	_loadout = load("res://data/loadouts/starter.tres") as LoadoutData
 	if _loadout == null:
 		push_error("Run tools/generate_data.gd first.")
@@ -177,6 +213,7 @@ func _initialize() -> void:
 	_test_this_pass()
 	_test_boss_defence()
 	_test_boss_music()
+	_test_every_ability_has_an_icon()
 	_test_mirror_matchup_is_fair()
 
 	var ran := _passed + _failed
@@ -185,6 +222,12 @@ func _initialize() -> void:
 		print("\n  FAIL  only %d checks ran, expected at least %d — a test almost"
 			% [ran, MIN_CHECKS])
 		print("        certainly died partway through. Scroll up for a SCRIPT ERROR.")
+	if _watch.count > 0:
+		_failed += 1
+		print("\n  FAIL  %d runtime script error(s) during the run — each one killed a"
+			% _watch.count)
+		print("        test partway through and skipped every check after it.")
+		print("        First: %s" % _watch.first)
 	print("\n%d passed, %d failed" % [_passed, _failed])
 	if _failed > 0:
 		print("FAILURES PRESENT")
@@ -975,8 +1018,14 @@ func _test_buff_data() -> void:
 	_section("Buff data")
 
 	var pool := _pool()
-	_check("every buff on disk loaded", pool.buffs.size() == 52,
-		"loaded %d, expected 52" % pool.buffs.size())
+	# Counted from the table that BUILDS them rather than pinned to a literal. The
+	# literal version failed the moment a buff was added, which taught nothing except
+	# that a buff had been added — what is worth asserting is that everything the
+	# builder emits is everything the pool finds, so a row that fails to load is
+	# caught and a row that is deliberately added is not.
+	var expected_buffs := DataBuilder.BUFF_TABLE.size()
+	_check("every buff on disk loaded", pool.buffs.size() == expected_buffs,
+		"loaded %d, the builder writes %d" % [pool.buffs.size(), expected_buffs])
 
 	var ids := {}
 	var missing: PackedStringArray = []
@@ -1702,8 +1751,17 @@ func _test_new_units() -> void:
 		roster != null and roster.is_valid())
 	if roster == null:
 		return
-	_check("thirty-four unit types are pickable", roster.units.size() == 34,
-		"%d in the roster" % roster.units.size())
+	# Derived, not pinned. The roster is every unit row that is not `hidden` — the
+	# hidden ones being things like the Sentry and the Wisp, which exist only because
+	# something else summons them and must never appear in a draw. Counting the table
+	# asserts exactly that rule, and keeps asserting it when a unit is added.
+	var pickable := 0
+	for row in DataBuilder.UNIT_TABLE:
+		if not row.get("hidden", false):
+			pickable += 1
+	_check("every unbidden unit type is pickable and no summon is",
+		roster.units.size() == pickable,
+		"%d in the roster, %d unhidden rows" % [roster.units.size(), pickable])
 	# Ids are file names, so a duplicate means one row quietly overwrites another
 	# and the roster is short without anything reporting it.
 	var seen_ids := {}
@@ -14062,3 +14120,70 @@ func _mix(s: AudioStream, at: float, n: int) -> PackedVector2Array:
 
 func _audio_script() -> GDScript:
 	return load("res://autoload/audio.gd") as GDScript
+
+
+func _test_every_ability_has_an_icon() -> void:
+	_section("Every ability has an icon of its own")
+
+	# Its OWN, by id, not the by-kind fallback: the fallback is there so a new ability
+	# shows something on day one, not so it can ship without one. Read off the units
+	# rather than the abilities folder, which can hold a file no unit uses any more.
+	var unlisted: Array[String] = []
+	var dir := DirAccess.open("res://data/units")
+	var counted := {}
+	for f in dir.get_files():
+		if not f.ends_with(".tres"):
+			continue
+		var d := load("res://data/units/" + f) as UnitData
+		if d == null or d.ability == null or counted.has(d.ability.id):
+			continue
+		counted[d.ability.id] = true
+		if not AbilityFx.GLYPHS.has(d.ability.id):
+			unlisted.append(String(d.ability.id))
+	var seen := counted.size()
+	_check("there are abilities on disk", seen >= 20, "%d" % seen)
+	_check("and every one of them has its own icon", unlisted.is_empty(),
+		", ".join(unlisted))
+
+	# Every icon named anywhere is one the layer can actually draw. An unknown name
+	# falls through to a plain star, which would pass every other check and still be
+	# the wrong picture.
+	var unknown: Array[String] = []
+	for id in AbilityFx.GLYPHS:
+		var shape := String(AbilityFx.GLYPHS[id][0])
+		if not AbilityFx.SHAPES.has(shape):
+			unknown.append("%s -> %s" % [id, shape])
+	for k in AbilityData.Kind.values():
+		var shape := AbilityFx.glyph_for(&"", k)
+		if not AbilityFx.SHAPES.has(shape) or not AbilityFx.KIND_GLYPHS.has(k):
+			unknown.append("kind %d -> %s" % [k, shape])
+	_check("every icon named is one that can be drawn, and every kind has a fallback",
+		unknown.is_empty(), ", ".join(unknown))
+	_check("the Warden's is a shield", AbilityFx.glyph_of(_must_find("warden").ability)
+		== "shield", AbilityFx.glyph_of(_must_find("warden").ability))
+	_check("and the Lancer's is a spear", AbilityFx.glyph_of(_must_find("lancer").ability)
+		== "spear", AbilityFx.glyph_of(_must_find("lancer").ability))
+	_check("two abilities of one kind can look different",
+		AbilityFx.glyph_for(&"cinder_lance", AbilityData.Kind.FOCUS_BURST)
+		!= AbilityFx.glyph_for(&"execute", AbilityData.Kind.FOCUS_BURST))
+
+	# The layer itself: an icon arrives, lives for its span, and goes.
+	var fx := AbilityFx.new()
+	fx.glyph("shield", Vector2(10, 10), Color.WHITE, 0.5)
+	fx.lance(Vector2.ZERO, Vector2(0, -100), Color.WHITE, 0.5)
+	_check("an icon and a spear are queued", fx.count() == 2, "%d" % fx.count())
+	fx._process(0.3)
+	_check("still there part way through", fx.count() == 2, "%d" % fx.count())
+	fx._process(0.3)
+	_check("and gone once their time is up", fx.count() == 0, "%d" % fx.count())
+	_check("the layer draws above the units", fx.z_index > 0, "z %d" % fx.z_index)
+	fx.free()
+
+	# The sim end of it: an ability event says which KIND of ability it was. It used to
+	# lose that to the event type, so the view drew every ability as a Haste.
+	var sim := CombatSim.new()
+	sim._emit("ability", {uid = 1, ability = &"impale", kind = AbilityData.Kind.PIERCE})
+	var sent: Dictionary = sim.events[0]
+	_check("an ability event keeps the ability's kind",
+		sent.kind == "ability" and int(sent.get("ability_kind", -1)) == AbilityData.Kind.PIERCE,
+		"%s" % sent)

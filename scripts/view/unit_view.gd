@@ -31,7 +31,7 @@ const TIER_COLORS: Array[Color] = [
 ## happened when this was tried the other way round.
 ##
 ## GameSetup owns the SETTING and writes it down to here; this is where the
-## drawing reads it.
+## drawing reads it. Off by default, matching GameSetup.portraits.
 static var portraits_on := false
 
 

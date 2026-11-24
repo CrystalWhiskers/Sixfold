@@ -697,6 +697,7 @@ func _check_every_sound_loaded() -> void:
 	_check("and a crit is mixed above it", Audio.CRIT_DB > Audio.MELEE_DB)
 	_check_voice_lines()
 	_check_zoom_keeps_units_put()
+	_check_every_ability_shows_its_icon()
 	_music_checks_at_start = _main.music_checks
 
 
@@ -1794,3 +1795,165 @@ func _check_the_powderkeg_reaches_the_view() -> void:
 	player.queue_free()
 	view.queue_free()
 	BoardModel.clear_changes()
+
+
+func _icons_after(caster: UnitInstance, foes: Array[UnitInstance],
+		event: Dictionary) -> Array[Dictionary]:
+	## Plays one event through a real BattlePlayer and returns every effect it put on
+	## the icon layer. The effects themselves rather than pixels: a headless run draws
+	## nothing, but what is queued is exactly what would be drawn.
+	BoardModel.reset_map()
+	var model := BoardModel.new()
+	model.force_place(caster, caster.cell)
+	for f in foes:
+		model.force_place(f, f.cell)
+	var view := BoardView.new()
+	add_child(view)
+	view.fit_to(Rect2(Vector2.ZERO, Vector2(900, 700)))
+	view.bind(model)
+	var units := {}
+	var log: Array[Dictionary] = []
+	var everyone: Array[UnitInstance] = [caster]
+	everyone.append_array(foes)
+	for u in everyone:
+		view.ensure_view(u)
+		units[u.uid] = u
+		log.append({kind = "spawn", t = 0.0, uid = u.uid, cell = u.cell,
+			hp = 100.0, max_hp = 100.0, has_ability = true})
+	var e := event.duplicate()
+	e["t"] = 0.01
+	log.append(e)
+	log.append({kind = "counts", t = 999.0, a = 1, b = 1})
+	var player := BattlePlayer.new()
+	add_child(player)
+	player.play(view, log, units)
+	player._process(0.05)
+	var out: Array[Dictionary] = []
+	for fx in view.effects()._fx:
+		out.append(fx)
+	player.stop()
+	player.queue_free()
+	view.queue_free()
+	return out
+
+
+static func _cast(caster: UnitInstance, ab: AbilityData, extra: Dictionary) -> Dictionary:
+	## An "ability" event exactly as CombatSim._emit leaves it: the event type in
+	## `kind`, and the ability's own kind under `ability_kind`.
+	var e := {kind = "ability", ability = ab.id, ability_kind = ab.kind,
+		uid = caster.uid, cell = caster.cell}
+	e.merge(extra, true)
+	return e
+
+
+func _check_every_ability_shows_its_icon() -> void:
+	## Every ability in the game puts its own icon on the board when it happens — the
+	## shield over the Warden, the spear over the Lancer — so a player can see what just
+	## happened and to whom, not only a label saying something did.
+	var by_ability := {}
+	var dir := DirAccess.open("res://data/units")
+	for f in dir.get_files():
+		if not f.ends_with("_t1.tres"):
+			continue
+		var d := load("res://data/units/" + f) as UnitData
+		if d != null and d.ability != null and not by_ability.has(d.ability.id):
+			by_ability[d.ability.id] = d
+	_check("there are abilities on disk to check", by_ability.size() >= 20,
+		"%d" % by_ability.size())
+	var foe_data := load("res://data/units/warden_t1.tres") as UnitData
+	var missing: Array[String] = []
+	for id in by_ability:
+		var d: UnitData = by_ability[id]
+		var ab := d.ability
+		var caster := UnitInstance.create(d, BoardModel.TEAM_A)
+		caster.cell = Vector2i(2, 7)
+		var foe := UnitInstance.create(foe_data, BoardModel.TEAM_B)
+		foe.cell = Vector2i(2, 3)
+		var event := {}
+		# The passive ones never send an "ability" event; they show on their own.
+		match ab.kind:
+			AbilityData.Kind.REVIVE:
+				event = {kind = "respawn_start", uid = caster.uid, cell = caster.cell,
+					duration = 1.0}
+			AbilityData.Kind.FRENZY:
+				event = {kind = "frenzy", uid = caster.uid, cell = caster.cell, seconds = 2.0}
+			AbilityData.Kind.FUSE:
+				event = {kind = "fuse_lit", uid = caster.uid, cell = caster.cell, seconds = 1.5,
+					offsets = [Vector2i.ZERO], fleeing = []}
+			AbilityData.Kind.MEND:
+				var patient := UnitInstance.create(foe_data, BoardModel.TEAM_A)
+				patient.cell = Vector2i(2, 6)
+				foe = patient
+				event = {kind = "heal", uid = patient.uid, cell = patient.cell, amount = 5.0,
+					hp = 50.0, mend = true, source_uid = caster.uid, from = caster.cell}
+			AbilityData.Kind.CHARGE:
+				event = {kind = "charge", uid = caster.uid, from = caster.cell,
+					dir = Vector2i(0, -1), cells = [Vector2i(2, 6), Vector2i(2, 5)],
+					per_tile = 0.1}
+			_:
+				event = _cast(caster, ab, {target_uid = foe.uid, target_cell = foe.cell,
+					cells = [foe.cell], radius = 1})
+		var want := AbilityFx.glyph_for(ab.id, ab.kind)
+		var seen := false
+		for fx in _icons_after(caster, [foe], event):
+			if String(fx.type) == "glyph" and String(fx.shape) == want:
+				seen = true
+		if not seen:
+			missing.append("%s (%s)" % [id, want])
+	_check("every ability puts its own icon on the board when it happens",
+		missing.is_empty(), ", ".join(missing))
+
+	# The two that were asked for by name.
+	var warden := load("res://data/units/warden_t1.tres") as UnitData
+	var w := UnitInstance.create(warden, BoardModel.TEAM_A)
+	w.cell = Vector2i(2, 7)
+	var shield_icon := false
+	var shield_ring := false
+	for fx in _icons_after(w, [], _cast(w, warden.ability, {shield = 100.0})):
+		if String(fx.type) == "glyph" and String(fx.shape) == "shield":
+			shield_icon = true
+		if String(fx.type) == "ring":
+			shield_ring = true
+	_check("the Warden's shield flashes up over it", shield_icon and shield_ring,
+		"icon %s, ring %s" % [shield_icon, shield_ring])
+
+	var lancer := load("res://data/units/lancer_t1.tres") as UnitData
+	var l := UnitInstance.create(lancer, BoardModel.TEAM_A)
+	l.cell = Vector2i(2, 7)
+	var near := UnitInstance.create(foe_data, BoardModel.TEAM_B)
+	near.cell = Vector2i(2, 6)
+	var far := UnitInstance.create(foe_data, BoardModel.TEAM_B)
+	far.cell = Vector2i(2, 5)
+	var spear := {}
+	var hits := 0
+	var thrown := _icons_after(l, [near, far], _cast(l, lancer.ability, {
+		target_uid = near.uid, target_cell = near.cell,
+		cells = [near.cell, far.cell], amount = 10.0}))
+	for fx in thrown:
+		if String(fx.type) == "lance":
+			spear = fx
+		if String(fx.type) == "impact":
+			hits += 1
+	_check("the Lancer throws a spear", not spear.is_empty())
+	if not spear.is_empty():
+		# Straight up the column, and ending beyond the far enemy rather than on it: a
+		# spear that stops at the second body has not gone THROUGH it.
+		var from: Vector2 = spear.from
+		var to: Vector2 = spear.to
+		# The Lancer stands in the middle of column 2, so its x is two and a half tiles.
+		var tile: float = from.x / 2.5
+		var far_y: float = (float(far.cell.y) + 0.5) * tile
+		_check("and it runs from the Lancer through both enemies and out the far side",
+			absf(to.x - from.x) < 1.0 and to.y < far_y - tile * 0.3,
+			"from %s to %s, far enemy at y %.0f" % [from, to, far_y])
+	_check("with a hit marked on each of the two it went through", hits == 2,
+		"%d hits" % hits)
+
+	# The bug underneath all of it: the sim's ability events used to lose their
+	# ability kind, so the view drew every one of them as a Haste.
+	var sim := CombatSim.new()
+	sim._emit("ability", {uid = 1, ability = &"impale", kind = AbilityData.Kind.PIERCE})
+	var sent: Dictionary = sim.events[0]
+	_check("an ability event still carries which kind of ability it was",
+		sent.kind == "ability" and int(sent.get("ability_kind", -1)) == AbilityData.Kind.PIERCE,
+		"%s" % sent)
