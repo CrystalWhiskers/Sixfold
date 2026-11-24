@@ -25,6 +25,7 @@ var _drag_at := Vector2.ZERO
 var _header: Label = null
 var _income_btn: Button = null
 var _recruit_btns: Array[Button] = []
+var _merge_btns: Array[Button] = []
 var _type_btns: Array[Button] = []
 ## Where the upgrade bar starts, below the three sections.
 const BAR_Y := 230.0
@@ -53,6 +54,16 @@ func setup(p_barracks: Barracks) -> void:
 		r.pressed.connect(_on_recruit.bind(s))
 		add_child(r)
 		_recruit_btns.append(r)
+		# Merge every pair in the section in one press.
+		var m := Button.new()
+		m.position = Vector2(x, 106)
+		m.size = Vector2(SECTION_W - _grid_w() - 12.0, 34)
+		m.add_theme_font_size_override("font_size", 12)
+		m.text = "Merge
+pairs"
+		m.pressed.connect(_on_merge_all.bind(s))
+		add_child(m)
+		_merge_btns.append(m)
 	# The upgrade bar: one button per unit type in the loadout. A level reaches every
 	# copy of that unit — the ones fighting now and every wave after.
 	var n := maxi(barracks.types.size(), 1)
@@ -99,6 +110,12 @@ func refresh() -> void:
 		_income_btn.text = "Income +%s/s  (%d)  Lv%d" % [_amount(barracks.next_income_gain()),
 			ceili(barracks.income_price()), barracks.income_level]
 	_income_btn.disabled = barracks.supply < barracks.income_price()
+	for s in _merge_btns.size():
+		var pairs := false
+		for i in barracks.slot_count():
+			if barracks.has_twin(s, i) >= 0:
+				pairs = true
+		_merge_btns[s].disabled = not pairs
 	for s in Barracks.SECTIONS:
 		_recruit_btns[s].text = "Recruit\n%d" % ceili(barracks.recruit_price())
 		_recruit_btns[s].disabled = (barracks.supply < barracks.recruit_price()
@@ -145,6 +162,9 @@ func _draw() -> void:
 			if d == null or Vector2i(s, i) == _drag_from:
 				continue
 			_draw_unit(r, d)
+			if barracks.has_twin(s, i) >= 0:
+				# Has a twin in this section: lit gold, ready to merge.
+				draw_rect(r.grow(1.5), Color(1.0, 0.85, 0.35, 0.95), false, 2.0)
 	if _drag_from.x >= 0:
 		var d := barracks.at(_drag_from.x, _drag_from.y)
 		if d != null:
@@ -159,6 +179,18 @@ func _draw_unit(r: Rect2, d: UnitData) -> void:
 		# letters, the tier as a small number in the corner and a thin tier rim.
 		draw_rect(inner, d.accent, true)
 		draw_rect(inner, UnitView.tier_color(d.tier), false, 2.0)
+		if UnitView.tier_squares:
+			# The squares look: dark letters up top, a row of tier-coloured squares below.
+			draw_string(font, inner.position + Vector2(3, 13), UnitView.short_name(d),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0, 0, 0, 0.85))
+			var pip := minf(5.0, inner.size.x / (float(d.tier) * 1.75 + 0.25))
+			var x := inner.get_center().x - (float(d.tier) * pip + float(d.tier - 1) * pip * 0.75) * 0.5
+			for i in d.tier:
+				var sq := Rect2(x, inner.end.y - pip - 3.0, pip, pip)
+				draw_rect(sq.grow(1.0), Color(0, 0, 0, 0.8), true)
+				draw_rect(sq, UnitView.tier_ink(d.tier), true)
+				x += pip * 1.75
+			return
 		draw_string(font, inner.position + Vector2(3, inner.size.y - 8), UnitView.short_name(d),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0, 0, 0, 0.8))
 		draw_string(font, inner.position + Vector2(inner.size.x - 6, 7), str(d.tier),
@@ -167,7 +199,7 @@ func _draw_unit(r: Rect2, d: UnitData) -> void:
 	var ink := UnitView.tier_ink(d.tier)
 	# The plate a little darker than on the board, so the tier-coloured letters on it
 	# stand out; the rim in the same colour as the letters, heavier the higher it is.
-	draw_rect(inner, d.accent.lerp(Color(0.10, 0.11, 0.14), 0.6), true)
+	draw_rect(inner, d.accent, true)
 	draw_rect(inner, ink, false, 1.5 + 0.4 * float(d.tier))
 	var label := UnitView.short_name(d)
 	var fs := 12
@@ -190,6 +222,16 @@ func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		var at := slot_at(event.position)
 		if event.pressed:
+			if event.double_click and at.x >= 0 and barracks.has_twin(at.x, at.y) >= 0:
+				# Double-click a unit with a twin in its section: they merge, no dragging.
+				var twin := barracks.has_twin(at.x, at.y)
+				_drag_from = Vector2i(-1, -1)
+				if barracks.drop(at.x, at.y, at.x, twin) == "merged":
+					Audio.play_recruit()
+					changed.emit("Merged into %s — from the next wave." % barracks.at(at.x, twin).display_name)
+				refresh()
+				accept_event()
+				return
 			if at.x >= 0 and barracks.at(at.x, at.y) != null:
 				_drag_from = at
 				_drag_at = event.position
@@ -201,7 +243,8 @@ func _gui_input(event: InputEvent) -> void:
 			if at.x >= 0:
 				var what := barracks.drop(from.x, from.y, at.x, at.y)
 				if what == "merged":
-					Audio.play_merge()
+					# The coin: a merge in the Barracks sounds like money well spent.
+					Audio.play_recruit()
 					changed.emit("Merged into %s — from the next wave." %
 						barracks.at(at.x, at.y).display_name)
 				elif not what.is_empty():
@@ -250,3 +293,12 @@ func _on_upgrade(index: int) -> void:
 static func _amount(v: float) -> String:
 	## 2, 4.5, 15 — whole numbers when they are whole, one decimal when they are not.
 	return str(roundi(v)) if is_equal_approx(v, roundf(v)) else "%.1f" % v
+
+
+func _on_merge_all(section: int) -> void:
+	var n := barracks.merge_all(section)
+	if n > 0:
+		Audio.play_recruit()
+		changed.emit("%d merge%s in %s — from the next wave." % [n, "" if n == 1 else "s",
+			BossFight.ZONE_NAMES[section]])
+	refresh()

@@ -248,8 +248,11 @@ Tier markings")
 		not GameSetup.bold_tiers and not UnitView.bold_tiers and b.text.begins_with("Plain"),
 		b.text)
 	b.pressed.emit()
-	_check("and another turns them back on",
-		GameSetup.bold_tiers and UnitView.bold_tiers, b.text)
+	_check("the next shows the old look: coloured squares along the bottom",
+		not UnitView.bold_tiers and UnitView.tier_squares and b.text.begins_with("Squares"), b.text)
+	b.pressed.emit()
+	_check("and round again to bold",
+		GameSetup.bold_tiers and UnitView.bold_tiers and not UnitView.tier_squares, b.text)
 	panel._on_done()
 
 

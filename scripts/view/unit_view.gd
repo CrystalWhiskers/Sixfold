@@ -222,6 +222,9 @@ static func tier_color(tier: int) -> Color:
 ## the pips. A Settings switch (GameSetup.bold_tiers writes it here); on by default, and
 ## true here too so the board draws it before that setter has ever run.
 static var bold_tiers := true
+## The old look: the tier as a row of bright squares along the bottom of every unit,
+## large enough to read on the smallest tiles. One of the Tier markings settings.
+static var tier_squares := false
 
 ## Text colours for the tiers: TIER_COLORS pushed bright and apart so that letters in
 ## them read against any unit's plate behind a black outline. White, green, sky blue,
@@ -805,9 +808,12 @@ func _draw_boss() -> void:
 	draw_rect(filled, Color(0.95, 0.25, 0.22), true)
 
 
-func _draw_tier_pips(body: Rect2, tier: int, tint: Color, alpha: float) -> void:
+func _draw_tier_pips(body: Rect2, tier: int, tint: Color, alpha: float, big := false) -> void:
 	# One pip per tier along the bottom edge: countable without reading.
-	var pip := maxf(tile_size * 0.055, 3.0)
+	var pip := maxf(tile_size * (0.11 if big else 0.055), 4.0 if big else 3.0)
+	if big:
+		# As big as the row will fit across the tile.
+		pip = minf(pip, body.size.x / (float(tier) * 1.75 + 0.25))
 	var gap := pip * 0.75
 	var span := float(tier) * pip + float(tier - 1) * gap
 	var x := body.get_center().x - span * 0.5
@@ -857,11 +863,6 @@ func _draw() -> void:
 		# way to grey and darkened well below the portrait's own midtones. It is
 		# there to say whose unit this is and what tier, not to be looked at.
 		fill = fill.lerp(Color(0.16, 0.17, 0.20), 0.62).darkened(0.15)
-	if _bold() and art_tex == null:
-		# Pulled most of the way to a dark grey, keeping a hint of the unit's own hue:
-		# the tier-coloured letters must never sit on a plate of their own colour (a
-		# violet tier 4 on a violet Vexer was the case that read worst).
-		fill = fill.lerp(Color(0.10, 0.11, 0.14), 0.6)
 	fill.a = alpha
 	draw_rect(body, fill, true)
 
@@ -1108,7 +1109,10 @@ func _draw() -> void:
 			HORIZONTAL_ALIGNMENT_LEFT, -1, tfs, chip)
 
 	# On a small tile the pips would sit on the name; the corner number says it.
-	if tile_size >= 44.0:
+	if tier_squares and not unit.boss and not unit.structure and not is_summon_icon(unit.data.id):
+		# The squares as the main look: big, bright, along the bottom, on any tile size.
+		_draw_tier_pips(body, tier, tier_ink(tier), alpha, true)
+	elif tile_size >= 44.0:
 		_draw_tier_pips(body, tier, tint, alpha)
 
 	if reeling:

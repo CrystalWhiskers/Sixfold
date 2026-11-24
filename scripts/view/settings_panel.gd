@@ -227,7 +227,8 @@ func _build_portrait_toggle() -> Control:
 
 
 func _on_toggle_tiers() -> void:
-	GameSetup.bold_tiers = not GameSetup.bold_tiers
+	# Three looks, round in turn: bold, plain, squares.
+	GameSetup.tier_style = GameSetup.tier_style + 1
 	_refresh_tiers()
 	get_tree().root.propagate_call("queue_redraw")
 
@@ -235,9 +236,10 @@ func _on_toggle_tiers() -> void:
 func _refresh_tiers() -> void:
 	if _tier_button == null:
 		return
-	var on := GameSetup.bold_tiers
+	var on := GameSetup.tier_style != 1
 	# Says what you will see, like the unit art switch.
-	_tier_button.text = "Bold: coloured letters" if on else "Plain: corner number"
+	_tier_button.text = ["Bold: coloured letters", "Plain: corner number",
+		"Squares along the bottom"][GameSetup.tier_style]
 	_tier_button.button_pressed = on
 	_tier_button.add_theme_color_override("font_color",
 		Color(0.86, 0.90, 0.96) if on else Color(0.48, 0.52, 0.60))

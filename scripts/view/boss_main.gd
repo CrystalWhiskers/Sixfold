@@ -75,6 +75,9 @@ var _counter: Label = null
 ## the screen has shown so far.
 var _enrage_line: Label = null
 var _enrage_shown := 0
+var _collapse_btn: Button = null
+var _boss_stats: Label = null
+var barracks_hidden := false
 var _results: Control = null
 
 
@@ -198,6 +201,19 @@ func _build_ui() -> void:
 	root.add_child(_panel)
 	_panel.setup(barracks)
 	_panel.changed.connect(func(msg: String): _status.text = msg)
+	# Collapse the Barracks away to see the whole field larger, and back.
+	_collapse_btn = Button.new()
+	_collapse_btn.text = "▾ Hide Barracks"
+	_collapse_btn.position = Vector2(560, 818)
+	_collapse_btn.size = Vector2(150, 24)
+	_collapse_btn.add_theme_font_size_override("font_size", 12)
+	_collapse_btn.pressed.connect(toggle_barracks)
+	root.add_child(_collapse_btn)
+	# Her strength, always on show under the field.
+	_boss_stats = _label(Vector2(24, 1158), 13, Color(1.0, 0.70, 0.62))
+	_boss_stats.add_theme_constant_override("outline_size", 3)
+	_boss_stats.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+	root.add_child(_boss_stats)
 
 	_status = _label(Vector2(24, 1134), 14, Color(0.65, 0.71, 0.79))
 	root.add_child(_status)
@@ -259,6 +275,8 @@ func _on_fight() -> void:
 
 
 func _process(delta: float) -> void:
+	if _boss_stats != null and fight != null and fight.boss != null:
+		_boss_stats.text = boss_stats_text()
 	if phase != "fight" or sim == null:
 		return
 	if not sim.is_finished():
@@ -642,3 +660,32 @@ func _phase_cutscene(index: int, name: String) -> void:
 	t.tween_property(banner, "modulate:a", 0.0, 0.6)
 	t.chain().tween_callback(layer.queue_free)
 	Audio.play_boss_slam()
+
+
+func toggle_barracks() -> void:
+	## Folds the Barracks away and lets the field take its space, or brings it back.
+	barracks_hidden = not barracks_hidden
+	_panel.visible = not barracks_hidden
+	_collapse_btn.text = "▴ Show Barracks" if barracks_hidden else "▾ Hide Barracks"
+	_collapse_btn.position.y = (BARRACKS_AREA.end.y - 26.0) if barracks_hidden else 818.0
+	var area := BOARD_AREA
+	if barracks_hidden:
+		area.size.y = BARRACKS_AREA.end.y - BOARD_AREA.position.y - 30.0
+	_view.fit_to(area)
+	Audio.play_confirm()
+
+
+func boss_stats_text() -> String:
+	## Everything she has gained, at a glance: attack against her base, attack speed,
+	## mending, lifesteal, her single-hit cap and ranged resistance.
+	var b := fight.boss
+	var atk := b.stat(StatModifier.Stat.ATTACK_DAMAGE)
+	var base := maxf(boss_data.attack_damage, 1.0)
+	var spd := b.stat(StatModifier.Stat.ATTACK_SPEED) / maxf(boss_data.attack_speed, 0.01)
+	var p := boss_data.phases[mini(fight.phase, boss_data.phases.size() - 1)]
+	var regen := b.stat(StatModifier.Stat.MAX_HP) * p.regen
+	var steal := b.stat(StatModifier.Stat.LIFESTEAL)
+	var cap := fight.max_hit()
+	return "Boss  ATK %d (x%.2f)  ·  SPD x%.2f  ·  Regen %d/s  ·  Steal %d%%  ·  Hit cap %s  ·  Ranged -%d%%" % [
+		roundi(atk), atk / base, spd, roundi(regen), roundi(steal * 100.0),
+		"none" if is_inf(cap) else str(roundi(cap)), roundi(boss_data.ranged_resist * 100.0)]

@@ -143,6 +143,15 @@ var bold_tiers := true:
 		bold_tiers = value
 		UnitView.bold_tiers = value
 
+## The three tier looks, in the order Settings cycles them: 0 bold (coloured letters,
+## badge, rim), 1 plain (a small corner number), 2 squares (a big row of coloured
+## squares along the bottom — the original look).
+var tier_style := 0:
+	set(value):
+		tier_style = posmod(value, 3)
+		bold_tiers = tier_style == 0
+		UnitView.tier_squares = tier_style == 2
+
 ## How far one notch of the mouse wheel zooms the board; 1 is the original feel.
 ## Set in Settings, written down to BoardView for the same reason `portraits` is
 ## written to UnitView. Like the other settings it lasts until the game is closed.

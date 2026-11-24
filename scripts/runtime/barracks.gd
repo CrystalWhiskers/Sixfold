@@ -335,6 +335,27 @@ func drop(from_section: int, from_slot: int, to_section: int, to_slot: int) -> S
 	return "swapped"
 
 
+func merge_all(section: int) -> int:
+	## Every merge a section has in it, pair after pair, until no twins are left — the
+	## Merge button. Returns how many merges were made.
+	var n := 0
+	while merge_any(section):
+		n += 1
+	return n
+
+
+func has_twin(section: int, slot: int) -> int:
+	## The slot of this unit's merge partner in the same section, or -1.
+	var d: UnitData = sections[section][slot]
+	if d == null:
+		return -1
+	var slots: Array = sections[section]
+	for j in slots.size():
+		if j != slot and can_merge(d, slots[j]):
+			return j
+	return -1
+
+
 func merge_any(section: int) -> bool:
 	## One merge inside a section if it has a pair. For the scripted player.
 	var slots: Array = sections[section]

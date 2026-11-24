@@ -133,6 +133,27 @@ func _ready() -> void:
 		"%.0f + %.0f vs %.0f" % [st.to_boss, st.to_summons, st.dealt])
 	_check("units sent outnumber units lost", st.deployed >= st.lost and st.deployed > 0,
 		"%d sent, %d lost" % [st.deployed, st.lost])
+	_check("her stats are always on show under the field",
+		scn._boss_stats.text.begins_with("Boss  ATK") and scn._boss_stats.text.contains("Hit cap"),
+		scn._boss_stats.text)
+	var area_before: Vector2 = scn._view.board_size()
+	scn.toggle_barracks()
+	_check("the Barracks folds away and the field grows into its space",
+		not scn._panel.visible and scn._view.board_size().y > area_before.y,
+		"%s -> %s" % [area_before, scn._view.board_size()])
+	scn.toggle_barracks()
+	_check("and comes back", scn._panel.visible)
+	var bk: Barracks = scn.barracks
+	for s2 in Barracks.SECTIONS:
+		for i2 in bk.slot_count():
+			bk.sections[s2][i2] = null
+	bk.sections[0][0] = bk.types[0]
+	bk.sections[0][1] = bk.types[0]
+	bk.sections[0][2] = bk.types[0]
+	bk.sections[0][3] = bk.types[0]
+	scn._panel._on_merge_all(0)
+	_check("Merge pairs merges every pair in a section at once",
+		bk.unit_count(0) == 1 or bk.unit_count(0) == 2, "%d left" % bk.unit_count(0))
 	_check("a results screen comes up at the end",
 		scn._results != null and scn._results.visible)
 	var rows: Array = scn.result_rows(scn.result == BoardModel.TEAM_B, "1:00")
