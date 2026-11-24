@@ -23,4 +23,11 @@ extends Resource
 ## Hits everything of the army beside its circle as it arrives, this many of its own
 ## blows. 0 for none.
 @export var burst_mult: float = 0.0
+## Who it hunts. NEAREST: whatever of the army is closest (the default). TOP_TIER:
+## the highest-tier unit on the field, wherever it is — a Headhunter. CROWD: the
+## thickest knot of the army — a Berserker, whose swings land on everything round
+## its target (`cleave_radius`).
+enum Targeting { NEAREST, TOP_TIER, CROWD }
+@export var targeting: Targeting = Targeting.NEAREST
+@export var cleave_radius: int = 0
 @export var accent: Color = Color(0.85, 0.25, 0.30)

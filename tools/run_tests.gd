@@ -14330,6 +14330,34 @@ func _test_boss_attacks(data: BossData) -> void:
 		"%d round her, next %s" % [bf2.crowd_around(), whirled.id if whirled != null else &"none"])
 	# Every phase after the first opens with a signature move of its own.
 	var openers := data.phases.slice(1).map(func(p): return p.entry_move)
+	# Her summons: more kinds, with tiers, hunting their own way.
+	var s4 := _boss_board([["warden", "archer"], [], []])
+	var bf4: BossFight = s4.bf
+	var sim4: CombatSim = s4.sim
+	var kinds4 := {}
+	for k in data.summon_pool:
+		kinds4[k.id] = k
+	var hunter: BossMinion = kinds4.get(&"headhunter", null)
+	var berserk: BossMinion = kinds4.get(&"berserker", null)
+	_check("her summoning waves mix shades, Headhunters, Berserkers and archers",
+		hunter != null and berserk != null and kinds4.size() >= 4)
+	if hunter != null and berserk != null:
+		var top: UnitInstance = null
+		for u in sim4._units:
+			if u.team == bf4.player_team() and u.is_alive() and not u.structure:
+				if top == null or u.data.tier > top.data.tier:
+					top = u
+		var h := bf4._spawn_minion(Vector2i(8, 6), 1.0, hunter)
+		_check("a Headhunter goes for the highest tier on the field",
+			h != null and bf4.minion_target(h) != null
+			and bf4.minion_target(h).data.tier == top.data.tier)
+		var bz := bf4._spawn_minion(Vector2i(9, 6), 1.0, berserk)
+		_check("a Berserker cleaves round what it hits", bz != null and bz.empowered
+			and bz.data.empower_splash_radius >= 1)
+		bf4.phase = 2
+		_check("and summons come out at a higher tier each phase",
+			bf4.minion_tier() == data.minion_base_tier + 2 and h.data.tier == data.minion_base_tier)
+	BoardModel.reset_map()
 	_check("phases 2-4 each open with their own big move",
 		openers.all(func(m): return m != null and m.windup > 0.0)
 		and openers[0].id != openers[1].id and openers[1].id != openers[2].id)
@@ -14422,8 +14450,8 @@ func _test_boss_retreat(data: BossData) -> void:
 	var kinds := {}
 	for k in mv.retreat_summons:
 		kinds[k.id] = k
-	_check("and calls three kinds of summon, each its own thing",
-		kinds.size() == 3 and kinds.has(&"scarlet_thorn") and kinds.has(&"blood_chalice"),
+	_check("and calls every kind of summon she has, each its own thing",
+		kinds.size() >= 5 and kinds.has(&"headhunter") and kinds.has(&"berserker") and kinds.has(&"scarlet_thorn") and kinds.has(&"blood_chalice"),
 		"%s" % [kinds.keys()])
 
 	var s := _boss_board([["warden", "warden"], ["archer"], []])

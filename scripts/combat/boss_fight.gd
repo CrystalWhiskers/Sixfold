@@ -1458,6 +1458,23 @@ func _refresh_ward() -> void:
 	sim._emit("boss_ward", {uid = boss.uid, cell = boss.cell, shades = n, cut = cut})
 
 
+var _pool_n := 0
+## uid -> how one of her summons picks its target (BossMinion.Targeting).
+var _targeting: Dictionary = {}
+
+
+func _next_pool_kind() -> BossMinion:
+	if data.summon_pool.is_empty():
+		return null
+	var k: BossMinion = data.summon_pool[_pool_n % data.summon_pool.size()]
+	_pool_n += 1
+	return k
+
+
+func minion_tier() -> int:
+	return clampi(data.minion_base_tier + phase + enrage_stacks / 2, 1, 6)
+
+
 func _summon_wave(count: int, power: float) -> void:
 	## Marks `count` summoning circles round the boss (up to the cap). Each becomes a
 	## minion `summon_warning` seconds later — the circle is the telegraph.
@@ -1472,7 +1489,7 @@ func _summon_wave(count: int, power: float) -> void:
 	if cells.is_empty():
 		return
 	for c in cells:
-		_summon_marks.append({cell = c, left = data.summon_warning, power = power})
+		_summon_marks.append({cell = c, left = data.summon_warning, power = power, kind = _next_pool_kind()})
 	sim._emit("boss_summon", {uid = boss.uid, cells = cells, seconds = data.summon_warning,
 		cell = boss.cell})
 
@@ -1493,6 +1510,8 @@ func _spawn_minion(cell: Vector2i, power: float, kind: BossMinion = null) -> Uni
 	var md := UnitData.new()
 	md.sight_range = 40
 	md.mana_per_attack = 0.0
+	# Her summons grow with the fight: a tier per phase, and more as she enrages.
+	md.tier = minion_tier()
 	var burst := data.minion_burst_mult
 	if kind == null:
 		md.id = MINION_ID
@@ -1515,6 +1534,7 @@ func _spawn_minion(cell: Vector2i, power: float, kind: BossMinion = null) -> Uni
 		md.can_attack = kind.can_attack
 		md.accent = kind.accent
 		burst = kind.burst_mult
+		md.empower_splash_radius = kind.cleave_radius
 	var m := UnitInstance.create(md, boss_team())
 	if not sim.board.force_place(m, cell):
 		return null
@@ -1523,9 +1543,14 @@ func _spawn_minion(cell: Vector2i, power: float, kind: BossMinion = null) -> Uni
 	sim._pending_units.append(m)
 	if kind != null and kind.heal_boss > 0.0:
 		_heal_rate[m.uid] = kind.heal_boss
+	if kind != null:
+		_targeting[m.uid] = kind.targeting
+		if kind.cleave_radius > 0:
+			# Its swings land on everything round what it hits.
+			m.empowered = true
 	sim._emit("summon", {
 		uid = m.uid, owner_uid = boss.uid, team = m.team, cell = cell,
-		unit_id = md.id, tier = 1, hp = m.current_hp, max_hp = m.current_hp,
+		unit_id = md.id, tier = md.tier, hp = m.current_hp, max_hp = m.current_hp,
 		has_ability = false, permanent = false, minion = true,
 	})
 	_shade_burst(m, burst)
@@ -1652,8 +1677,26 @@ func _restore_crystal(i: int) -> bool:
 
 
 func minion_target(u: UnitInstance) -> UnitInstance:
-	## What one of her shades fights: the nearest of the player's units. Never a
-	## crystal — those are hers alone to break.
+	## What one of her summons fights. Never a crystal — those are hers alone to break.
+	## Most go for the nearest of the army; a Headhunter for its highest tier, wherever
+	## it stands; a Berserker for the thickest knot.
+	var how := int(_targeting.get(u.uid, BossMinion.Targeting.NEAREST))
+	if how == BossMinion.Targeting.TOP_TIER:
+		var prey: UnitInstance = null
+		for v in sim._units:
+			if not v.is_alive() or v.team != player_team() or v.structure or v.is_hidden():
+				continue
+			if prey == null or v.data.tier > prey.data.tier or (v.data.tier == prey.data.tier
+					and BoardModel.tile_distance(u.cell, v.cell) < BoardModel.tile_distance(u.cell, prey.cell)):
+				prey = v
+		if prey != null:
+			return prey
+	elif how == BossMinion.Targeting.CROWD:
+		var knot := _thickest_anywhere()
+		if knot != NO_AIM:
+			var at_knot := sim.board.unit_at(knot)
+			if at_knot != null and at_knot.is_alive():
+				return at_knot
 	var best: UnitInstance = null
 	var best_d := 1 << 30
 	for v in sim._units:

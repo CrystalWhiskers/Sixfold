@@ -101,6 +101,55 @@ func _draw_shade(body: Rect2, alpha: float) -> void:
 ## The boss's retreat summons (BossMinion ids), each with its own picture.
 const THORN_ID := &"scarlet_thorn"
 const CHALICE_ID := &"blood_chalice"
+const HEADHUNTER_ID := &"headhunter"
+const BERSERKER_ID := &"berserker"
+
+
+static func is_summon_icon(id: StringName) -> bool:
+	return id in [SHADE_ID, THORN_ID, CHALICE_ID, HEADHUNTER_ID, BERSERKER_ID]
+
+
+func _draw_summon_tier(body: Rect2, alpha: float) -> void:
+	## Her summons have tiers too: shown as small diamonds along the bottom edge, in
+	## the tier's colour, one per tier.
+	var tier := unit.data.tier
+	var s := maxf(body.size.x * 0.07, 2.5)
+	var gap := s * 2.4
+	var x0 := body.get_center().x - gap * float(tier - 1) * 0.5
+	var y := body.end.y - s * 1.6
+	var ink := tier_ink(tier)
+	for i in tier:
+		var c := Vector2(x0 + gap * float(i), y)
+		var d := PackedVector2Array([c + Vector2(0, -s), c + Vector2(s, 0), c + Vector2(0, s), c + Vector2(-s, 0)])
+		draw_colored_polygon(d, Color(0, 0, 0, 0.8 * alpha))
+		draw_colored_polygon(PackedVector2Array([c + Vector2(0, -s * 0.7), c + Vector2(s * 0.7, 0),
+			c + Vector2(0, s * 0.7), c + Vector2(-s * 0.7, 0)]), Color(ink, alpha))
+
+
+func _draw_headhunter(body: Rect2, alpha: float) -> void:
+	## Headhunter: a crosshair over a dark disc — it hunts your highest tier.
+	var c := body.get_center()
+	var s := body.size.x * 0.5 * 0.9
+	var red := Color(1.0, 0.30, 0.25, alpha)
+	draw_circle(c, s * 0.82, Color(0.08, 0.02, 0.03, 0.92 * alpha))
+	draw_arc(c, s * 0.55, 0.0, TAU, 28, red, maxf(s * 0.09, 1.5), true)
+	for dir in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
+		draw_line(c + dir * s * 0.25, c + dir * s * 0.8, red, maxf(s * 0.08, 1.5))
+	draw_circle(c, s * 0.1, Color(1.0, 0.85, 0.6, alpha))
+
+
+func _draw_berserker(body: Rect2, alpha: float) -> void:
+	## Berserker: two crossed axes — it cleaves through crowds.
+	var c := body.get_center()
+	var s := body.size.x * 0.5 * 0.9
+	draw_circle(c, s * 0.82, Color(0.10, 0.03, 0.02, 0.92 * alpha))
+	for side in [-1.0, 1.0]:
+		var a := c + Vector2(-0.55 * side, 0.6) * s
+		var b := c + Vector2(0.45 * side, -0.55) * s
+		draw_line(a, b, Color(0.55, 0.35, 0.20, alpha), maxf(s * 0.1, 1.5))
+		var head := b + Vector2(-0.05 * side, 0.1) * s
+		draw_colored_polygon(PackedVector2Array([head, head + Vector2(0.4 * side, -0.15) * s,
+			head + Vector2(0.35 * side, 0.35) * s]), Color(0.95, 0.55, 0.30, alpha))
 
 
 func _draw_thorn(body: Rect2, alpha: float) -> void:
@@ -198,7 +247,7 @@ func _bold() -> bool:
 	if not bold_tiers or unit == null or unit.boss or unit.structure:
 		return false
 	var id := unit.data.id
-	return id != SHADE_ID and id != THORN_ID and id != CHALICE_ID
+	return not is_summon_icon(id)
 
 ## Set by the board on every zoom. A setter, not a plain field: a unit only repaints
 ## when something asks it to, so a unit standing still kept drawing itself at the OLD
@@ -826,10 +875,19 @@ func _draw() -> void:
 		# The boss's shades get a picture, not letters: "CRI" next to the army's own
 		# three-letter units read as one more of yours.
 		_draw_shade(body, alpha)
+		_draw_summon_tier(body, alpha)
 	elif unit.data.id == THORN_ID:
 		_draw_thorn(body, alpha)
+		_draw_summon_tier(body, alpha)
 	elif unit.data.id == CHALICE_ID:
 		_draw_chalice(body, alpha)
+		_draw_summon_tier(body, alpha)
+	elif unit.data.id == HEADHUNTER_ID:
+		_draw_headhunter(body, alpha)
+		_draw_summon_tier(body, alpha)
+	elif unit.data.id == BERSERKER_ID:
+		_draw_berserker(body, alpha)
+		_draw_summon_tier(body, alpha)
 	else:
 		# Its short name, not an initial: with seven units starting "S" a single
 		# letter told nobody anything. Unique across the roster — see short_name().

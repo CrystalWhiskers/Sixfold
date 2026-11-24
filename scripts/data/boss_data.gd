@@ -92,6 +92,11 @@ extends Resource
 @export var minion_attack_speed: float = 1.0
 @export var minion_move_time: float = 0.8
 @export var minion_cap: int = 8
+## What her ordinary summoning waves call, taken in turn (shades when empty), and the
+## tier they come out at by phase: phase 1 at `minion_base_tier`, one higher each
+## phase after, and one more for every two enrage surges — up to tier 6.
+@export var summon_pool: Array[BossMinion] = []
+@export var minion_base_tier: int = 1
 ## A shade arrives with a blast: this many of its own hits to every one of the army
 ## standing within `minion_burst_radius` tiles of the circle. 0 for a quiet arrival.
 @export var minion_burst_mult: float = 0.0

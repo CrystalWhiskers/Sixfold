@@ -308,7 +308,7 @@ func _initialize() -> void:
 	b.minion_name = "Crimson Shade"
 	b.minion_hp = 420.0
 	b.minion_attack = 35.0
-	b.minion_cap = 8
+	b.minion_cap = 24
 	# A shade tears out of its circle, hitting everything round it, and while shades
 	# stand she takes less damage — so they are worth killing, not just walking past.
 	b.minion_burst_mult = 2.5
@@ -374,14 +374,24 @@ func _initialize() -> void:
 	chalice.can_move = false
 	chalice.can_attack = false
 	chalice.heal_boss = 0.003
+	# Hunters with a purpose. A Headhunter runs for your highest tier wherever it
+	# stands; a Berserker wades into the thickest crowd and cleaves all round it.
+	var hunter := _minion(&"headhunter", "Headhunter", 300.0, 60.0, 1.2, 0.5, 1,
+		Color(0.70, 0.10, 0.10))
+	hunter.targeting = BossMinion.Targeting.TOP_TIER
+	var berserker := _minion(&"berserker", "Berserker", 600.0, 30.0, 0.8, 0.7, 1,
+		Color(0.75, 0.35, 0.12))
+	berserker.targeting = BossMinion.Targeting.CROWD
+	berserker.cleave_radius = 1
+	b.summon_pool = [shade, hunter, shade, berserker, thorn] as Array[BossMinion]
 	var retreat := _move(&"crimson_retreat", "Crimson Retreat", S.RETREAT, 0, 0, 0.0, 0.5)
 	retreat.windup = 1.5
-	retreat.retreat_summons = [shade, shade, thorn, thorn, chalice, chalice] as Array[BossMinion]
+	retreat.retreat_summons = [shade, shade, hunter, berserker, thorn, thorn, chalice, chalice] as Array[BossMinion]
 	var sanctum := _move(&"scarlet_sanctum", "Scarlet Sanctum", S.RETREAT, 0, 0, 0.0, 0.5)
 	sanctum.windup = 1.5
 	sanctum.retreat_seconds = 9.0
 	sanctum.retreat_heal = 0.007
-	sanctum.retreat_summons = [shade, shade, shade, thorn, thorn, thorn, chalice, chalice] as Array[BossMinion]
+	sanctum.retreat_summons = [shade, shade, shade, hunter, hunter, berserker, berserker, thorn, thorn, thorn, chalice, chalice] as Array[BossMinion]
 	b.phases = [
 		# Four phases, each its own health bar. The crystals and the merge are a
 		# separate track: they change WHERE it fights, these change HOW.
@@ -417,7 +427,8 @@ func _initialize() -> void:
 	b.max_hit_percent = 0.012
 	b.ranged_resist = 0.3
 	b.death_power = 0.002
-	var summons := [[0, 0.0, 0, 1.0], [2, 20.0, 1, 1.0], [3, 18.0, 2, 1.3], [4, 15.0, 2, 1.6]]
+	# A lot more of them: [on entering, every N seconds, how many, power].
+	var summons := [[2, 20.0, 2, 1.0], [5, 14.0, 3, 1.1], [7, 12.0, 4, 1.3], [9, 10.0, 5, 1.6]]
 	for i in b.phases.size():
 		b.phases[i].summons_on_start = summons[i][0]
 		b.phases[i].summon_every = summons[i][1]
