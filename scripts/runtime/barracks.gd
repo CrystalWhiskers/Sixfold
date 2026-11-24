@@ -83,7 +83,7 @@ func income_price() -> float:
 
 
 func recruit_price() -> float:
-	return roundf(data.recruit_cost * pow(data.recruit_growth, recruits))
+	return roundf(data.recruit_cost * pow(data.recruit_growth, recruits) + data.recruit_step * recruits)
 
 
 func level_of(id: StringName) -> int:

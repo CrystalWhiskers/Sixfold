@@ -50,9 +50,11 @@ extends Resource
 @export var income_cost: float = 30.0
 @export var income_growth: float = 1.6
 ## A recruit: one random draw from the player's loadout, at tier 1, into a section.
-## Each one costs `recruit_growth` times the last, rounded to a whole number.
-@export var recruit_cost: float = 12.0
-@export var recruit_growth: float = 1.15
+## The first costs `recruit_cost`; each after it costs `recruit_step` more (10, 12, 14...).
+## `recruit_growth` can make it climb by a multiple instead (1 = flat steps only).
+@export var recruit_cost: float = 10.0
+@export var recruit_step: float = 2.0
+@export var recruit_growth: float = 1.0
 ## Unit upgrades, per unit TYPE: what each level does to that unit's own ability
 ## lives in `upgrades`; these are the price of each level (index 0 buys Lv1) and the
 ## small stat bump every level adds on top.

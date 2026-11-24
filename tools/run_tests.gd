@@ -13505,6 +13505,15 @@ func _test_boss_defence() -> void:
 	b.recruit(0)
 	_check("each recruit costs more than the last",
 		b.recruit_price() > r_price, "%.0f then %.0f" % [r_price, b.recruit_price()])
+	var fresh := Barracks.new()
+	fresh.setup(data, load("res://data/loadouts/starter.tres") as LoadoutData, 3)
+	fresh.supply = 1000.0
+	var ladder: Array[int] = []
+	for i in 4:
+		ladder.append(roundi(fresh.recruit_price()))
+		fresh.recruit(i % Barracks.SECTIONS)
+	_check("recruits start at 10 and go up by 2: 10, 12, 14, 16", ladder == [10, 12, 14, 16],
+		"%s" % [ladder])
 	# Merging: two of the same in a section become one of the next tier.
 	for i in b.slot_count():
 		b.sections[0][i] = null

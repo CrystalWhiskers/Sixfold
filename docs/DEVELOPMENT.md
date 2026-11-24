@@ -3379,7 +3379,7 @@ board's merge lottery), onto anything else to swap. Supply ticks up in real time
 
 | | Cost | Effect |
 |---|---|---|
-| Recruit | 12, x1.15 per recruit (rounded) | a random tier-1 draw from your loadout into that section |
+| Recruit | 10, then +2 per recruit (10, 12, 14...) | a random tier-1 draw from your loadout into that section |
 | Income | 30, x1.6 per upgrade | +2 Supply a second (from a base of 4) |
 | Unit upgrade | 30 / 50 / 80 / 120 / 180 | one unit TYPE up a level, Lv1-Lv5: its own ability grows (table below) and +15% health and attack per level |
 

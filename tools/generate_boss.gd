@@ -262,8 +262,10 @@ func _initialize() -> void:
 	b.income_step = 2.0
 	b.income_cost = 30.0
 	b.income_growth = 1.6
-	b.recruit_cost = 12.0
-	b.recruit_growth = 1.15
+	# Recruits: 10 Supply, then 2 more each time — 10, 12, 14, 16...
+	b.recruit_cost = 10.0
+	b.recruit_step = 2.0
+	b.recruit_growth = 1.0
 	b.upgrade_costs = PackedFloat32Array([30, 50, 80, 120, 180])
 	b.upgrade_stat_per_level = 0.15
 	b.start_draws = 6
