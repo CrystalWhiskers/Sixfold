@@ -14255,6 +14255,7 @@ func _test_boss_polish() -> void:
 	_test_boss_enrage(data)
 	_test_boss_attacks(data)
 	_test_boss_units(data)
+	_test_boss_executions(data)
 
 
 func _free_near(board: BoardModel, want: Vector2i) -> Vector2i:
@@ -14265,6 +14266,58 @@ func _free_near(board: BoardModel, want: Vector2i) -> Vector2i:
 				if board.in_bounds(c) and board.is_empty(c) and not BoardModel.is_blocked(c):
 					return c
 	return want
+
+
+func _test_boss_executions(data: BossData) -> void:
+	_section("Boss defence: % max HP blows and executions")
+	var by_id := {}
+	for p in data.phases:
+		for m in p.moves:
+			by_id[m.id] = m
+			if m.finisher != null:
+				by_id[m.finisher.id] = m.finisher
+	var heaven: BossMove = by_id.get(&"heaven_split", null)
+	var cross: BossMove = by_id.get(&"crimson_cross", null)
+	_check("the heavy blows carry a share of max HP, and the stance finishers execute",
+		heaven != null and heaven.max_hp_percent > 0.0 and cross != null and cross.executes_top_tier)
+	var s := _boss_board([["warden", "archer"], [], []])
+	var bf: BossFight = s.bf
+	var sim: CombatSim = s.sim
+	var army: Array[UnitInstance] = []
+	for u in sim._units:
+		if u.team == bf.player_team() and u.is_alive() and not u.structure:
+			army.append(u)
+	if heaven != null and army.size() >= 1:
+		var v: UnitInstance = army[0]
+		v.shield = 0.0
+		v.current_hp = v.stat(StatModifier.Stat.MAX_HP)
+		var hp0 := v.current_hp
+		bf.marked = {move = heaven, cells = [v.cell] as Array[Vector2i], left = 0.01, aim = v.cell, step = 0}
+		bf._strike()
+		var plain := bf.boss.stat(StatModifier.Stat.ATTACK_DAMAGE) * heaven.damage_mult
+		_check("a % max HP blow takes more than its plain damage",
+			not v.is_alive() or hp0 - v.current_hp > plain * 0.99,
+			"%.0f taken, plain %.0f" % [hp0 - v.current_hp, plain])
+	if cross != null:
+		_check("no execution while the army is below the minimum tier",
+			bf.top_army_tier() < cross.execute_min_tier and bf.execute_tier(cross) == 0)
+		# Raise one unit to tier 4: now it is the top tier, and the cross executes it.
+		var top: UnitInstance = null
+		for u in army:
+			if u.is_alive():
+				top = u
+		if top != null:
+			top.data = BoardModel.at_tier(top.data, 4)
+			top.current_hp = top.stat(StatModifier.Stat.MAX_HP)
+			top.shield = 99999.0
+			var doom := bf.execute_tier(cross)
+			bf.marked = {move = cross, cells = [top.cell] as Array[Vector2i], left = 0.01,
+				aim = top.cell, step = 0, doom = doom}
+			bf._strike()
+			_check("an execution kills the top tier outright, shield and all",
+				doom == 4 and not top.is_alive() and not _kind_events(sim, "boss_execute").is_empty(),
+				"doom %d, alive %s" % [doom, top.is_alive()])
+	BoardModel.reset_map()
 
 
 func _test_boss_units(_data: BossData) -> void:
