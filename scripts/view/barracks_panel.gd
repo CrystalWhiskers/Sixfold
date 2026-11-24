@@ -152,13 +152,24 @@ func _draw() -> void:
 func _draw_unit(r: Rect2, d: UnitData) -> void:
 	var font := ThemeDB.fallback_font
 	var inner := r.grow(-2.0)
-	draw_rect(inner, d.accent, true)
-	draw_rect(inner, UnitView.tier_color(d.tier), false, 2.0)
+	var ink := UnitView.tier_ink(d.tier)
+	# The plate a little darker than on the board, so the tier-coloured letters on it
+	# stand out; the rim in the same colour as the letters, heavier the higher it is.
+	draw_rect(inner, d.accent.lerp(Color(0.10, 0.11, 0.14), 0.6), true)
+	draw_rect(inner, ink, false, 1.5 + 0.4 * float(d.tier))
 	var label := UnitView.short_name(d)
-	draw_string(font, inner.position + Vector2(3, inner.size.y - 8), label,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0, 0, 0, 0.8))
-	draw_string(font, inner.position + Vector2(inner.size.x - 6, 7), str(d.tier),
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 7, Color(0, 0, 0, 0.85))
+	var fs := 12
+	var lw := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var at := inner.position + Vector2((inner.size.x - lw) * 0.5, inner.size.y - 6)
+	draw_string_outline(font, at, label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 4, Color(0, 0, 0, 0.95))
+	draw_string(font, at, label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, ink)
+	# The tier as a badge in the top-left corner, its number in black.
+	var badge := inner.position + Vector2(7, 7)
+	draw_circle(badge, 7.2, Color(0, 0, 0, 0.9))
+	draw_circle(badge, 6.0, ink)
+	var tw := font.get_string_size(str(d.tier), HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
+	draw_string(font, badge + Vector2(-tw * 0.5, 3.6), str(d.tier),
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.02, 0.02, 0.04))
 
 
 func _gui_input(event: InputEvent) -> void:

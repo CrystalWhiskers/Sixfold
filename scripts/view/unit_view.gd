@@ -167,6 +167,28 @@ func _draw_chalice(body: Rect2, alpha: float) -> void:
 static func tier_color(tier: int) -> Color:
 	return TIER_COLORS[clampi(tier - 1, 0, TIER_COLORS.size() - 1)]
 
+
+## Boss defence turns this on: the tier is told by the colour of a unit's LETTERS, a
+## badge with its number, and a full-strength tier rim — on that crowded field the
+## corner digit and the pips are too small to read. Off everywhere else.
+static var bold_tiers := false
+
+## Text colours for the tiers: TIER_COLORS pushed bright and apart so that letters in
+## them read against any unit's plate behind a black outline. White, green, sky blue,
+## violet, gold, red — the same order as the rims.
+const TIER_INKS: Array[Color] = [
+	Color(0.96, 0.96, 0.96),
+	Color(0.40, 1.00, 0.45),
+	Color(0.35, 0.80, 1.00),
+	Color(0.86, 0.55, 1.00),
+	Color(1.00, 0.84, 0.15),
+	Color(1.00, 0.38, 0.28),
+]
+
+
+static func tier_ink(tier: int) -> Color:
+	return TIER_INKS[clampi(tier - 1, 0, TIER_INKS.size() - 1)]
+
 ## Set by the board on every zoom. A setter, not a plain field: a unit only repaints
 ## when something asks it to, so a unit standing still kept drawing itself at the OLD
 ## size after a zoom out — giant blocks spilling over their neighbours until it next
@@ -775,6 +797,11 @@ func _draw() -> void:
 		# way to grey and darkened well below the portrait's own midtones. It is
 		# there to say whose unit this is and what tier, not to be looked at.
 		fill = fill.lerp(Color(0.16, 0.17, 0.20), 0.62).darkened(0.15)
+	if bold_tiers and unit.team == player_team and art_tex == null:
+		# Pulled most of the way to a dark grey, keeping a hint of the unit's own hue:
+		# the tier-coloured letters must never sit on a plate of their own colour (a
+		# violet tier 4 on a violet Vexer was the case that read worst).
+		fill = fill.lerp(Color(0.10, 0.11, 0.14), 0.6)
 	fill.a = alpha
 	draw_rect(body, fill, true)
 
@@ -803,9 +830,16 @@ func _draw() -> void:
 		# a small tile they stay legible where dark ink on a dark plate did not.
 		var ink := Color(0.98, 0.97, 0.94, 0.95 * alpha)
 		var edge := Color(0.02, 0.02, 0.04, 0.9 * alpha)
+		var edge_w := maxi(size / 4, 2)
+		if bold_tiers and unit.team == player_team:
+			# Boss defence: the letters THEMSELVES carry the tier, in a bright text
+			# colour per tier and a heavier outline so each reads on any plate.
+			ink = Color(tier_ink(tier), 0.98 * alpha)
+			edge = Color(0.0, 0.0, 0.0, 0.95 * alpha)
+			edge_w = maxi(size / 3, 3)
 		if unit.team == player_team:
 			draw_string_outline(font, Vector2(-w * 0.5, size * 0.36), initial,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, size, maxi(size / 4, 2), edge)
+				HORIZONTAL_ALIGNMENT_LEFT, -1, size, edge_w, edge)
 			draw_string(font, Vector2(-w * 0.5, size * 0.36), initial,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, size, ink)
 		else:
@@ -815,7 +849,7 @@ func _draw() -> void:
 			# health bar and everything below draw in plain local space.
 			draw_set_transform(Vector2.ZERO, PI, Vector2.ONE)
 			draw_string_outline(font, Vector2(-w * 0.5, size * 0.36), initial,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, size, maxi(size / 4, 2), edge)
+				HORIZONTAL_ALIGNMENT_LEFT, -1, size, edge_w, edge)
 			draw_string(font, Vector2(-w * 0.5, size * 0.36), initial,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, size, ink)
 			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
@@ -972,13 +1006,30 @@ func _draw() -> void:
 	# unit; the tier is a detail, and the pips along the edge say it again. Just the
 	# digit in its tier colour with a thin dark outline — no chip behind it.
 	var tt := str(tier)
-	var tfs := clampi(roundi(tile_size * 0.17), 7, 9)
-	var chip := tint
-	chip.a = alpha
-	draw_string_outline(tfont, Vector2(-half + 3.0, -half + 2.0 + float(tfs)), tt,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, tfs, 2, Color(0.04, 0.05, 0.08, 0.9 * alpha))
-	draw_string(tfont, Vector2(-half + 3.0, -half + 2.0 + float(tfs)), tt,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, tfs, chip)
+	if bold_tiers and unit.team == player_team:
+		# A badge: the tier's colour, its number in black, on the top-left corner and
+		# hanging slightly off it so nothing on the tile covers it. The rim goes full
+		# strength in the same colour.
+		var ink := tier_ink(tier)
+		draw_rect(body.grow(-1.0), Color(ink, 0.95 * alpha), false, 1.5 + 0.4 * float(tier))
+		var r := clampf(tile_size * 0.2, 5.0, 14.0)
+		# Centred nearly on the corner itself, so on the small tiles of the full field
+		# it sits off the letters instead of on them.
+		var at := body.position + Vector2(r * 0.15, r * 0.15)
+		draw_circle(at, r + 1.2, Color(0, 0, 0, 0.9 * alpha))
+		draw_circle(at, r, Color(ink, alpha))
+		var bfs := maxi(roundi(r * 1.5), 7)
+		var bw := tfont.get_string_size(tt, HORIZONTAL_ALIGNMENT_LEFT, -1, bfs).x
+		draw_string(tfont, at + Vector2(-bw * 0.5, bfs * 0.36), tt,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, bfs, Color(0.02, 0.02, 0.04, alpha))
+	else:
+		var tfs := clampi(roundi(tile_size * 0.17), 7, 9)
+		var chip := tint
+		chip.a = alpha
+		draw_string_outline(tfont, Vector2(-half + 3.0, -half + 2.0 + float(tfs)), tt,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, tfs, 2, Color(0.04, 0.05, 0.08, 0.9 * alpha))
+		draw_string(tfont, Vector2(-half + 3.0, -half + 2.0 + float(tfs)), tt,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, tfs, chip)
 
 	# On a small tile the pips would sit on the name; the corner number says it.
 	if tile_size >= 44.0:
