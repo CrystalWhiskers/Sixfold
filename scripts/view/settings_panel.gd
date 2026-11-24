@@ -30,6 +30,7 @@ var _previewing := ""
 var _interrupted := ""
 var _portrait_button: Button = null
 var _tier_button: Button = null
+var _army_button: Button = null
 var _volume_slider: HSlider = null
 var _volume_label: Label = null
 
@@ -93,6 +94,7 @@ func _ready() -> void:
 	column.add_child(_build_scroll())
 	column.add_child(_build_playlist())
 	column.add_child(_build_boss_toggle())
+	column.add_child(_build_army_limit_toggle())
 
 	var done := Button.new()
 	done.text = "Done"
@@ -571,6 +573,7 @@ func open() -> void:
 	_refresh_volume()
 	_refresh_portraits()
 	_refresh_tiers()
+	_refresh_army_limit()
 	_refresh_tracks()
 	_refresh_boss()
 	_refresh_scroll()
@@ -584,3 +587,34 @@ func _on_done() -> void:
 		_scroll_demo._on_done()
 	visible = false
 	closed.emit()
+
+
+func _build_army_limit_toggle() -> Control:
+	## Boss defence: whether each crystal's army on the field is capped. Off, every
+	## wave lands in full while there is room on the field.
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 6)
+	box.add_child(_heading("Boss defence: army size on the field"))
+	_army_button = Button.new()
+	_army_button.custom_minimum_size = Vector2(PANEL_WIDTH * 0.52, 34.0)
+	_army_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_army_button.add_theme_font_size_override("font_size", 15)
+	_army_button.toggle_mode = true
+	_army_button.pressed.connect(Audio.play_confirm)
+	_army_button.pressed.connect(func():
+		GameSetup.boss_army_limit = not GameSetup.boss_army_limit
+		_refresh_army_limit())
+	box.add_child(_army_button)
+	_refresh_army_limit()
+	return box
+
+
+func _refresh_army_limit() -> void:
+	if _army_button == null:
+		return
+	var on := GameSetup.boss_army_limit
+	_army_button.text = "Limited per crystal" if on else "No limit — every wave lands"
+	_army_button.button_pressed = not on
+	_army_button.add_theme_color_override("font_color",
+		Color(0.86, 0.90, 0.96) if not on else Color(0.48, 0.52, 0.60))

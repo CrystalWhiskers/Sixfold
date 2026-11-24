@@ -13244,7 +13244,8 @@ func _test_discord() -> void:
 
 # --- Boss defence ---------------------------------------------------------------
 
-func _boss_board(sections: Array = [[], [], []], boss: BossData = null) -> Dictionary:
+func _boss_board(sections: Array = [[], [], []], boss: BossData = null,
+		limited := false) -> Dictionary:
 	## The open field with the crystals and the boss, a Barracks whose three sections
 	## hold exactly `sections` (unit ids, tier 1), and the fight started — so the
 	## first wave is already on the field. Call BoardModel.reset_map() when done.
@@ -13262,6 +13263,7 @@ func _boss_board(sections: Array = [[], [], []], boss: BossData = null) -> Dicti
 			i += 1
 	var bf := BossFight.new()
 	bf.place_structures(board, data)
+	bf.limit_army = limited
 	var sim := CombatSim.new()
 	sim.crit_chance = 0.0
 	bf.attach(sim, barracks)
@@ -13720,7 +13722,7 @@ func _test_boss_defence() -> void:
 	# A zone at its cap: the rest wait, one section's worth at most, and drop in later.
 	var capped := (load("res://data/boss/arbiter.tres") as BossData).duplicate(true)
 	capped.zone_cap = 3
-	s = _boss_board([["warden", "archer", "lancer", "seraph"], [], []], capped)
+	s = _boss_board([["warden", "archer", "lancer", "seraph"], [], []], capped, true)
 	bf = s.bf
 	sim = s.sim
 	for i in 3:
@@ -14266,6 +14268,14 @@ func _test_boss_enrage(data: BossData) -> void:
 	_check("and what she summons comes out stronger too",
 		m != null and is_equal_approx(m.data.max_hp, data.minion_hp * (1.0 + 2.0 * data.enrage_minions)),
 		"%.0f" % (m.data.max_hp if m != null else 0.0))
+	BoardModel.reset_map()
+	# No army limit by default: a capped boss still lets a whole wave land.
+	var small := (load("res://data/boss/arbiter.tres") as BossData).duplicate(true)
+	small.zone_cap = 3
+	var s2 := _boss_board([["warden", "archer", "lancer", "seraph", "warden", "archer"], [], []], small)
+	var bf2: BossFight = s2.bf
+	_check("with no army limit, every unit of a wave lands while there is room",
+		bf2.army_in_zone(0) == 6, "%d of 6 on the field" % bf2.army_in_zone(0))
 	BoardModel.reset_map()
 
 

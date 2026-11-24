@@ -1032,7 +1032,15 @@ func _queue_cap(zone: int) -> int:
 	return per * 3 if zone == 3 else per
 
 
+## Whether each zone's army on the field is held to BossData.zone_cap. Off by default
+## (Settings: Army limit): every wave lands in full as long as there is ground to
+## stand on. On, a full zone keeps the rest of its wave waiting.
+var limit_army := false
+
+
 func zone_cap(zone: int) -> int:
+	if not limit_army or data.zone_cap <= 0:
+		return 1 << 20
 	return data.zone_cap * 3 if zone == 3 else data.zone_cap
 
 
@@ -1081,7 +1089,7 @@ func spawn_cell(zone: int, e: Dictionary) -> Vector2i:
 	## The free tile nearest its home, searched outwards ring by ring. A unit lands
 	## near where it is meant to be or, on a crowded field, as near as it can.
 	var home := home_cell(zone, e)
-	for r in 8:
+	for r in maxi(WIDTH, HEIGHT):
 		var best := Vector2i(-1, -1)
 		var best_d := 1 << 30
 		for dy in range(-r, r + 1):

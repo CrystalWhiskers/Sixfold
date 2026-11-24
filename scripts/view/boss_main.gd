@@ -93,6 +93,7 @@ func _ready() -> void:
 		else int(Time.get_unix_time_from_system()))
 
 	fight = BossFight.new()
+	fight.limit_army = GameSetup.boss_army_limit
 	fight.place_structures(board, boss_data)
 	barracks = Barracks.new()
 	barracks.setup(boss_data, GameSetup.loadout_for(BoardModel.TEAM_B), _rng.seed)

@@ -131,6 +131,10 @@ var portraits := false:
 		# exists — see UnitView.portraits_on.
 		UnitView.portraits_on = value
 
+## Boss defence: hold each crystal's army on the field to the boss's zone cap. Off by
+## default — every wave lands in full while there is room.
+var boss_army_limit := false
+
 ## Bold tier markings: coloured letters, a numbered badge and a full-colour rim. On by
 ## default; Settings switches it off for the plain corner number. Written down to
 ## UnitView like `portraits`.
