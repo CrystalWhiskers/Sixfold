@@ -227,7 +227,7 @@ func _gui_input(event: InputEvent) -> void:
 				var twin := barracks.has_twin(at.x, at.y)
 				_drag_from = Vector2i(-1, -1)
 				if barracks.drop(at.x, at.y, at.x, twin) == "merged":
-					Audio.play_recruit()
+					Audio.play_merge()
 					changed.emit("Merged into %s — from the next wave." % barracks.at(at.x, twin).display_name)
 				refresh()
 				accept_event()
@@ -243,8 +243,8 @@ func _gui_input(event: InputEvent) -> void:
 			if at.x >= 0:
 				var what := barracks.drop(from.x, from.y, at.x, at.y)
 				if what == "merged":
-					# The coin: a merge in the Barracks sounds like money well spent.
-					Audio.play_recruit()
+					# Every Barracks action — merge, recruit, upgrade, income — plays the merge sound.
+					Audio.play_merge()
 					changed.emit("Merged into %s — from the next wave." %
 						barracks.at(at.x, at.y).display_name)
 				elif not what.is_empty():
@@ -258,7 +258,7 @@ func _gui_input(event: InputEvent) -> void:
 
 func _on_recruit(section: int) -> void:
 	if barracks.recruit(section):
-		Audio.play_recruit()
+		Audio.play_merge()
 		var d := barracks.at(section, _last_filled(section))
 		changed.emit("Recruited %s into %s — joins the next wave." % [
 			d.display_name if d != null else "a unit", BossFight.ZONE_NAMES[section]])
@@ -276,7 +276,7 @@ func _last_filled(section: int) -> int:
 
 func _on_income() -> void:
 	if barracks.upgrade_income():
-		Audio.play_upgrade()
+		Audio.play_merge()
 		changed.emit("Supply now +%.0f a second." % barracks.income)
 	refresh()
 
@@ -284,7 +284,7 @@ func _on_income() -> void:
 func _on_upgrade(index: int) -> void:
 	var t: UnitData = barracks.types[index]
 	if barracks.upgrade_type(t.id):
-		Audio.play_upgrade()
+		Audio.play_merge()
 		changed.emit("%s upgraded to Lv%d — every %s on the field and in every wave." % [
 			t.display_name, barracks.level_of(t.id), t.display_name])
 	refresh()
@@ -298,7 +298,7 @@ static func _amount(v: float) -> String:
 func _on_merge_all(section: int) -> void:
 	var n := barracks.merge_all(section)
 	if n > 0:
-		Audio.play_recruit()
+		Audio.play_merge()
 		changed.emit("%d merge%s in %s — from the next wave." % [n, "" if n == 1 else "s",
 			BossFight.ZONE_NAMES[section]])
 	refresh()
