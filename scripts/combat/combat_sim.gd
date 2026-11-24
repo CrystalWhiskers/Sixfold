@@ -3786,6 +3786,10 @@ func _damage(victim: UnitInstance, amount: float, source: UnitInstance,
 	var crit := crit_chance > 0.0 and rng.randf() < crit_chance
 	if crit:
 		total *= CRIT_MULT
+	if boss_fight != null and victim.boss:
+		# Boss defence: her ranged resistance and the cap on any single blow, last,
+		# on the final figure — so nothing can delete a health bar in one hit.
+		total = boss_fight.shape_boss_damage(total, source)
 	var landed := victim.take_damage(total)
 	_harden(victim)
 	_drain_life(source, victim, total, landed)
@@ -3884,6 +3888,10 @@ func _execute(u: UnitInstance, victim: UnitInstance) -> void:
 		# Nothing deletes a boss or a crystal in one blow. The armed swing still lands
 		# as the heaviest hit the Devourer has — four of its ordinary ones.
 		var heavy := u.stat(StatModifier.Stat.ATTACK_DAMAGE) * 4.0
+		if boss_fight != null and victim.boss:
+			# Boss defence: an instakill on HER is the biggest blow she can take — her
+			# whole single-hit cap, however small the unit swinging it.
+			heavy = maxf(heavy, boss_fight.max_hit())
 		_emit("attack", {uid = u.uid, target_uid = victim.uid,
 			from = u.cell, to = victim.cell, amount = heavy})
 		_damage(victim, heavy, u)

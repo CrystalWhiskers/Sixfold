@@ -29,6 +29,11 @@ extends Resource
 
 ## Share of all damage the boss deals that comes back to it as health.
 @export var lifesteal: float = 0.0
+## Extra attack damage for this phase (0.3 = +30%), on top of the haste above: she hits
+## harder as well as faster with every phase.
+@export var attack_bonus: float = 0.0
+## Health she regenerates every second in this phase, a share of her full health.
+@export var regen: float = 0.0
 
 @export var moves: Array[BossMove] = []
 

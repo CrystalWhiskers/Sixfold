@@ -63,6 +63,50 @@ const LEAP_TIME := 0.18
 const NO_TIME_LIMIT := 1.0e9
 
 
+func max_hit() -> float:
+	## The most one blow can take off her, or INF with no cap.
+	if data.max_hit_percent <= 0.0:
+		return INF
+	return boss.stat(StatModifier.Stat.MAX_HP) * data.max_hit_percent
+
+
+func shape_boss_damage(amount: float, source: UnitInstance) -> float:
+	## Every hit on her, after all the usual multipliers: ranged blows are cut by her
+	## ranged resistance, and nothing lands bigger than her single-hit cap.
+	var out := amount
+	if source != null and source.is_ranged() and data.ranged_resist > 0.0:
+		out *= 1.0 - clampf(data.ranged_resist, 0.0, 0.95)
+	return minf(out, max_hit())
+
+
+## Her lasting gain from the army's dead: one modifier, re-laid when the count grows.
+var _death_mod: StatModifier = null
+var dead_counted := 0
+
+
+func _tick_death_power() -> void:
+	if data.death_power <= 0.0 or not boss.is_alive():
+		return
+	var dead := 0
+	for u in sim._units:
+		if u.team == player_team() and not u.structure and not u.is_alive() and not u.is_lit():
+			dead += 1
+	if dead == dead_counted:
+		return
+	dead_counted = dead
+	if _death_mod != null:
+		boss.battle_modifiers.erase(_death_mod)
+	_death_mod = StatModifier.make(StatModifier.Stat.ATTACK_DAMAGE, StatModifier.Mode.PERCENT,
+		data.death_power * float(dead))
+	boss.add_battle_modifier(_death_mod)
+
+
+func _tick_regen() -> void:
+	var p := _phase()
+	if p != null and p.regen > 0.0 and boss.is_alive():
+		heal_boss(boss.stat(StatModifier.Stat.MAX_HP) * p.regen * CombatSim.TICK)
+
+
 func top_army_tier() -> int:
 	## The highest tier of anything in the army on the field right now, 0 if none.
 	var top := 0
@@ -966,6 +1010,8 @@ func tick() -> void:
 	elif gap_left > 0.0:
 		gap_left -= CombatSim.TICK
 	_tick_enrage()
+	_tick_death_power()
+	_tick_regen()
 	_tick_boosts()
 	_tick_rebuilds()
 	_tick_summons()
@@ -1435,6 +1481,9 @@ func _apply_phase_mods() -> void:
 	if p.lifesteal > 0.0:
 		_phase_mods.append(StatModifier.make(StatModifier.Stat.LIFESTEAL,
 			StatModifier.Mode.FLAT, p.lifesteal))
+	if p.attack_bonus > 0.0:
+		_phase_mods.append(StatModifier.make(StatModifier.Stat.ATTACK_DAMAGE,
+			StatModifier.Mode.PERCENT, p.attack_bonus))
 	for m in _phase_mods:
 		boss.add_battle_modifier(m)
 

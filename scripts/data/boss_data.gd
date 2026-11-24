@@ -125,6 +125,12 @@ extends Resource
 @export var enrage_attack: float = 0.15
 @export var enrage_speed: float = 0.08
 @export var enrage_minions: float = 0.10
+## Toughness. No single blow takes more than `max_hit_percent` of her full health
+## (0 for no cap); ranged hits are cut by `ranged_resist` (0.3 = 30% less); and every
+## one of the army that dies makes her `death_power` stronger (attack, for good).
+@export var max_hit_percent: float = 0.0
+@export var ranged_resist: float = 0.0
+@export var death_power: float = 0.0
 
 
 func phase_for(hp_fraction: float, central: bool) -> int:

@@ -346,16 +346,28 @@ func _initialize() -> void:
 		# It takes up a second weapon: quicker, the two-row combo joins the cycle, and
 		# the first stance and the first map-wide sweep arrive. The big moves are
 		# spaced out with ordinary ones — about one in eight of the cycle.
-		_phase("Twin Blades", 0.75, 2.4, 1.2,
-			_cycle([crossed, sweep, spear, edge, dash], [gather, hunt], 7)),
-		_phase("Rending Arts", 0.50, 2.2, 1.3,
-			_cycle([heaven, crossed, horizon, pounce, spear], [ring, red_tide, retreat, rain], 4)),
+		_phase("Twin Blades", 0.75, 2.3, 1.25,
+			_cycle([crossed, sweep, spear, edge, dash], [gather, hunt], 5), 0.05),
+		_phase("Rending Arts", 0.50, 2.0, 1.45,
+			_cycle([heaven, crossed, horizon, pounce, spear], [ring, red_tide, retreat, rain], 3), 0.08),
 		# Its final form: the widest moves, and every blow feeds it.
-		_phase("Crimson Finale", 0.25, 2.0, 1.4,
+		_phase("Crimson Finale", 0.25, 1.8, 1.7,
 			_cycle([heaven, pounce, horizon, spear, crossed], [onrush_long, last_breath,
-				sanctum, ring_big, rain_big], 4),
-			0.10),
+				sanctum, ring_big, rain_big], 3),
+			0.14),
 	]
+	# She hits harder every phase, as well as faster (the haste above), and mends
+	# herself all the while: +0 / 15 / 30 / 50% attack, 0 / 0.1 / 0.15 / 0.2% of her
+	# health a second.
+	var bonus := [[0.0, 0.0], [0.15, 0.001], [0.30, 0.0015], [0.50, 0.002]]
+	for i in b.phases.size():
+		b.phases[i].attack_bonus = bonus[i][0]
+		b.phases[i].regen = bonus[i][1]
+	# No blow takes more than 1.2% of her health; ranged hits are cut by 30%; every
+	# fallen unit of the army makes her 0.2% stronger.
+	b.max_hit_percent = 0.012
+	b.ranged_resist = 0.3
+	b.death_power = 0.002
 	var summons := [[0, 0.0, 0, 1.0], [2, 20.0, 1, 1.0], [3, 18.0, 2, 1.3], [4, 15.0, 2, 1.6]]
 	for i in b.phases.size():
 		b.phases[i].summons_on_start = summons[i][0]

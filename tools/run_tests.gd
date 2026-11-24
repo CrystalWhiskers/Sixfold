@@ -13514,6 +13514,8 @@ func _test_boss_defence() -> void:
 	s = _boss_board([["warden"], [], []])
 	bf = s.bf
 	sim = s.sim
+	# One blow can only take her single-hit cap, so bring her to the edge first.
+	bf.boss.current_hp = 1.0
 	sim._damage(bf.boss, 1.0e7, bf.crystals[0])
 	sim.step()
 	_check("bring the boss to zero and the player wins", sim.is_finished()
@@ -14283,6 +14285,22 @@ func _test_boss_enrage(data: BossData) -> void:
 	small.zone_cap = 3
 	var s2 := _boss_board([["warden", "archer", "lancer", "seraph", "warden", "archer"], [], []], small)
 	var bf2: BossFight = s2.bf
+	# Her toughness: a single blow is capped, and ranged blows are cut.
+	var s3 := _boss_board([["archer"], [], []])
+	var bf3: BossFight = s3.bf
+	var sim3: CombatSim = s3.sim
+	var hp0 := bf3.boss.current_hp
+	sim3._damage(bf3.boss, 1.0e7, bf3.crystals[0])
+	_check("no single blow takes more than her cap",
+		absf((hp0 - bf3.boss.current_hp) - bf3.max_hit()) < 1.0 and bf3.max_hit() < hp0 * 0.05,
+		"%.0f taken, cap %.0f" % [hp0 - bf3.boss.current_hp, bf3.max_hit()])
+	var archer: UnitInstance = null
+	for u in sim3._units:
+		if u.team == bf3.player_team() and u.is_ranged():
+			archer = u
+	_check("and a ranged hit is cut by her ranged resistance",
+		archer != null and is_equal_approx(bf3.shape_boss_damage(100.0, archer), 100.0 * (1.0 - data.ranged_resist)))
+	BoardModel.reset_map()
 	_check("with no army limit, every unit of a wave lands while there is room",
 		bf2.army_in_zone(0) == 6, "%d of 6 on the field" % bf2.army_in_zone(0))
 	BoardModel.reset_map()
