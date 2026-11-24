@@ -49,6 +49,11 @@ enum Shape {
 	RAIN,
 	## A band of `span` rows the width of the map, centred on the biggest crowd.
 	HUNT,
+	## Not a blow: she teleports away to the back of the field, calls up
+	## `retreat_summons` round her, and heals for `retreat_seconds` — taking
+	## `retreat_vulnerability` MORE damage the whole time. Survive it and she comes
+	## back permanently stronger (`retreat_attack`, `retreat_speed`, stacking).
+	RETREAT,
 }
 
 @export var id: StringName = &""
@@ -80,6 +85,18 @@ enum Shape {
 ## ONRUSH: each leg runs straight through the thickest knot of the army, wherever
 ## it is, and on to the edge of the map, instead of the fixed criss-cross pattern.
 @export var seeks_army: bool = false
+
+@export_group("Retreat")
+@export var retreat_seconds: float = 8.0
+## Her own healing, a share of her full health per second (0.006 = 0.6%). The
+## summons that mend her (BossMinion.heal_boss) add to it while they stand.
+@export var retreat_heal: float = 0.006
+## Extra damage she takes while retreating: 0.5 = 50% more.
+@export var retreat_vulnerability: float = 0.5
+## What she gains, for the rest of the fight, each time a retreat runs its course.
+@export var retreat_attack: float = 0.15
+@export var retreat_speed: float = 0.10
+@export var retreat_summons: Array[BossMinion] = []
 @export var count: int = 24
 
 @export_group("Stance")

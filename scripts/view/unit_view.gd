@@ -98,6 +98,72 @@ func _draw_shade(body: Rect2, alpha: float) -> void:
 		draw_circle(eye, s * 0.055, Color(1.0, 0.55, 0.40, alpha))
 
 
+## The boss's retreat summons (BossMinion ids), each with its own picture.
+const THORN_ID := &"scarlet_thorn"
+const CHALICE_ID := &"blood_chalice"
+
+
+func _draw_thorn(body: Rect2, alpha: float) -> void:
+	## Scarlet Thorn, her archer: a thorned bow drawn back on an arrow.
+	var c := body.get_center()
+	var s := body.size.x * 0.5 * 0.9
+	var dark := Color(0.12, 0.02, 0.04, alpha)
+	var red := Color(1.0, 0.40, 0.45, alpha)
+	draw_circle(c, s * 0.78, Color(0.10, 0.02, 0.05, 0.85 * alpha))
+	# The bow: an arc on the left, thorns along its back.
+	var arc := PackedVector2Array()
+	for i in 13:
+		var a := lerpf(PI * 0.62, PI * 1.38, float(i) / 12.0)
+		arc.append(c + Vector2(cos(a) * 0.55 + 0.12, sin(a) * 0.62) * s)
+	draw_polyline(arc, red, maxf(s * 0.10, 1.5), true)
+	for i in [3, 6, 9]:
+		var p: Vector2 = arc[i]
+		var out := (p - (c + Vector2(0.12, 0.0) * s)).normalized()
+		var side := Vector2(-out.y, out.x) * s * 0.07
+		draw_colored_polygon(PackedVector2Array([p + side, p - side, p + out * s * 0.17]), red)
+	# The string, drawn back to the nock, and the arrow pointing at you.
+	var nock := c + Vector2(0.32, 0.0) * s
+	draw_polyline(PackedVector2Array([arc[0], nock, arc[12]]),
+		Color(1.0, 0.85, 0.80, 0.8 * alpha), maxf(s * 0.04, 1.0), true)
+	var tip := c + Vector2(-0.62, 0.0) * s
+	draw_line(nock, tip, Color(0.95, 0.90, 0.85, alpha), maxf(s * 0.06, 1.0))
+	draw_colored_polygon(PackedVector2Array([tip + Vector2(-0.12, 0) * s,
+		tip + Vector2(0.06, -0.10) * s, tip + Vector2(0.06, 0.10) * s]), red)
+	draw_circle(nock, s * 0.05, dark)
+
+
+func _draw_chalice(body: Rect2, alpha: float) -> void:
+	## Blood Chalice, which mends her: a cup brimming red, glowing while it stands.
+	var c := body.get_center()
+	var s := body.size.x * 0.5 * 0.9
+	var gold := Color(0.95, 0.78, 0.40, alpha)
+	var deep := Color(0.14, 0.03, 0.05, 0.9 * alpha)
+	draw_circle(c, s * 0.80, deep)
+	var glow := 0.7 + 0.3 * sin(Time.get_ticks_msec() * 0.004)
+	draw_circle(c + Vector2(0, -0.30) * s, s * 0.5, Color(0.5, 1.0, 0.6, 0.14 * glow * alpha))
+	# The bowl.
+	var bowl := PackedVector2Array()
+	for i in 13:
+		var a := lerpf(0.0, PI, float(i) / 12.0)
+		bowl.append(c + Vector2(cos(a) * 0.46, sin(a) * 0.38 - 0.30) * s)
+	draw_colored_polygon(bowl, gold)
+	# The blood at its brim.
+	var top := PackedVector2Array()
+	for i in 16:
+		var a := TAU * float(i) / 16.0
+		top.append(c + Vector2(cos(a) * 0.42, sin(a) * 0.09 - 0.30) * s)
+	draw_colored_polygon(top, Color(0.85, 0.08, 0.15, alpha))
+	# Stem and foot.
+	draw_rect(Rect2(c + Vector2(-0.06, 0.06) * s, Vector2(0.12, 0.34) * s), gold)
+	var foot := PackedVector2Array()
+	for i in 16:
+		var a := TAU * float(i) / 16.0
+		foot.append(c + Vector2(cos(a) * 0.30, sin(a) * 0.08 + 0.44) * s)
+	draw_colored_polygon(foot, gold)
+	# A drop running over the lip.
+	draw_circle(c + Vector2(0.40, -0.12) * s, s * 0.06, Color(0.85, 0.08, 0.15, alpha))
+
+
 static func tier_color(tier: int) -> Color:
 	return TIER_COLORS[clampi(tier - 1, 0, TIER_COLORS.size() - 1)]
 
@@ -275,7 +341,7 @@ func _process(delta: float) -> void:
 	if unit != null and unit.sealed:
 		# The Central Crystal's seal turns.
 		queue_redraw()
-	if unit != null and unit.data != null and unit.data.id == SHADE_ID:
+	if unit != null and unit.data != null and (unit.data.id == SHADE_ID or unit.data.id == CHALICE_ID):
 		# Its eyes burn.
 		queue_redraw()
 	if unit != null and unit.data != null and unit.data.tier >= APEX_TIER:
@@ -611,6 +677,10 @@ func _draw() -> void:
 		# The boss's shades get a picture, not letters: "CRI" next to the army's own
 		# three-letter units read as one more of yours.
 		_draw_shade(body, alpha)
+	elif unit.data.id == THORN_ID:
+		_draw_thorn(body, alpha)
+	elif unit.data.id == CHALICE_ID:
+		_draw_chalice(body, alpha)
 	else:
 		# Its short name, not an initial: with seven units starting "S" a single
 		# letter told nobody anything. Unique across the roster — see short_name().

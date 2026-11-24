@@ -40,6 +40,20 @@ func _stance(id: StringName, name: String, seconds: float, threshold: float,
 	return m
 
 
+func _minion(id: StringName, name: String, hp: float, atk: float, speed: float,
+		move: float, reach: int, accent: Color) -> BossMinion:
+	var m := BossMinion.new()
+	m.id = id
+	m.display_name = name
+	m.max_hp = hp
+	m.attack_damage = atk
+	m.attack_speed = speed
+	m.move_time = move
+	m.attack_range = reach
+	m.accent = accent
+	return m
+
+
 func _phase(name: String, threshold: float, gap: float, haste: float,
 		moves: Array[BossMove], lifesteal := 0.0) -> BossPhase:
 	var p := BossPhase.new()
@@ -287,6 +301,28 @@ func _initialize() -> void:
 	# Every map-wide move and every stance finisher charges up before it is marked.
 	for big in [hunt, cross, ring, ring_big, rain, rain_big, onrush, onrush_long, stripes]:
 		big.windup = 2.5
+	# The retreats: she vanishes to the back of the field, calls up all three kinds of
+	# summon, and heals while taking extra damage. Ride it out and she comes back
+	# stronger for good; beat her down a bar meanwhile and it is cut short.
+	var shade := _minion(&"crimson_shade", "Crimson Shade", 420.0, 35.0, 1.0, 0.8, 1,
+		Color(0.80, 0.12, 0.14).lightened(0.25))
+	shade.burst_mult = 2.5
+	var thorn := _minion(&"scarlet_thorn", "Scarlet Thorn", 240.0, 30.0, 0.9, 0.85, 3,
+		Color(0.78, 0.22, 0.34))
+	thorn.ranged = true
+	var chalice := _minion(&"blood_chalice", "Blood Chalice", 700.0, 0.0, 0.5, 0.8, 1,
+		Color(0.55, 0.14, 0.20))
+	chalice.can_move = false
+	chalice.can_attack = false
+	chalice.heal_boss = 0.003
+	var retreat := _move(&"crimson_retreat", "Crimson Retreat", S.RETREAT, 0, 0, 0.0, 0.5)
+	retreat.windup = 1.5
+	retreat.retreat_summons = [shade, shade, thorn, thorn, chalice, chalice] as Array[BossMinion]
+	var sanctum := _move(&"scarlet_sanctum", "Scarlet Sanctum", S.RETREAT, 0, 0, 0.0, 0.5)
+	sanctum.windup = 1.5
+	sanctum.retreat_seconds = 9.0
+	sanctum.retreat_heal = 0.007
+	sanctum.retreat_summons = [shade, shade, shade, thorn, thorn, thorn, chalice, chalice] as Array[BossMinion]
 	b.phases = [
 		# Four phases, each its own health bar. The crystals and the merge are a
 		# separate track: they change WHERE it fights, these change HOW.
@@ -297,11 +333,11 @@ func _initialize() -> void:
 		_phase("Twin Blades", 0.75, 2.4, 1.2,
 			_cycle([crossed, sweep, spear, edge, dash], [gather, hunt], 7)),
 		_phase("Rending Arts", 0.50, 2.2, 1.3,
-			_cycle([heaven, crossed, horizon, pounce, spear], [ring, red_tide, rain], 4)),
+			_cycle([heaven, crossed, horizon, pounce, spear], [ring, red_tide, retreat, rain], 4)),
 		# Its final form: the widest moves, and every blow feeds it.
 		_phase("Crimson Finale", 0.25, 2.0, 1.4,
 			_cycle([heaven, pounce, horizon, spear, crossed], [onrush_long, last_breath,
-				ring_big, rain_big], 4),
+				sanctum, ring_big, rain_big], 4),
 			0.10),
 	]
 	var summons := [[0, 0.0, 0, 1.0], [2, 20.0, 1, 1.0], [3, 18.0, 2, 1.3], [4, 15.0, 2, 1.6]]

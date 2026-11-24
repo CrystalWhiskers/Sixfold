@@ -22,7 +22,26 @@ func _initialize() -> void:
 	_save("shade_summon.wav", _shade_summon())
 	_save("recruit.wav", _recruit())
 	_save("upgrade.wav", _upgrade())
+	_save("boss_teleport.wav", _boss_teleport())
 	quit()
+
+
+func _boss_teleport() -> PackedFloat32Array:
+	## Her retreat: a sharp rising shimmer that snaps off — there, then gone.
+	var n := int(RATE * 0.7)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var p := 0.0
+	var hp := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var k := t / 0.7
+		p += TAU * lerpf(220.0, 1760.0, k * k) / RATE
+		var noise := _rng.randf_range(-1.0, 1.0)
+		hp = noise - hp * 0.6
+		var e := sin(minf(k / 0.85, 1.0) * PI * 0.5) * (1.0 - smoothstep(0.85, 1.0, k))
+		out[i] = (sin(p) * 0.7 + sin(p * 1.5) * 0.3 + hp * 0.25 * k) * e
+	return out
 
 
 func _save(file: String, samples: PackedFloat32Array) -> void:

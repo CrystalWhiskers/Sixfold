@@ -311,6 +311,16 @@ func _on_event(e: Dictionary) -> void:
 			_status.text = "%s is empowered — and lets loose!" % boss_data.display_name
 		"boss_summon":
 			_status.text = "%s calls her shades — stay out of the circles!" % boss_data.display_name
+		"boss_retreat":
+			_status.text = "%s retreats to heal and calls everything she has — she takes %d%% more damage now. Hit her!" % [
+				boss_data.display_name, roundi(float(e.vulnerability) * 100.0)]
+		"boss_retreat_end":
+			if bool(e.completed):
+				_status.text = "%s returns stronger: +%d%% attack, +%d%% speed." % [
+					boss_data.display_name, roundi(float(e.attack) * 100.0),
+					roundi(float(e.speed) * 100.0)]
+			else:
+				_status.text = "Her retreat is cut short — she gains nothing from it."
 		"boss_ward":
 			if int(e.shades) > 0:
 				_status.text = "%d shade%s shield %s: she takes %d%% less damage. Kill them!" % [

@@ -14152,6 +14152,93 @@ func _test_boss_polish() -> void:
 			and not _kind_events(sim, "boss_ward").is_empty(),
 			"%.2f -> %.2f" % [hp_before, bf.boss.stat(StatModifier.Stat.DAMAGE_TAKEN)])
 	BoardModel.reset_map()
+	_test_boss_retreat(data)
+
+
+func _test_boss_retreat(data: BossData) -> void:
+	_section("Boss defence: the retreat")
+	var retreats: Array[BossMove] = []
+	var phases_with: Array[int] = []
+	for i in data.phases.size():
+		for m in data.phases[i].moves:
+			if m.shape == BossMove.Shape.RETREAT:
+				if not retreats.has(m):
+					retreats.append(m)
+				if not phases_with.has(i):
+					phases_with.append(i)
+	_check("she retreats in her last two phases", phases_with == [2, 3], "%s" % [phases_with])
+	if retreats.is_empty():
+		return
+	var mv := retreats[0]
+	var kinds := {}
+	for k in mv.retreat_summons:
+		kinds[k.id] = k
+	_check("and calls three kinds of summon, each its own thing",
+		kinds.size() == 3 and kinds.has(&"scarlet_thorn") and kinds.has(&"blood_chalice"),
+		"%s" % [kinds.keys()])
+
+	var s := _boss_board([["warden", "warden"], ["archer"], []])
+	var bf: BossFight = s.bf
+	var sim: CombatSim = s.sim
+	var full := bf.boss.stat(StatModifier.Stat.MAX_HP)
+	var taken_before := bf.boss.stat(StatModifier.Stat.DAMAGE_TAKEN)
+	var atk_before := bf.boss.stat(StatModifier.Stat.ATTACK_DAMAGE)
+	# Walk her out into the field first, so the teleport has somewhere to come from.
+	var out := Vector2i(8, 9)
+	if sim.board.is_empty(out):
+		sim.board.move_unit(bf.boss, out)
+	bf.marked = {}
+	bf._mark(mv, 0, true)
+	_check("she teleports to the back of the field",
+		bf.boss.cell.y < BossFight.RETREAT_ROWS and bool(bf.marked.get("retreat", false)),
+		"at %s" % bf.boss.cell)
+	_check("and takes extra damage while she is there",
+		bf.boss.stat(StatModifier.Stat.DAMAGE_TAKEN) > taken_before,
+		"%.2f -> %.2f" % [taken_before, bf.boss.stat(StatModifier.Stat.DAMAGE_TAKEN)])
+	bf.boss.current_hp = full * 0.80
+	for i in int((data.summon_warning + 0.2) / CombatSim.TICK):
+		sim.step()
+	var ids := {}
+	for u in sim._units:
+		if u.is_alive() and u.team == bf.boss_team() and u != bf.boss:
+			ids[u.data.id] = int(ids.get(u.data.id, 0)) + 1
+	_check("her summons step out of their circles: all three kinds",
+		ids.has(&"crimson_shade") and ids.has(&"scarlet_thorn") and ids.has(&"blood_chalice"),
+		"%s" % [ids])
+	var hp_mid := bf.boss.current_hp
+	for i in int(1.0 / CombatSim.TICK):
+		sim.step()
+	_check("she heals while she waits", bf.boss.current_hp > hp_mid,
+		"%.0f -> %.0f" % [hp_mid, bf.boss.current_hp])
+	_check("and every chalice standing mends her too",
+		bf._heal_rate.values().any(func(r): return float(r) > 0.0))
+	bf.boss.current_hp = full * 0.999
+	for i in int(1.0 / CombatSim.TICK):
+		sim.step()
+	_check("but never past the top of her health bar",
+		bf.boss.current_hp <= full + 0.01, "%.0f of %.0f" % [bf.boss.current_hp, full])
+	var guard := 0
+	while bool(bf.marked.get("retreat", false)) and guard < 2000:
+		sim.step()
+		guard += 1
+	var ended := _kind_events(sim, "boss_retreat_end")
+	_check("ride it out and she comes back stronger, for good",
+		bf.retreats_completed == 1 and bf.boss.stat(StatModifier.Stat.ATTACK_DAMAGE) > atk_before
+		and not ended.is_empty() and bool(ended[0].completed),
+		"%.0f -> %.0f attack" % [atk_before, bf.boss.stat(StatModifier.Stat.ATTACK_DAMAGE)])
+	_check("and the extra damage taken is gone again", bf._retreat_vuln.is_empty())
+
+	# Beaten down a bar while she is away: cut short, nothing gained.
+	bf.marked = {}
+	bf.gap_left = 999.0
+	bf._mark(mv, 0, true)
+	bf.boss.current_hp = full * (data.phases[1].hp_threshold - 0.01)
+	sim.step()
+	var last: Dictionary = _kind_events(sim, "boss_retreat_end").back()
+	_check("knock her down a bar while she heals and the retreat is cut short",
+		not bool(bf.marked.get("retreat", false)) and not bool(last.completed)
+		and bf.retreats_completed == 1)
+	BoardModel.reset_map()
 
 
 func _test_boss_music() -> void:

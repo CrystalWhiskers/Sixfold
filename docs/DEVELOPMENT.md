@@ -3500,7 +3500,26 @@ to the fixed criss-cross. Red Tide's Onrush keeps the fixed pattern.
 
 **Boss sounds** are made by `tools/generate_sfx.gd` (sine waves and filtered noise, no
 samples): `boss_charge` on a big move's wind-up, `boss_slam` when any move lands,
-`shade_summon` on a shade's arrival, `recruit` and `upgrade` in the Barracks.
+`shade_summon` on a shade's arrival, `recruit` and `upgrade` in the Barracks,
+`boss_teleport` when she retreats.
+
+**The retreat** (`BossMove.Shape.RETREAT`): Crimson Retreat in Rending Arts, Scarlet
+Sanctum in Crimson Finale. After a 1.5 s wind-up she teleports to the free hub tile
+furthest from the army (`BossFight.retreat_cell`), calls every summon in
+`retreat_summons` (not held to the ordinary cap) and stands there healing for
+`retreat_seconds` (8 / 9 s) at `retreat_heal` of her full health a second (0.6% /
+0.7%), taking `retreat_vulnerability` (50%) MORE damage. Healing never goes past the
+top of her current bar (`heal_boss`). If it runs its course she comes back with +15%
+attack and +10% attack speed for the rest of the fight, stacking per retreat; if she
+is knocked down a bar meanwhile it is cut short and she gains nothing. She will not
+start one with her bar already empty.
+
+Her summons are `BossMinion` resources, each with its own icon in `UnitView`:
+Crimson Shade (the ordinary add: melee, bursts on arrival, wards her), Scarlet Thorn
+(an archer: 240 health, 30 attack, range 3) and Blood Chalice (700 health, never moves
+or attacks, mends her 0.3% of her full health a second while it stands — at any time,
+not just during the retreat). Measured with the decent player: about one retreat a
+fight, healing her 10-45% of a bar; still won 6 of 6.
 
 **Unit labels.** On coloured blocks a unit shows its three-letter short name
 (`UnitView.short_name`, unique across the roster — WAR, LAN, KEG, PGN...), in light

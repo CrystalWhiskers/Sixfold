@@ -202,6 +202,26 @@ func _apply(e: Dictionary) -> void:
 				_view.tile_size * (float(e.get("radius", 1)) + 0.6),
 				Color(0.85, 0.18, 0.40), _fx_life(0.5))
 			Audio.play_shade_summon()
+		"boss_retreat":
+			# Gone from where she stood, and glowing where she heals.
+			var gone: Array[Vector2i] = [Vector2i(e.from)]
+			_view.flash_cells(gone, Color(0.85, 0.20, 0.30, 0.6), _fx_life(0.5))
+			var halo: Array[Vector2i] = []
+			for dy in range(-1, 2):
+				for dx in range(-1, 2):
+					halo.append(Vector2i(e.cell) + Vector2i(dx, dy))
+			_view.flash_cells(halo, Color(0.40, 0.95, 0.55, 0.30),
+				float(e.get("seconds", 8.0)) / maxf(speed, 0.01))
+			_view.effects().ring(_view.cell_to_pos(e.cell), _view.tile_size * 0.3,
+				_view.tile_size * 2.5, Color(0.95, 0.30, 0.40), _fx_life(0.6))
+			_view.spawn_label(_view.cell_to_pos(e.cell), "RETREATS TO HEAL — +%d%% DAMAGE TAKEN"
+				% roundi(float(e.get("vulnerability", 0.0)) * 100.0), Color(0.55, 1.0, 0.65))
+			Audio.play_boss_teleport()
+		"boss_retreat_end":
+			if bool(e.get("completed", false)):
+				_view.spawn_label(_at(int(e.uid), e.cell), "STRONGER ×%d" % int(e.stacks),
+					Color(1.0, 0.45, 0.25))
+				Audio.play_boss_charge()
 		"boss_ward":
 			if int(e.get("shades", 0)) > 0:
 				_view.spawn_label(_at(int(e.uid), e.cell),

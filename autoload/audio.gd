@@ -127,11 +127,13 @@ const BOSS_SLAM_DB := -9.0
 const SHADE_DB := -10.0
 const RECRUIT_DB := -9.0
 const UPGRADE_DB := -8.0
+const TELEPORT_DB := -9.0
 var _boss_charge: AudioStream = null
 var _boss_slam: AudioStream = null
 var _shade_summon: AudioStream = null
 var _recruit: AudioStream = null
 var _upgrade: AudioStream = null
+var _boss_teleport: AudioStream = null
 
 var _music: AudioStreamPlayer = null
 var _music_now := ""
@@ -330,6 +332,7 @@ func _ready() -> void:
 	_shade_summon = _load_one("shade_summon.wav")
 	_recruit = _load_one("recruit.wav")
 	_upgrade = _load_one("upgrade.wav")
+	_boss_teleport = _load_one("boss_teleport.wav")
 	_death_voice = _load_voice_run("death")
 	_overkill_voice = _load_voice_run("overkill")
 	while ResourceLoader.exists("%s/%s.ogg" % [
@@ -730,6 +733,10 @@ func play_recruit() -> void:
 
 func play_upgrade() -> void:
 	_fire(_upgrade, UPGRADE_DB)
+
+
+func play_boss_teleport() -> void:
+	_fire(_boss_teleport, TELEPORT_DB)
 
 
 func play_select() -> void:

@@ -432,6 +432,117 @@ func _complete_stance(mv: BossMove) -> void:
 		_mark(mv.finisher)
 
 
+# --- The retreat ---------------------------------------------------------------
+
+## Her lasting gains from every retreat that ran its course, and how many that was.
+var _retreat_mods: Array[StatModifier] = []
+var _retreat_vuln: Array[StatModifier] = []
+var retreats_completed := 0
+## Where she can be sent to heal: the back of the field, in the hub.
+const RETREAT_ROWS := 3
+
+
+func retreat_cell() -> Vector2i:
+	## The free tile in the hub furthest from the whole of the army — measured to the
+	## nearest unit of it, so she goes where nobody is.
+	var best := boss.cell
+	var best_d := -1
+	for y in RETREAT_ROWS:
+		for x in WIDTH:
+			var c := Vector2i(x, y)
+			if c != boss.cell and (not sim.board.in_bounds(c) or not sim.board.is_empty(c)
+					or BoardModel.is_blocked(c)):
+				continue
+			var near := 1 << 20
+			for v in sim.board.units_view():
+				if v.team == player_team() and v.is_alive() and not v.structure:
+					near = mini(near, BoardModel.tile_distance(c, v.cell))
+			# Ties go to the middle of the hub, so the summons have room on both sides.
+			var d := near * 100 - absi(x - WIDTH / 2)
+			if d > best_d:
+				best = c
+				best_d = d
+	return best
+
+
+func _begin_retreat(mv: BossMove) -> void:
+	## She vanishes to the back of the field, calls her summons round her and heals —
+	## open to everything while she does.
+	var from := boss.cell
+	var to := retreat_cell()
+	if to != from and sim.board.move_unit(boss, to):
+		boss.move_from = from
+		sim._emit("move", {uid = boss.uid, from = from, to = to, duration = LEAP_TIME,
+			leap = true})
+	boss.target = null
+	boss.state = UnitInstance.State.IDLE
+	_retreat_vuln = [StatModifier.make(StatModifier.Stat.DAMAGE_TAKEN,
+		StatModifier.Mode.PERCENT, maxf(mv.retreat_vulnerability, 0.0))]
+	for m in _retreat_vuln:
+		boss.add_battle_modifier(m)
+	marked = {move = mv, retreat = true, left = maxf(mv.retreat_seconds, CombatSim.TICK),
+		cells = [] as Array[Vector2i]}
+	sim._emit("boss_retreat", {uid = boss.uid, from = from, cell = boss.cell,
+		name = mv.display_name, seconds = mv.retreat_seconds,
+		vulnerability = mv.retreat_vulnerability, phase = phase})
+	_summon_kinds(mv.retreat_summons)
+
+
+func _summon_kinds(kinds: Array[BossMinion]) -> void:
+	## A retreat's summons: every one in the list, in circles round her, not held to
+	## the ordinary cap — this is her calling everything she has. Each steps out a
+	## summon_warning later, like any other.
+	var p := _phase()
+	var power := p.minion_power if p != null else 1.0
+	var cells: Array[Vector2i] = []
+	var ring := [Vector2i(-2, 1), Vector2i(2, 1), Vector2i(-1, 2), Vector2i(1, 2), Vector2i(0, 2),
+		Vector2i(-3, 2), Vector2i(3, 2), Vector2i(-2, 3), Vector2i(2, 3), Vector2i(0, 3)]
+	for i in kinds.size():
+		if minions_alive() + cells.size() >= data.minion_cap + kinds.size():
+			break
+		var want: Vector2i = boss.cell + ring[i % ring.size()]
+		var c := _nearest_free(want, boss.cell)
+		if c == boss.cell or cells.has(c):
+			continue
+		cells.append(c)
+		_summon_marks.append({cell = c, left = data.summon_warning, power = power,
+			kind = kinds[i]})
+	if not cells.is_empty():
+		sim._emit("boss_summon", {uid = boss.uid, cells = cells, seconds = data.summon_warning,
+			cell = boss.cell, retreat = true})
+
+
+func _tick_retreat() -> void:
+	marked.left = float(marked.left) - CombatSim.TICK
+	if float(marked.left) <= 0.0:
+		_end_retreat(true)
+
+
+func _end_retreat(completed: bool) -> void:
+	var mv: BossMove = marked.move
+	for m in _retreat_vuln:
+		boss.battle_modifiers.erase(m)
+	_retreat_vuln.clear()
+	marked = {}
+	var p := _phase()
+	gap_left = p.gap if p != null else 3.0
+	if completed and boss.is_alive():
+		# Back, and stronger for good: every retreat that runs its course stacks.
+		retreats_completed += 1
+		var gains := [
+			StatModifier.make(StatModifier.Stat.ATTACK_DAMAGE, StatModifier.Mode.PERCENT,
+				mv.retreat_attack),
+			StatModifier.make(StatModifier.Stat.ATTACK_SPEED, StatModifier.Mode.PERCENT,
+				mv.retreat_speed),
+		]
+		for m: StatModifier in gains:
+			boss.add_battle_modifier(m)
+			_retreat_mods.append(m)
+	sim._emit("boss_retreat_end", {uid = boss.uid, cell = boss.cell, completed = completed,
+		stacks = retreats_completed, attack = mv.retreat_attack * retreats_completed,
+		speed = mv.retreat_speed * retreats_completed})
+
+
 func _tick_boosts() -> void:
 	if stagger_left > 0.0:
 		stagger_left -= CombatSim.TICK
@@ -460,6 +571,16 @@ func _mark(mv: BossMove, step := 0, wound := false) -> void:
 		boss.target = null
 		sim._emit("boss_windup", {uid = boss.uid, move = mv.id, name = mv.display_name,
 			seconds = mv.windup, cell = boss.cell, phase = phase})
+		return
+	if mv.shape == BossMove.Shape.RETREAT:
+		if bar_of(boss.current_hp).x <= 0.0:
+			# Her bar is already empty: the next one is about to begin, and a retreat
+			# now would be cut short before it started.
+			marked = {}
+			var p := _phase()
+			gap_left = p.gap if p != null else 3.0
+			return
+		_begin_retreat(mv)
 		return
 	var aim := _aim_for(mv)
 	var cells := move_cells(mv, boss.cell, aim, step)
@@ -766,6 +887,8 @@ func tick() -> void:
 		marked.left = float(marked.left) - CombatSim.TICK
 		if float(marked.left) <= 0.0:
 			_mark(marked.move, 0, true)
+	elif bool(marked.get("retreat", false)):
+		_tick_retreat()
 	elif not marked.is_empty():
 		marked.left = float(marked.left) - CombatSim.TICK
 		if float(marked.left) <= 0.0:
@@ -954,6 +1077,10 @@ func _check_phase() -> void:
 	var want := data.phase_for(frac, merged)
 	if want <= phase:
 		return
+	# Beaten down to the next bar while she was off healing: the retreat is cut
+	# short, and she gains nothing from it.
+	if bool(marked.get("retreat", false)):
+		_end_retreat(false)
 	# One bar at a time. Each phase is its own health bar: however big the blow that
 	# emptied this one, the next starts full — the overflow is lost — and nothing
 	# can hurt the boss during the announcement.
@@ -1015,9 +1142,50 @@ func _tick_summons() -> void:
 		m.left = float(m.left) - CombatSim.TICK
 		if float(m.left) <= 0.0:
 			_summon_marks.remove_at(i)
-			_spawn_minion(m.cell, float(m.power))
+			_spawn_minion(m.cell, float(m.power), m.get("kind", null))
 		i -= 1
 	_refresh_ward()
+	_tick_menders()
+
+
+## Healing owed to the boss but not yet shown, so the bar is told about it a few
+## times a second rather than every tick.
+var _heal_unshown := 0.0
+var _heal_clock := 0.0
+
+
+func _tick_menders() -> void:
+	## Every summon that mends her does so while it stands — kill them to stop it.
+	if not boss.is_alive():
+		return
+	var rate := 0.0
+	for u in sim._units:
+		if u.is_alive() and u.team == boss_team() and u != boss:
+			rate += float(_heal_rate.get(u.uid, 0.0))
+	if bool(marked.get("retreat", false)):
+		rate += (marked.move as BossMove).retreat_heal
+	if rate > 0.0:
+		heal_boss(boss.stat(StatModifier.Stat.MAX_HP) * rate * CombatSim.TICK)
+	_heal_clock -= CombatSim.TICK
+	if _heal_clock <= 0.0:
+		_heal_clock = 0.5
+		if _heal_unshown > 0.0:
+			sim._emit("heal", {uid = boss.uid, amount = _heal_unshown, hp = boss.current_hp,
+				cell = boss.cell})
+			_heal_unshown = 0.0
+
+
+func heal_boss(amount: float) -> float:
+	## Mends her, never past the top of the health bar she is on: healing can undo
+	## damage, not a phase. Returns how much it actually mended.
+	if amount <= 0.0 or not boss.is_alive():
+		return 0.0
+	var top := data.phases[phase].hp_threshold * boss.stat(StatModifier.Stat.MAX_HP)
+	var before := boss.current_hp
+	boss.current_hp = minf(boss.current_hp + amount, maxf(top, before))
+	var got := boss.current_hp - before
+	_heal_unshown += got
+	return got
 
 
 ## The damage cut the boss gets from the shades standing beside her, and how many it
@@ -1073,43 +1241,66 @@ func _summon_wave(count: int, power: float) -> void:
 		cell = boss.cell})
 
 
-func _spawn_minion(cell: Vector2i, power: float) -> void:
+## uid -> the share of her full health a standing summon mends each second.
+var _heal_rate: Dictionary = {}
+
+
+func _spawn_minion(cell: Vector2i, power: float, kind: BossMinion = null) -> UnitInstance:
+	## One summon stepping out of its circle: an ordinary shade, or `kind`.
 	if not boss.is_alive():
-		return
+		return null
 	if not sim.board.is_empty(cell):
 		cell = _nearest_free(cell, Vector2i(-1, -1))
 		if cell == Vector2i(-1, -1):
-			return
+			return null
 	var md := UnitData.new()
-	md.id = MINION_ID
-	md.display_name = data.minion_name
-	md.max_hp = data.minion_hp * power
-	md.attack_damage = data.minion_attack * power
-	md.attack_speed = data.minion_attack_speed
-	md.move_time = data.minion_move_time
 	md.sight_range = 40
 	md.mana_per_attack = 0.0
-	md.accent = data.accent.lightened(0.25)
+	var burst := data.minion_burst_mult
+	if kind == null:
+		md.id = MINION_ID
+		md.display_name = data.minion_name
+		md.max_hp = data.minion_hp * power
+		md.attack_damage = data.minion_attack * power
+		md.attack_speed = data.minion_attack_speed
+		md.move_time = data.minion_move_time
+		md.accent = data.accent.lightened(0.25)
+	else:
+		md.id = kind.id
+		md.display_name = kind.display_name
+		md.max_hp = kind.max_hp * power
+		md.attack_damage = kind.attack_damage * power
+		md.attack_speed = kind.attack_speed
+		md.move_time = kind.move_time
+		md.attack_range = kind.attack_range
+		md.attack_type = UnitData.AttackType.RANGED if kind.ranged else UnitData.AttackType.MELEE
+		md.can_move = kind.can_move
+		md.can_attack = kind.can_attack
+		md.accent = kind.accent
+		burst = kind.burst_mult
 	var m := UnitInstance.create(md, boss_team())
 	if not sim.board.force_place(m, cell):
-		return
+		return null
 	m.current_hp = m.stat(StatModifier.Stat.MAX_HP)
 	m.move_from = cell
 	sim._pending_units.append(m)
+	if kind != null and kind.heal_boss > 0.0:
+		_heal_rate[m.uid] = kind.heal_boss
 	sim._emit("summon", {
 		uid = m.uid, owner_uid = boss.uid, team = m.team, cell = cell,
 		unit_id = md.id, tier = 1, hp = m.current_hp, max_hp = m.current_hp,
 		has_ability = false, permanent = false, minion = true,
 	})
-	_shade_burst(m)
+	_shade_burst(m, burst)
+	return m
 
 
-func _shade_burst(m: UnitInstance) -> void:
+func _shade_burst(m: UnitInstance, mult: float) -> void:
 	## A shade does not just appear: it tears out of its circle, hitting everything of
 	## the army around it. The circle was the warning — standing in it costs.
-	if data.minion_burst_mult <= 0.0:
+	if mult <= 0.0:
 		return
-	var dmg := m.stat(StatModifier.Stat.ATTACK_DAMAGE) * data.minion_burst_mult
+	var dmg := m.stat(StatModifier.Stat.ATTACK_DAMAGE) * mult
 	var r := maxi(data.minion_burst_radius, 0)
 	var cells: Array[Vector2i] = []
 	for dy in range(-r, r + 1):
