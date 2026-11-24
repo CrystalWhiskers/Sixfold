@@ -4182,8 +4182,148 @@ func _downhill(u: UnitInstance, field: Dictionary, through: Dictionary) -> Vecto
 	return best
 
 
+## The board's fixed shape for the pathfinder, worked out once per map: for every
+## tile (by index y * WIDTH + x), the tiles a unit could step FROM into it — in
+## bounds, no barrier between, and a legal climb. Barriers, high ground and stairs
+## never change mid-battle; walls and units do, and those are read live.
+var _adj: Array = []
+var _adj_key := ""
+
+
+func _adjacency() -> Array:
+	var key := "%s|%d|%d|%d|%d|%d" % [BoardModel.map_name, BoardModel.WIDTH, BoardModel.HEIGHT,
+		BoardModel._edges.hash(), BoardModel._high.hash(), BoardModel._stairs.hash()]
+	if key == _adj_key and not _adj.is_empty():
+		return _adj
+	_adj_key = key
+	_adj = []
+	var w := BoardModel.WIDTH
+	for y in BoardModel.HEIGHT:
+		for x in w:
+			var c := Vector2i(x, y)
+			var from := PackedInt32Array()
+			for off in _neighbour_offsets():
+				var n: Vector2i = c + off
+				if not board.in_bounds(n) or BoardModel.blocks_between(c, n):
+					continue
+				# The step is FROM n INTO c — the field is built backwards from the goal.
+				if not BoardModel.can_climb(n, c):
+					continue
+				from.append(n.y * w + n.x)
+			_adj.append(from)
+	return _adj
+
+
 func _distance_field(goal: Vector2i, start: Vector2i,
 		through: Dictionary = {}) -> Dictionary:
+	## Cost from every reachable tile back to `goal`, as _distance_field_reference
+	## explains — the same rules and exactly the same answers, on flat arrays instead
+	## of a dictionary lookup and a handful of function calls per tile per neighbour.
+	## The pathfinder is most of a big fight's simulation time, so this is the one
+	## place the speed matters.
+	if not board.in_bounds(goal):
+		return _distance_field_reference(goal, start, through)
+	var w := BoardModel.WIDTH
+	var size := w * BoardModel.HEIGHT
+	var adj := _adjacency()
+	# Who stands where, read off the board once: -1 empty, otherwise the team.
+	var team_at := PackedInt32Array()
+	team_at.resize(size)
+	team_at.fill(-1)
+	for cell in board._cells:
+		var su: UnitInstance = board._cells[cell]
+		if su != null and board.in_bounds(cell):
+			team_at[cell.y * w + cell.x] = su.team
+	var passable := PackedByteArray()
+	passable.resize(size)
+	for cell in through:
+		if board.in_bounds(cell):
+			passable[cell.y * w + cell.x] = 1
+	var start_i := start.y * w + start.x if board.in_bounds(start) else -1
+	# Terrain, worked out the first time a tile is reached: 0 unknown, 1 open,
+	# 2 breakable stone, 3 impassable (permanent stone or a hole).
+	var ground := PackedByteArray()
+	ground.resize(size)
+	var any_fields := not _fields.is_empty()
+	var dist := PackedInt32Array()
+	dist.resize(size)
+	dist.fill(-1)
+	var goal_i := goal.y * w + goal.x
+	dist[goal_i] = 0
+	# Plain Arrays for the buckets: they are shared by reference, where a packed
+	# array would be copied every time one was taken out and changed.
+	var buckets: Array = [[goal_i]]
+	var cur := 0
+	while cur < buckets.size():
+		var bucket: Array = buckets[cur]
+		if bucket.is_empty():
+			cur += 1
+			continue
+		var ci: int = bucket.pop_back()
+		if dist[ci] != cur or ci == start_i:
+			continue
+		var here := cur
+		for ni: int in adj[ci]:
+			var g := ground[ni]
+			if g == 0:
+				var nc := Vector2i(ni % w, ni / w)
+				if BoardModel.is_wall(nc):
+					g = 2 if BoardModel.is_breakable(nc) else 3
+				elif BoardModel.is_void(nc):
+					g = 3
+				else:
+					g = 1
+				ground[ni] = g
+			if g == 3:
+				continue
+			var step := 1
+			if any_fields and _field_team >= 0 \
+					and field_at(Vector2i(ni % w, ni / w), _field_team) > 0.0:
+				step = FIELD_COST
+			if g == 2:
+				step = _field_wall_cost
+			elif ni != start_i and passable[ni] == 0:
+				var t := team_at[ni]
+				if t >= 0:
+					if t != _field_team:
+						continue
+					step = CONGESTION_COST
+			var cost := here + step
+			var known := dist[ni]
+			if known >= 0 and known <= cost:
+				continue
+			dist[ni] = cost
+			while buckets.size() <= cost:
+				buckets.append([])
+			buckets[cost].append(ni)
+		# Through a gate, exactly as the reference does it.
+		if _field_gates:
+			var c := Vector2i(ci % w, ci / w)
+			if BoardModel.is_gate(c):
+				var far := BoardModel.gate_from(c)
+				if far != c and board.in_bounds(far):
+					var fi := far.y * w + far.x
+					var gate_step := 1
+					if fi != start_i and passable[fi] == 0 and team_at[fi] >= 0:
+						gate_step = -1 if team_at[fi] != _field_team else CONGESTION_COST
+					if gate_step > 0:
+						var gate_cost := here + gate_step
+						if dist[fi] < 0 or dist[fi] > gate_cost:
+							dist[fi] = gate_cost
+							while buckets.size() <= gate_cost:
+								buckets.append([])
+							buckets[gate_cost].append(fi)
+	var out := {}
+	for i in size:
+		if dist[i] >= 0:
+			out[Vector2i(i % w, i / w)] = dist[i]
+	return out
+
+
+func _distance_field_reference(goal: Vector2i, start: Vector2i,
+		through: Dictionary = {}) -> Dictionary:
+	## The plain version of _distance_field, kept as the reference it is tested
+	## against and as the fallback for a goal off the board. Same answers, slower.
 	# Cost from every reachable tile back to the goal — cost, not steps, because
 	# a tile with one of your own people standing on it is passable but slow.
 	# Treating it as a wall was what made a whole column queue behind one jam
@@ -4201,16 +4341,23 @@ func _distance_field(goal: Vector2i, start: Vector2i,
 	# starts swinging at the stone. Permanent stone and holes stay impassable, so
 	# a map can still say "never through here".
 	var dist := {goal: 0}
-	var open: Array[Vector2i] = [goal]
-	while not open.is_empty():
-		# Small boards, so a linear scan for the cheapest open tile is cheaper
-		# than keeping a heap in order.
-		var pick := 0
-		for i in range(1, open.size()):
-			if int(dist[open[i]]) < int(dist[open[pick]]):
-				pick = i
-		var c: Vector2i = open[pick]
-		open.remove_at(pick)
+	# A bucket queue: every step costs a small whole number, so the open tiles are
+	# filed by their cost and taken cheapest first by walking the buckets upward. It
+	# used to be one list scanned end to end for the cheapest tile on every pop, which
+	# is fine on a 6 x 11 board and was most of a boss fight's simulation time on the
+	# 17 x 26 field. Both always take a cheapest tile next, so the distances — and
+	# every step chosen from them — are exactly the same.
+	var buckets: Array = [[goal]]
+	var cur := 0
+	while cur < buckets.size():
+		var bucket: Array = buckets[cur]
+		if bucket.is_empty():
+			cur += 1
+			continue
+		var c: Vector2i = bucket.pop_back()
+		if int(dist[c]) != cur:
+			# Filed again later at a lower cost and already done from there.
+			continue
 		if c == start:
 			continue
 		var here: int = int(dist[c])
@@ -4245,7 +4392,9 @@ func _distance_field(goal: Vector2i, start: Vector2i,
 			if dist.has(n) and int(dist[n]) <= cost:
 				continue
 			dist[n] = cost
-			open.append(n)
+			while buckets.size() <= cost:
+				buckets.append([])
+			buckets[cost].append(n)
 
 		# And through a gate. This is the part that makes gates real rather than
 		# decorative: the field is built backwards from the goal, so if `c` costs k
@@ -4270,7 +4419,9 @@ func _distance_field(goal: Vector2i, start: Vector2i,
 					var gate_cost := here + gate_step
 					if not dist.has(far) or int(dist[far]) > gate_cost:
 						dist[far] = gate_cost
-						open.append(far)
+						while buckets.size() <= gate_cost:
+							buckets.append([])
+						buckets[gate_cost].append(far)
 	return dist
 
 
@@ -4290,13 +4441,19 @@ func _greedy_step(u: UnitInstance, goal: Vector2i) -> Vector2i:
 	return best
 
 
+const _DIAGONAL_OFFSETS: Array[Vector2i] = [
+	Vector2i(0, -1), Vector2i(1, -1), Vector2i(1, 0), Vector2i(1, 1),
+	Vector2i(0, 1), Vector2i(-1, 1), Vector2i(-1, 0), Vector2i(-1, -1),
+]
+const _SQUARE_OFFSETS: Array[Vector2i] = [
+	Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)]
+
+
 func _neighbour_offsets() -> Array[Vector2i]:
-	if BoardModel.DIAGONAL_MOVEMENT:
-		return [
-			Vector2i(0, -1), Vector2i(1, -1), Vector2i(1, 0), Vector2i(1, 1),
-			Vector2i(0, 1), Vector2i(-1, 1), Vector2i(-1, 0), Vector2i(-1, -1),
-		]
-	return [Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)]
+	# Shared constants rather than a fresh array per call: this is asked for once per
+	# tile the pathfinder visits, and building the list each time was a measurable
+	# share of a boss fight. Every caller only reads it.
+	return _DIAGONAL_OFFSETS if BoardModel.DIAGONAL_MOVEMENT else _SQUARE_OFFSETS
 
 
 func _check_over() -> void:

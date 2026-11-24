@@ -3641,3 +3641,20 @@ one decent run drag to 21 minutes, so it starts at 5:00.
 income rises by `passive_income` (+1 Supply/s) on its own (`Barracks.tick`,
 `next_passive_in`); the Barracks header shows "+1 in 12s". Measured with the decent
 player: 6 of 6 won, 4:02 – 5:16 (average 4:44), ending at 18 – 20 Supply/s.
+
+## Performance: the pathfinder
+
+Profiling a boss fight put 82% of the simulation's time in `_distance_field`, the
+cost-to-goal field every walking unit steps down. It now runs on flat arrays: the
+board's fixed shape (which tile can be stepped into from which, given barriers and
+climbs) is worked out once per map (`_adjacency`), who stands where is read off the
+board once per field, terrain is looked up the first time a tile is reached, and the
+open tiles sit in a bucket queue instead of a list scanned end to end on every pop.
+`_neighbour_offsets()` returns shared constant arrays instead of building one per call.
+
+The answers are exactly the same: the old version is kept as
+`_distance_field_reference`, and a test compares the two on 684 fields across every
+map (crowded, with friends to walk through, both wall prices, gates on and off). The
+boss measurement gives identical results seed for seed, 2–4x faster (decent player:
+34.9 s of simulation for a 4:54 fight before, 8.4 s after). On screen, in a crowded
+boss fight at x2 speed, frames slower than 50 fps went from 169 to 10 in 40 seconds.

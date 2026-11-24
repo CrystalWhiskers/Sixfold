@@ -215,6 +215,7 @@ func _initialize() -> void:
 	_test_boss_music()
 	_test_boss_polish()
 	_test_every_ability_has_an_icon()
+	_test_fast_pathfinder_matches()
 	_test_mirror_matchup_is_fair()
 
 	var ran := _passed + _failed
@@ -990,6 +991,60 @@ func _ability_fires(by_id: Dictionary, caster: String, foe: String) -> bool:
 		if e.kind == "ability" and e.uid == c.uid:
 			return true
 	return false
+
+
+func _test_fast_pathfinder_matches() -> void:
+	_section("The fast pathfinder gives exactly the reference's answers")
+	# Every map on disk plus the boss field, crowded with both sides, a few stone
+	# tiles knocked about, every combination of the rules the field takes — and the
+	# fast field must equal the plain one tile for tile.
+	var maps: Array[MapData] = []
+	for f in DirAccess.get_files_at("res://data/maps"):
+		var clean := f.trim_suffix(".remap")
+		if clean.ends_with(".tres"):
+			maps.append(load("res://data/maps/" + clean) as MapData)
+	maps.append(BossFight.make_map())
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 77
+	var unit_a := load("res://data/units/warden_t1.tres") as UnitData
+	var unit_b := load("res://data/units/archer_t1.tres") as UnitData
+	var compared := 0
+	var wrong: PackedStringArray = []
+	for m in maps:
+		BoardModel.use_map(m)
+		var board := BoardModel.new()
+		var open: Array[Vector2i] = []
+		for y in BoardModel.HEIGHT:
+			for x in BoardModel.WIDTH:
+				if not BoardModel.is_blocked(Vector2i(x, y)):
+					open.append(Vector2i(x, y))
+		for i in mini(open.size() / 3, 40):
+			var c: Vector2i = open.pop_at(rng.randi_range(0, open.size() - 1))
+			board.force_place(UnitInstance.create(unit_a if i % 2 == 0 else unit_b,
+				BoardModel.TEAM_A if i % 2 == 0 else BoardModel.TEAM_B), c)
+		var sim := CombatSim.new()
+		sim.board = board
+		var units := board.all_units()
+		for trial in 6:
+			if units.is_empty() or open.is_empty():
+				break
+			var walker: UnitInstance = units[rng.randi_range(0, units.size() - 1)]
+			var goal: Vector2i = open[rng.randi_range(0, open.size() - 1)] if trial % 2 == 0 \
+				else units[rng.randi_range(0, units.size() - 1)].cell
+			sim._field_team = walker.team
+			sim._field_wall_cost = CombatSim.WALL_COST if trial % 3 != 0 else CombatSim.SAPPER_WALL_COST
+			sim._field_gates = trial % 2 == 0
+			var friends := sim._friendly_cells(walker)
+			for args in [[goal, walker.cell, {}], [goal, Vector2i(-99, -99), {}],
+					[goal, walker.cell, friends]]:
+				var fast := sim._distance_field(args[0], args[1], args[2])
+				var slow := sim._distance_field_reference(args[0], args[1], args[2])
+				compared += 1
+				if fast != slow:
+					wrong.append("%s goal %s" % [m.display_name, goal])
+	BoardModel.reset_map()
+	_check("on %d fields across %d maps, every distance is the same" % [compared, maps.size()],
+		wrong.is_empty() and compared > 100, ", ".join(wrong.slice(0, 5)))
 
 
 func _test_mirror_matchup_is_fair() -> void:
