@@ -69,6 +69,13 @@ extends Resource
 @export var minion_attack_speed: float = 1.0
 @export var minion_move_time: float = 0.8
 @export var minion_cap: int = 8
+## A shade arrives with a blast: this many of its own hits to every one of the army
+## standing within `minion_burst_radius` tiles of the circle. 0 for a quiet arrival.
+@export var minion_burst_mult: float = 0.0
+@export var minion_burst_radius: int = 1
+## While shades stand, the boss takes this much less damage per shade (0.06 = 6%),
+## so leaving them alive is a choice with a cost.
+@export var minion_ward_per_shade: float = 0.0
 ## Seconds a summoning circle is marked on the ground before the minion steps out.
 @export var summon_warning: float = 1.0
 ## Free tier-1 draws handed out across the sections before the fight.

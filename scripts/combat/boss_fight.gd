@@ -481,6 +481,9 @@ func _aim_for(mv: BossMove) -> Vector2i:
 		return t.cell if t != null else boss.cell + Vector2i(0, 1)
 	if mv.shape == BossMove.Shape.LEAP or mv.shape == BossMove.Shape.HUNT:
 		return _thickest(mv)
+	if mv.shape == BossMove.Shape.ONRUSH:
+		# A hunting Onrush aims each leg at the army; a plain one ignores the aim.
+		return _thickest_anywhere() if mv.seeks_army else NO_AIM
 	var best: UnitInstance = null
 	var best_d := AIM_RADIUS + 1
 	for v in sim.board.units_in_box(boss.cell, AIM_RADIUS, player_team()):
@@ -532,6 +535,51 @@ func _thickest(mv: BossMove) -> Vector2i:
 	return best
 
 
+const NO_AIM := Vector2i(-1, -1)
+
+
+func _thickest_anywhere() -> Vector2i:
+	## The unit of the army, anywhere on the field, with the most of the army packed
+	## round it — what a hunting Onrush runs through. Ties go to the one nearer the
+	## boss, then to the lower uid. NO_AIM when there is no army on the field.
+	var best := NO_AIM
+	var best_n := -1
+	var best_d := 1 << 30
+	var best_uid := 1 << 30
+	for v in sim.board.units_view():
+		if v.team != player_team() or not v.is_alive() or v.structure:
+			continue
+		var n := 0
+		for w in sim.board.units_in_box(v.cell, 1, player_team()):
+			if w.is_alive() and not w.structure:
+				n += 1
+		var d := BoardModel.box_distance(boss.cell, v.cell)
+		if n > best_n or (n == best_n and (d < best_d or (d == best_d and v.uid < best_uid))):
+			best = v.cell
+			best_n = n
+			best_d = d
+			best_uid = v.uid
+	return best
+
+
+static func aimed_line(at: Vector2i, aim: Vector2i) -> Array[Vector2i]:
+	## Every tile on the straight line from `at` through `aim` and on to the edge of
+	## the map — any angle, not just the eight directions. Stepped one tile at a time
+	## along the longer axis, so the line has no gaps to slip through.
+	var out: Array[Vector2i] = []
+	var d := aim - at
+	var steps := maxi(absi(d.x), absi(d.y))
+	if steps == 0:
+		return out
+	var inc := Vector2(d) / float(steps)
+	for i in range(1, WIDTH + HEIGHT):
+		var c := Vector2i(roundi(at.x + inc.x * i), roundi(at.y + inc.y * i))
+		if c.x < 0 or c.y < 0 or c.x >= WIDTH or c.y >= HEIGHT:
+			break
+		out.append(c)
+	return out
+
+
 static func _direction(from: Vector2i, to: Vector2i) -> Vector2i:
 	var d := to - from
 	var dir := Vector2i(signi(d.x), signi(d.y))
@@ -560,11 +608,14 @@ func move_cells(mv: BossMove, at: Vector2i, aim: Vector2i, step := 0) -> Array[V
 	var out: Array[Vector2i] = []
 	match mv.shape:
 		BossMove.Shape.ONRUSH:
-			var d := onrush_direction(at, step)
-			var c := at + d
-			while c.x >= 0 and c.y >= 0 and c.x < WIDTH and c.y < HEIGHT:
-				out.append(c)
-				c += d
+			if mv.seeks_army and aim != NO_AIM and aim != at:
+				out.append_array(aimed_line(at, aim))
+			else:
+				var d := onrush_direction(at, step)
+				var c := at + d
+				while c.x >= 0 and c.y >= 0 and c.x < WIDTH and c.y < HEIGHT:
+					out.append(c)
+					c += d
 		BossMove.Shape.CROSS:
 			for k in _band(mv.span):
 				for x in WIDTH:
@@ -935,6 +986,7 @@ func bar_of(hp: float) -> Vector2:
 # --- Summons ------------------------------------------------------------------
 
 var summon_left := 0.0
+const MINION_ID := &"crimson_shade"
 ## Circles marked on the ground, each becoming a minion when its clock runs out.
 var _summon_marks: Array[Dictionary] = []
 
@@ -965,6 +1017,41 @@ func _tick_summons() -> void:
 			_summon_marks.remove_at(i)
 			_spawn_minion(m.cell, float(m.power))
 		i -= 1
+	_refresh_ward()
+
+
+## The damage cut the boss gets from the shades standing beside her, and how many it
+## was worked out for — so it is only re-laid when that number changes.
+var _ward_mod: StatModifier = null
+var _ward_shades := 0
+
+
+func shades_alive() -> int:
+	var n := 0
+	for u in sim._units:
+		if u.is_alive() and u.team == boss_team() and u != boss and u.data.id == MINION_ID:
+			n += 1
+	return n
+
+
+func _refresh_ward() -> void:
+	## While shades stand, she takes less damage: a share per shade. Killing them is
+	## how you take it away again.
+	if data.minion_ward_per_shade <= 0.0:
+		return
+	var n := shades_alive() if boss.is_alive() else 0
+	if n == _ward_shades:
+		return
+	_ward_shades = n
+	if _ward_mod != null:
+		boss.battle_modifiers.erase(_ward_mod)
+		_ward_mod = null
+	var cut := clampf(data.minion_ward_per_shade * float(n), 0.0, 0.6)
+	if n > 0:
+		_ward_mod = StatModifier.make(StatModifier.Stat.DAMAGE_TAKEN,
+			StatModifier.Mode.PERCENT, -cut)
+		boss.add_battle_modifier(_ward_mod)
+	sim._emit("boss_ward", {uid = boss.uid, cell = boss.cell, shades = n, cut = cut})
 
 
 func _summon_wave(count: int, power: float) -> void:
@@ -994,7 +1081,7 @@ func _spawn_minion(cell: Vector2i, power: float) -> void:
 		if cell == Vector2i(-1, -1):
 			return
 	var md := UnitData.new()
-	md.id = &"crimson_shade"
+	md.id = MINION_ID
 	md.display_name = data.minion_name
 	md.max_hp = data.minion_hp * power
 	md.attack_damage = data.minion_attack * power
@@ -1014,6 +1101,26 @@ func _spawn_minion(cell: Vector2i, power: float) -> void:
 		unit_id = md.id, tier = 1, hp = m.current_hp, max_hp = m.current_hp,
 		has_ability = false, permanent = false, minion = true,
 	})
+	_shade_burst(m)
+
+
+func _shade_burst(m: UnitInstance) -> void:
+	## A shade does not just appear: it tears out of its circle, hitting everything of
+	## the army around it. The circle was the warning — standing in it costs.
+	if data.minion_burst_mult <= 0.0:
+		return
+	var dmg := m.stat(StatModifier.Stat.ATTACK_DAMAGE) * data.minion_burst_mult
+	var r := maxi(data.minion_burst_radius, 0)
+	var cells: Array[Vector2i] = []
+	for dy in range(-r, r + 1):
+		for dx in range(-r, r + 1):
+			var c := m.cell + Vector2i(dx, dy)
+			if sim.board.in_bounds(c):
+				cells.append(c)
+	sim._emit("shade_burst", {uid = m.uid, cell = m.cell, cells = cells, radius = r})
+	for v in sim.board.units_in_box(m.cell, r, player_team()):
+		if v.is_alive() and not v.structure and not v.sealed:
+			sim._damage(v, dmg, m, true)
 
 
 # --- Upgrades reach the field -------------------------------------------------

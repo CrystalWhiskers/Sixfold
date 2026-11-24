@@ -105,10 +105,15 @@ func refresh() -> void:
 		_type_btns[i].text = ("%s  Lv%d\n%s" % [UnitView.short_name(t), lv,
 			"MAX" if is_inf(price) else "Up: %d" % ceili(price)])
 		_type_btns[i].disabled = is_inf(price) or barracks.supply < price
-		var nxt := barracks.data.upgrades.describe(t.id, lv + 1) \
-			if barracks.data.upgrades != null and lv < barracks.max_level() else ""
-		_type_btns[i].tooltip_text = "%s — Lv%d%s" % [t.display_name, lv,
-			("\nNext: %s" % nxt) if not nxt.is_empty() else ""]
+		var tip := "%s — Lv%d" % [t.display_name, lv]
+		if lv < barracks.max_level():
+			tip += "\nNext, Lv%d (and +%d%% health and attack):" % [lv + 1,
+				roundi(barracks.data.upgrade_stat_per_level * 100.0)]
+			for line in barracks.level_changes(t, lv + 1):
+				tip += "\n  • " + line
+		else:
+			tip += " (maxed)"
+		_type_btns[i].tooltip_text = tip
 	queue_redraw()
 
 
@@ -184,6 +189,7 @@ func _gui_input(event: InputEvent) -> void:
 
 func _on_recruit(section: int) -> void:
 	if barracks.recruit(section):
+		Audio.play_recruit()
 		var d := barracks.at(section, _last_filled(section))
 		changed.emit("Recruited %s into %s — joins the next wave." % [
 			d.display_name if d != null else "a unit", BossFight.ZONE_NAMES[section]])
@@ -201,6 +207,7 @@ func _last_filled(section: int) -> int:
 
 func _on_income() -> void:
 	if barracks.upgrade_income():
+		Audio.play_upgrade()
 		changed.emit("Supply now +%.0f a second." % barracks.income)
 	refresh()
 
@@ -208,6 +215,7 @@ func _on_income() -> void:
 func _on_upgrade(index: int) -> void:
 	var t: UnitData = barracks.types[index]
 	if barracks.upgrade_type(t.id):
+		Audio.play_upgrade()
 		changed.emit("%s upgraded to Lv%d — every %s on the field and in every wave." % [
 			t.display_name, barracks.level_of(t.id), t.display_name])
 	refresh()

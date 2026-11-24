@@ -151,7 +151,15 @@ func field_data(d: UnitData) -> UnitData:
 	## every copy of a type at a level shares one resource.
 	if d == null:
 		return d
-	var lv := level_of(d.id)
+	return field_data_at(d, level_of(d.id))
+
+
+func field_data_at(d: UnitData, lv: int) -> UnitData:
+	## field_data at a given level rather than the type's current one — for showing
+	## what the next level will change.
+	if d == null:
+		return d
+	lv = mini(lv, max_level())
 	if lv <= 0:
 		return d
 	var key := "%s|%d|%d" % [d.id, d.tier, lv]
@@ -179,6 +187,57 @@ func field_data(d: UnitData) -> UnitData:
 				target.set(field, value)
 	_field_cache[key] = out
 	return out
+
+
+func level_changes(d: UnitData, lv: int) -> PackedStringArray:
+	## What buying level `lv` changes, one line per improvement, read off the unit
+	## itself before and after — so the numbers are the real ones for this tier, not
+	## the table's.
+	var out: PackedStringArray = []
+	if d == null or data.upgrades == null:
+		return out
+	var before := field_data_at(d, lv - 1)
+	var after := field_data_at(d, lv)
+	var vals := data.upgrades.level_values(d.id, lv)
+	for raw in vals:
+		var k := String(raw)
+		var field := k.substr(2).trim_suffix("*")
+		var obj_a: Object = before.ability if k.begins_with("a.") else before
+		var obj_b: Object = after.ability if k.begins_with("a.") else after
+		if obj_a == null or obj_b == null:
+			continue
+		var a = obj_a.get(field)
+		var b = obj_b.get(field)
+		if a == null or b == null:
+			continue
+		out.append(describe_change(field, a, b, k.begins_with("u.") and k.ends_with("*"),
+			d.get(field) if k.begins_with("u.") else null))
+	return out
+
+
+static func describe_change(field: String, a, b, relative: bool, base) -> String:
+	## "Attack speed +10% → +15%" for a share of the unit's own number, "Shield
+	## percent 1.5 → 1.75" for a value the table sets outright.
+	if field == "move_time" and relative and base != null and float(base) > 0.0:
+		# Lower is faster: shown as the speed it buys, which reads the right way up.
+		return "Move speed +%d%% → +%d%%" % [roundi((float(base) / float(a) - 1.0) * 100.0),
+			roundi((float(base) / float(b) - 1.0) * 100.0)]
+	var label := field.replace("_", " ").capitalize()
+	if relative and base != null and float(base) != 0.0:
+		return "%s +%d%% → +%d%%" % [label, roundi((float(a) / float(base) - 1.0) * 100.0),
+			roundi((float(b) / float(base) - 1.0) * 100.0)]
+	return "%s %s → %s" % [label, _num(a), _num(b)]
+
+
+static func _num(v) -> String:
+	if v is int:
+		return str(v)
+	if v is bool:
+		return "on" if v else "off"
+	var f := float(v)
+	if is_equal_approx(f, roundf(f)):
+		return str(roundi(f))
+	return String.num(f, 3)
 
 
 # --- Arranging ----------------------------------------------------------------

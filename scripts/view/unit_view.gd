@@ -63,6 +63,41 @@ static func short_name(d: UnitData) -> String:
 	return String(d.id).substr(0, 3).to_upper()
 
 
+## The boss defence's summoned shade (BossFight.MINION_ID), drawn as an icon.
+const SHADE_ID := &"crimson_shade"
+const SHADE_HOOD := [
+	Vector2(0.0, -0.80), Vector2(0.36, -0.62), Vector2(0.54, -0.22), Vector2(0.58, 0.22),
+	Vector2(0.66, 0.74), Vector2(0.40, 0.50), Vector2(0.22, 0.78), Vector2(0.0, 0.54),
+	Vector2(-0.22, 0.78), Vector2(-0.40, 0.50), Vector2(-0.66, 0.74), Vector2(-0.58, 0.22),
+	Vector2(-0.54, -0.22), Vector2(-0.36, -0.62),
+]
+
+
+func _draw_shade(body: Rect2, alpha: float) -> void:
+	## A hooded wraith: a ragged dark cloak, a hollow face and two burning eyes.
+	var c := body.get_center()
+	var s := body.size.x * 0.5 * 0.92
+	var hood := PackedVector2Array()
+	for p: Vector2 in SHADE_HOOD:
+		hood.append(c + p * s)
+	draw_colored_polygon(hood, Color(0.10, 0.02, 0.05, 0.92 * alpha))
+	var rim := hood.duplicate()
+	rim.append(hood[0])
+	draw_polyline(rim, Color(1.0, 0.42, 0.50, 0.75 * alpha), maxf(s * 0.06, 1.0), true)
+	# The hollow under the hood.
+	var face := PackedVector2Array()
+	for i in 16:
+		var a := TAU * float(i) / 16.0
+		face.append(c + Vector2(cos(a) * 0.27, sin(a) * 0.30 - 0.14) * s)
+	draw_colored_polygon(face, Color(0.0, 0.0, 0.0, alpha))
+	# The eyes, with a glow that pulses a little with the apex clock everything shares.
+	var glow := 0.75 + 0.25 * sin(Time.get_ticks_msec() * 0.006)
+	for side in [-1.0, 1.0]:
+		var eye := c + Vector2(0.11 * side, -0.14) * s
+		draw_circle(eye, s * 0.11, Color(1.0, 0.25, 0.20, 0.30 * glow * alpha))
+		draw_circle(eye, s * 0.055, Color(1.0, 0.55, 0.40, alpha))
+
+
 static func tier_color(tier: int) -> Color:
 	return TIER_COLORS[clampi(tier - 1, 0, TIER_COLORS.size() - 1)]
 
@@ -239,6 +274,9 @@ func _process(delta: float) -> void:
 		queue_redraw()
 	if unit != null and unit.sealed:
 		# The Central Crystal's seal turns.
+		queue_redraw()
+	if unit != null and unit.data != null and unit.data.id == SHADE_ID:
+		# Its eyes burn.
 		queue_redraw()
 	if unit != null and unit.data != null and unit.data.tier >= APEX_TIER:
 		apex_t = fmod(apex_t + delta * 1.1, TAU)
@@ -569,6 +607,10 @@ func _draw() -> void:
 		# so nothing readable ends up underneath it.
 		var art := body.grow(-4.0)
 		draw_texture_rect(art_tex, art, false, Color(1, 1, 1, alpha))
+	elif unit.data.id == SHADE_ID:
+		# The boss's shades get a picture, not letters: "CRI" next to the army's own
+		# three-letter units read as one more of yours.
+		_draw_shade(body, alpha)
 	else:
 		# Its short name, not an initial: with seven units starting "S" a single
 		# letter told nobody anything. Unique across the roster — see short_name().

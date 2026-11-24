@@ -187,6 +187,7 @@ summon_count = 2
 minion_power = 1.3
 music_path = "res://audio/boss/red_mist.mp3"
 music_label = "Theme 3"
+music_from = 0.0647
 
 [sub_resource type="Resource" id="Resource_k1rwg"]
 script = ExtResource("2_s8kb7")
@@ -198,6 +199,7 @@ damage_mult = 4.0
 telegraph = 0.6
 windup = 2.5
 legs = 9
+seeks_army = true
 
 [sub_resource type="Resource" id="Resource_wk5wn"]
 script = ExtResource("2_s8kb7")
@@ -276,3 +278,7 @@ income_step = 2.0
 upgrades = ExtResource("4_xxu2h")
 upgrade_costs = PackedFloat32Array(30, 50, 80, 120, 180)
 upgrade_stat_per_level = 0.15
+minion_hp = 420.0
+minion_attack = 35.0
+minion_burst_mult = 2.5
+minion_ward_per_shade = 0.06

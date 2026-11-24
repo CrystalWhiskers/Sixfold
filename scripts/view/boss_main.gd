@@ -310,7 +310,12 @@ func _on_event(e: Dictionary) -> void:
 			_stance_need = 0.0
 			_status.text = "%s is empowered — and lets loose!" % boss_data.display_name
 		"boss_summon":
-			_status.text = "%s calls her shades." % boss_data.display_name
+			_status.text = "%s calls her shades — stay out of the circles!" % boss_data.display_name
+		"boss_ward":
+			if int(e.shades) > 0:
+				_status.text = "%d shade%s shield %s: she takes %d%% less damage. Kill them!" % [
+					int(e.shades), "" if int(e.shades) == 1 else "s", boss_data.display_name,
+					roundi(float(e.cut) * 100.0)]
 		"boss_windup":
 			_status.text = "%s is charging %s!" % [boss_data.display_name, String(e.name)]
 			_next_move = String(e.name)

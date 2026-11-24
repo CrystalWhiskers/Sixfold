@@ -85,10 +85,12 @@ func _upgrades() -> BossUpgrades:
 	u.levels = {
 		# Bulwark: a bigger shield, then one that outgrows its own cap.
 		&"warden": _lv({"a.shield_percent": [1.5, 1.75, 2.0, 2.5, 3.5],
-			"a.shield_cap_percent": [1.5, 1.75, 2.0, 2.5, 3.5]}),
+			"a.shield_cap_percent": [1.5, 1.75, 2.0, 2.5, 3.5],
+			"u.mana_per_attack*": [1.1, 1.2, 1.3, 1.4, 1.6]}),
 		# Quickdraw: more stacks, and the bow reaches further.
 		&"archer": _lv({"a.haste_max_stacks": [7, 8, 9, 10, 14],
-			"u.attack_range": [3, 4, 4, 4, 5]}),
+			"u.attack_range": [3, 4, 4, 4, 5],
+			"u.attack_speed*": [1.05, 1.1, 1.15, 1.2, 1.3]}),
 		# Impale and its ordinary swing both run further down the line: 2 -> 7.
 		&"lancer": _lv({"u.pierce_targets": [3, 4, 5, 6, 7],
 			"a.pierce_targets": [4, 5, 6, 7, 9], "a.pierce_damage_mult": [2.2, 2.4, 2.6, 2.8, 3.5]}),
@@ -101,78 +103,113 @@ func _upgrades() -> BossUpgrades:
 			"a.dot_vulnerability_per_tier": [0.06, 0.07, 0.08, 0.09, 0.12]}),
 		# Arrest: longer, harder freezes.
 		&"stasis": _lv({"a.freeze_seconds_per_tier": [1.0, 1.1, 1.25, 1.4, 1.8],
-			"a.freeze_amp_per_tier": [0.17, 0.19, 0.22, 0.25, 0.32]}),
+			"a.freeze_amp_per_tier": [0.17, 0.19, 0.22, 0.25, 0.32],
+			"u.mana_per_attack*": [1.1, 1.2, 1.3, 1.4, 1.6]}),
 		# Cinder Lance: hotter, and the scorch spreads wider.
 		&"pyre": _lv({"a.burst_damage": [90.0, 105.0, 120.0, 140.0, 190.0],
-			"a.splash_radius": [1, 1, 2, 2, 3]}),
+			"a.splash_radius": [1, 1, 2, 2, 3],
+			"u.mana_per_attack*": [1.1, 1.2, 1.3, 1.4, 1.6]}),
 		# Retribution: holds longer and throws back more.
 		&"aegis": _lv({"a.reflect_duration": [6.0, 7.0, 8.0, 9.0, 12.0],
-			"a.reflect_percent": [2.25, 2.5, 2.75, 3.0, 4.0]}),
+			"a.reflect_percent": [2.25, 2.5, 2.75, 3.0, 4.0],
+			"u.mana_per_attack*": [1.1, 1.2, 1.3, 1.4, 1.6]}),
 		# Its weight on the field reaches further.
 		&"tyrant": _lv({"u.burden_radius": [2, 3, 3, 4, 5],
-			"u.burden_percent*": [1.1, 1.2, 1.3, 1.4, 1.7]}),
+			"u.burden_percent*": [1.1, 1.2, 1.3, 1.4, 1.7],
+			"u.attack_speed*": [1.05, 1.1, 1.15, 1.2, 1.3]}),
 		# Benediction: heals more, from further away.
 		&"seraph": _lv({"a.heal_radius": [4, 4, 5, 5, 7],
-			"a.heal_percent": [0.5, 0.55, 0.6, 0.7, 0.9]}),
+			"a.heal_percent": [0.5, 0.55, 0.6, 0.7, 0.9],
+			"u.mana_per_attack*": [1.1, 1.2, 1.3, 1.4, 1.6]}),
 		# War Horn: reaches more of the line, and lifts it harder.
 		&"herald": _lv({"a.aura_radius": [1, 2, 2, 3, 4],
-			"a.aura_percent_per_tier": [0.13, 0.14, 0.15, 0.17, 0.22]}),
+			"a.aura_percent_per_tier": [0.13, 0.14, 0.15, 0.17, 0.22],
+			"u.mana_per_attack*": [1.1, 1.2, 1.3, 1.4, 1.6]}),
 		# Second Wind: up again more often, and sooner.
 		&"revenant": _lv({"a.revive_chance": [0.55, 0.6, 0.65, 0.75, 0.9],
-			"a.revive_delay": [0.9, 0.8, 0.7, 0.6, 0.4]}),
+			"a.revive_delay": [0.9, 0.8, 0.7, 0.6, 0.4],
+			"u.attack_speed*": [1.05, 1.1, 1.15, 1.2, 1.3]}),
 		# Shadowstep: a harder strike, and longer unseen afterwards.
 		&"assassin": _lv({"a.blink_base_damage": [55.0, 65.0, 75.0, 90.0, 130.0],
-			"a.stealth_time": [4.0, 4.5, 5.0, 5.5, 7.0]}),
+			"a.stealth_time": [4.0, 4.5, 5.0, 5.5, 7.0],
+			"u.move_time*": [0.95, 0.9, 0.85, 0.8, 0.7]}),
 		# Overflow: the mana zone grows.
-		&"wellspring": _lv({"a.mana_aura_radius": [1, 2, 3, 4, 5]}),
+		&"wellspring": _lv({"a.mana_aura_radius": [1, 2, 3, 4, 5],
+			"u.mana_per_charge*": [1.1, 1.2, 1.3, 1.4, 1.6],
+			"u.attack_speed*": [1.05, 1.1, 1.15, 1.2, 1.3]}),
 		# No ability: its plating learns to take blows, more with every level.
-		&"amalgam": _lv({"u.shield_on_hit": [0.01, 0.02, 0.03, 0.04, 0.06]}),
+		&"amalgam": _lv({"u.shield_on_hit": [0.01, 0.02, 0.03, 0.04, 0.06],
+			"u.attack_speed*": [1.05, 1.1, 1.15, 1.2, 1.3],
+			"u.move_time*": [0.95, 0.9, 0.85, 0.8, 0.7]}),
 		# The beam washes over more and more of what it passes.
-		&"transcendence": _lv({"u.beam_splash": [0.1, 0.2, 0.3, 0.4, 0.6]}),
+		&"transcendence": _lv({"u.beam_splash": [0.1, 0.2, 0.3, 0.4, 0.6],
+			"u.attack_speed*": [1.05, 1.1, 1.15, 1.2, 1.3],
+			"u.move_time*": [0.95, 0.9, 0.85, 0.8, 0.7]}),
 		# Call Wisp: more wisps per tier, and a bigger retinue.
 		&"conjurer": _lv({"a.summon_per_tier": [1.25, 1.5, 1.75, 2.0, 3.0],
-			"a.summon_max": [6, 7, 8, 9, 12]}),
+			"a.summon_max": [6, 7, 8, 9, 12],
+			"u.mana_per_attack*": [1.1, 1.2, 1.3, 1.4, 1.6]}),
 		# Bombardment: a wider cross, and the ground burns longer.
-		&"culverin": _lv({"a.shell_arm": [1, 2, 2, 3, 4], "a.field_seconds": [6.0, 7.0, 8.0, 9.0, 12.0]}),
+		&"culverin": _lv({"a.shell_arm": [1, 2, 2, 3, 4], "a.field_seconds": [6.0, 7.0, 8.0, 9.0, 12.0],
+			"u.mana_per_attack*": [1.1, 1.2, 1.3, 1.4, 1.6]}),
 		# Siphon: drinks faster, and keeps more of what it takes.
 		&"leech": _lv({"a.drain_percent_per_tier": [0.006, 0.007, 0.008, 0.01, 0.015],
-			"u.lifesteal": [0.3, 0.35, 0.4, 0.45, 0.6]}),
+			"u.lifesteal": [0.3, 0.35, 0.4, 0.45, 0.6],
+			"u.attack_speed*": [1.05, 1.1, 1.15, 1.2, 1.3]}),
 		# Usurpation: holds its host longer.
-		&"usurper": _lv({"a.possess_seconds_per_tier": [3.0, 3.5, 4.0, 4.5, 6.0]}),
+		&"usurper": _lv({"a.possess_seconds_per_tier": [3.0, 3.5, 4.0, 4.5, 6.0],
+			"u.attack_speed*": [1.05, 1.1, 1.15, 1.2, 1.3],
+			"u.move_time*": [0.95, 0.9, 0.85, 0.8, 0.7]}),
 		# Onslaught: hits harder and stuns longer at the end of the run.
 		&"breaker": _lv({"a.charge_damage_per_tier": [2.0, 2.2, 2.4, 2.7, 3.5],
-			"a.stun_seconds_per_tier": [0.5, 0.55, 0.65, 0.75, 1.0]}),
+			"a.stun_seconds_per_tier": [0.5, 0.55, 0.65, 0.75, 1.0],
+			"u.attack_speed*": [1.05, 1.1, 1.15, 1.2, 1.3]}),
 		# Hardens faster under blows.
-		&"colossus": _lv({"u.shield_on_hit*": [1.15, 1.3, 1.6, 1.9, 2.8]}),
+		&"colossus": _lv({"u.shield_on_hit*": [1.15, 1.3, 1.6, 1.9, 2.8],
+			"u.attack_speed*": [1.05, 1.1, 1.15, 1.2, 1.3],
+			"u.move_time*": [0.95, 0.9, 0.85, 0.8, 0.7]}),
 		# Alone, it bites deeper.
-		&"pariah": _lv({"u.alone_hp_damage*": [1.15, 1.3, 1.45, 1.7, 2.3]}),
+		&"pariah": _lv({"u.alone_hp_damage*": [1.15, 1.3, 1.45, 1.7, 2.3],
+			"u.attack_speed*": [1.05, 1.1, 1.15, 1.2, 1.3],
+			"u.move_time*": [0.95, 0.9, 0.85, 0.8, 0.7]}),
 		# Lament: calls back more of the fallen, at fuller health.
-		&"vigil": _lv({"a.raise_per_tier": [1, 2, 2, 3, 4], "a.raise_hp_percent": [0.9, 0.95, 1.0, 1.0, 1.0]}),
+		&"vigil": _lv({"a.raise_per_tier": [1, 2, 2, 3, 4], "a.raise_hp_percent": [0.9, 0.95, 1.0, 1.0, 1.0],
+			"u.attack_speed*": [1.05, 1.1, 1.15, 1.2, 1.3]}),
 		# Last Stand: pulls from further, and holds longer.
-		&"paragon": _lv({"a.taunt_radius": [3, 4, 4, 5, 6], "a.taunt_duration": [4.5, 5.0, 5.5, 6.0, 8.0]}),
+		&"paragon": _lv({"a.taunt_radius": [3, 4, 4, 5, 6], "a.taunt_duration": [4.5, 5.0, 5.5, 6.0, 8.0],
+			"u.mana_per_attack*": [1.1, 1.2, 1.3, 1.4, 1.6]}),
 		# Undermine: more ground at once, and a bigger charge.
-		&"sapper": _lv({"a.terrain_tiles": [1, 2, 2, 3, 4], "a.sap_burst_multiple": [4.5, 5.0, 5.5, 6.0, 8.0]}),
+		&"sapper": _lv({"a.terrain_tiles": [1, 2, 2, 3, 4], "a.sap_burst_multiple": [4.5, 5.0, 5.5, 6.0, 8.0],
+			"u.mana_per_charge*": [1.1, 1.2, 1.3, 1.4, 1.6]}),
 		# Raise walls: more of them, tougher.
-		&"mason": _lv({"a.terrain_tiles": [1, 2, 2, 3, 4], "a.wall_hp": [280.0, 320.0, 360.0, 420.0, 600.0]}),
+		&"mason": _lv({"a.terrain_tiles": [1, 2, 2, 3, 4], "a.wall_hp": [280.0, 320.0, 360.0, 420.0, 600.0],
+			"u.mana_per_charge*": [1.1, 1.2, 1.3, 1.4, 1.6]}),
 		# Gorge: a bigger, faster ascended form.
 		&"devourer": _lv({"a.ascend_hp_mult": [2.7, 2.9, 3.1, 3.4, 4.0],
-			"a.ascend_attack_speed_mult": [1.55, 1.6, 1.7, 1.8, 2.0]}),
+			"a.ascend_attack_speed_mult": [1.55, 1.6, 1.7, 1.8, 2.0],
+			"u.move_time*": [0.95, 0.9, 0.85, 0.8, 0.7]}),
 		# Raise Host: more hosts per raising.
-		&"spire": _lv({"a.summon_count": [2, 3, 4, 5, 6]}),
+		&"spire": _lv({"a.summon_count": [2, 3, 4, 5, 6],
+			"u.mana_per_charge*": [1.1, 1.2, 1.3, 1.4, 1.6],
+			"u.shield_on_hit": [0.01, 0.02, 0.03, 0.04, 0.06]}),
 		# Assemble: builds sooner, and mends faster.
 		&"engineer": _lv({"a.cast_time": [9.0, 8.0, 7.0, 6.0, 4.0],
-			"u.repair_per_second*": [1.2, 1.4, 1.6, 2.0, 3.0]}),
+			"u.repair_per_second*": [1.2, 1.4, 1.6, 2.0, 3.0],
+			"u.mana_per_charge*": [1.1, 1.2, 1.3, 1.4, 1.6]}),
 		# Martyrdom: a longer last stand, cutting through more.
-		&"martyr": _lv({"a.frenzy_seconds": [3.0, 3.5, 4.0, 4.5, 6.0], "a.frenzy_pierce": [3, 4, 4, 5, 7]}),
+		&"martyr": _lv({"a.frenzy_seconds": [3.0, 3.5, 4.0, 4.5, 6.0], "a.frenzy_pierce": [3, 4, 4, 5, 7],
+			"u.attack_speed*": [1.05, 1.1, 1.15, 1.2, 1.3]}),
 		# Vertigo: longer lost, and a higher ceiling.
 		&"siren": _lv({"a.disorient_seconds": [0.6, 0.7, 0.8, 0.9, 1.2],
-			"a.disorient_max": [2.3, 2.6, 3.0, 3.5, 4.5]}),
+			"a.disorient_max": [2.3, 2.6, 3.0, 3.5, 4.5],
+			"u.mana_per_attack*": [1.1, 1.2, 1.3, 1.4, 1.6]}),
 		# Triage: reaches further, mends more, and more often.
 		&"hospitaller": _lv({"a.heal_radius": [3, 4, 4, 5, 6], "a.mend_percent": [0.06, 0.07, 0.08, 0.09, 0.12],
 			"a.mend_interval": [1.0, 0.9, 0.8, 0.7, 0.5]}),
 		# Slow Match: a heavier blast, over a bigger square.
 		&"powderkeg": _lv({"a.blast_radius": [1, 2, 2, 2, 3],
-			"a.blast_attack_multiple": [5.5, 6.0, 6.5, 7.0, 9.0]}),
+			"a.blast_attack_multiple": [5.5, 6.0, 6.5, 7.0, 9.0],
+			"u.move_time*": [0.95, 0.9, 0.85, 0.8, 0.7]}),
 	}
 	return u
 
@@ -202,6 +239,8 @@ func _initialize() -> void:
 	onrush.legs = 6
 	var onrush_long := _move(&"endless_onrush", "Endless Onrush", S.ONRUSH, 0, 1, 4.0, 0.6)
 	onrush_long.legs = 9
+	# Endless Onrush hunts: every leg runs through the thickest knot of the army.
+	onrush_long.seeks_army = true
 	var stripes := _move(&"thousand_cuts", "Thousand Cuts", S.STRIPES, 0, 1, 3.5, 1.2)
 	# The charge-up stances, and what each lets loose if it is not broken.
 	var gather := _stance(&"gathering_storm", "Gathering Storm", 5.0, 3000.0, cross)
@@ -233,9 +272,14 @@ func _initialize() -> void:
 	b.zone_cap = 20
 	# The adds.
 	b.minion_name = "Crimson Shade"
-	b.minion_hp = 300.0
-	b.minion_attack = 25.0
+	b.minion_hp = 420.0
+	b.minion_attack = 35.0
 	b.minion_cap = 8
+	# A shade tears out of its circle, hitting everything round it, and while shades
+	# stand she takes less damage — so they are worth killing, not just walking past.
+	b.minion_burst_mult = 2.5
+	b.minion_burst_radius = 1
+	b.minion_ward_per_shade = 0.06
 	b.summon_warning = 1.0
 	b.accent = Color(0.80, 0.12, 0.14)
 	# Every map-wide move and every stance finisher charges up before it is marked.
@@ -270,11 +314,12 @@ func _initialize() -> void:
 	# 91.6364 s and 183.2727 s, measured from the onsets in the file. Every stretch is a
 	# whole number of beats long, so each loop lands on the downbeat (the file itself is
 	# 506 beats, so Theme 4 wrapping off its end lands right too). The Red Mist theme
-	# whole. [path, from, to]; to 0 = the end of the file.
+	# whole, from its first sound: the file opens on 65 ms of silence (2854 samples, measured
+	# from the decoded audio), which looping from 0 put into every lap as an audible gap. [path, from, to]; to 0 = the end of the file.
 	var music := [
 		["res://audio/boss/gebura_battle.mp3", 0.0, 91.6364, "Theme 1"],
 		["res://audio/boss/gebura_battle.mp3", 91.6364, 183.2727, "Theme 2"],
-		["res://audio/boss/red_mist.mp3", 0.0, 0.0, "Theme 3"],
+		["res://audio/boss/red_mist.mp3", 0.0647, 0.0, "Theme 3"],
 		["res://audio/boss/gebura_battle.mp3", 183.2727, 0.0, "Theme 4"],
 	]
 	for i in b.phases.size():

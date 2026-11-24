@@ -213,6 +213,7 @@ func _initialize() -> void:
 	_test_this_pass()
 	_test_boss_defence()
 	_test_boss_music()
+	_test_boss_polish()
 	_test_every_ability_has_an_icon()
 	_test_mirror_matchup_is_fair()
 
@@ -14043,13 +14044,115 @@ func _test_boss_defence() -> void:
 	BoardModel.reset_map()
 
 
+func _test_boss_polish() -> void:
+	_section("Boss defence: upgrades, shades, the hunting Onrush")
+	var data := load("res://data/boss/arbiter.tres") as BossData
+
+	# --- Every unit's upgrade improves three things, every one of them real.
+	var not_three: PackedStringArray = []
+	var missing: PackedStringArray = []
+	for id in data.upgrades.levels:
+		var d := _find(String(id))
+		for lv in range(1, BossUpgrades.MAX_LEVEL + 1):
+			var vals := data.upgrades.level_values(id, lv)
+			if vals.size() != 3:
+				not_three.append("%s Lv%d has %d" % [id, lv, vals.size()])
+			for raw in vals:
+				var k := String(raw)
+				var field := k.substr(2).trim_suffix("*")
+				var obj: Object = d.ability if k.begins_with("a.") else d
+				if obj == null or obj.get(field) == null:
+					missing.append("%s %s" % [id, k])
+	_check("every unit's upgrade level improves exactly three things",
+		not_three.is_empty(), ", ".join(not_three))
+	_check("and every one names a field the unit really has", missing.is_empty(),
+		", ".join(missing))
+	var bar := Barracks.new()
+	bar.setup(data, load("res://data/loadouts/starter.tres") as LoadoutData, 5)
+	var warden := _find("warden")
+	var lines := bar.level_changes(warden, 1)
+	_check("the upgrade bar spells out all three, before and after", lines.size() == 3
+		and lines[0].contains("→"), " | ".join(lines))
+	var lv2 := bar.field_data_at(warden, 2)
+	_check("a share of the unit's own number grows by its share",
+		is_equal_approx(lv2.mana_per_attack, warden.mana_per_attack * 1.2),
+		"%.2f" % lv2.mana_per_attack)
+	_check("a lower move time reads as a faster unit",
+		Barracks.describe_change("move_time", 0.5, 0.4, true, 0.5) == "Move speed +0% → +25%",
+		Barracks.describe_change("move_time", 0.5, 0.4, true, 0.5))
+
+	# --- A line at any angle, out to the edge, with no gaps.
+	var line := BossFight.aimed_line(Vector2i(2, 2), Vector2i(5, 3))
+	var gaps := false
+	for i in range(1, line.size()):
+		if BoardModel.box_distance(line[i], line[i - 1]) != 1:
+			gaps = true
+	var last: Vector2i = line[line.size() - 1] if not line.is_empty() else Vector2i.ZERO
+	_check("an aimed line runs through its target and on to the edge, with no gaps",
+		line.has(Vector2i(5, 3)) and not gaps and last.x == BossFight.WIDTH - 1,
+		"%s" % [line])
+
+	# --- Endless Onrush hunts the army.
+	var hunting: BossMove = null
+	for p in data.phases:
+		for m in p.moves:
+			if m.id == &"endless_onrush":
+				hunting = m
+	_check("Endless Onrush hunts the army; the stance's Onrush keeps its pattern",
+		hunting != null and hunting.seeks_army)
+	var s := _boss_board([["warden", "warden", "warden", "warden"], [], []])
+	var bf: BossFight = s.bf
+	var sim: CombatSim = s.sim
+	var army: Array[UnitInstance] = []
+	for u in sim.board.units_view():
+		if u.team == bf.player_team() and u.is_alive() and not u.structure:
+			army.append(u)
+	if hunting != null and not army.is_empty():
+		var aim := bf._aim_for(hunting)
+		var leg := bf.move_cells(hunting, bf.boss.cell, aim, 0)
+		var through := false
+		for u in army:
+			if leg.has(u.cell):
+				through = true
+		_check("each leg is aimed straight through the army", through,
+			"aim %s, %d tiles" % [aim, leg.size()])
+		var fixed := bf.move_cells(hunting, bf.boss.cell, BossFight.NO_AIM, 0)
+		_check("and with no army to hunt it falls back to the old criss-cross",
+			not fixed.is_empty())
+
+	# --- Shades: a blast on arrival, and a ward while they stand.
+	var hp_before := bf.boss.stat(StatModifier.Stat.DAMAGE_TAKEN)
+	var target: UnitInstance = army[0] if not army.is_empty() else null
+	if target != null:
+		var spot := Vector2i(-1, -1)
+		for dy in range(-1, 2):
+			for dx in range(-1, 2):
+				var c: Vector2i = target.cell + Vector2i(dx, dy)
+				if spot.x < 0 and sim.board.in_bounds(c) and sim.board.is_empty(c) \
+						and not BoardModel.is_blocked(c):
+					spot = c
+		var was := target.current_hp + target.shield
+		bf._spawn_minion(spot, 1.0)
+		sim._absorb_new_units()
+		_check("a shade tears out of its circle and hits whoever stands beside it",
+			target.current_hp + target.shield < was and not _kind_events(sim, "shade_burst").is_empty(),
+			"%.0f -> %.0f" % [was, target.current_hp + target.shield])
+		bf._refresh_ward()
+		_check("and while it stands, the boss takes less damage",
+			bf.shades_alive() == 1 and bf.boss.stat(StatModifier.Stat.DAMAGE_TAKEN) < hp_before
+			and not _kind_events(sim, "boss_ward").is_empty(),
+			"%.2f -> %.2f" % [hp_before, bf.boss.stat(StatModifier.Stat.DAMAGE_TAKEN)])
+	BoardModel.reset_map()
+
+
 func _test_boss_music() -> void:
 	_section("Boss defence music")
 	var data := load("res://data/boss/arbiter.tres") as BossData
 	var want := [
 		["res://audio/boss/gebura_battle.mp3", 0.0, 91.6364],
 		["res://audio/boss/gebura_battle.mp3", 91.6364, 183.2727],
-		["res://audio/boss/red_mist.mp3", 0.0, 0.0],
+		# From its first sound: the file opens on 65 ms of silence that gapped every loop.
+		["res://audio/boss/red_mist.mp3", 0.0647, 0.0],
 		["res://audio/boss/gebura_battle.mp3", 183.2727, 0.0],
 	]
 	var got: PackedStringArray = []

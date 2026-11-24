@@ -77,6 +77,9 @@ enum Shape {
 
 ## ONRUSH: how many map-crossing dashes. RAIN: how many tiles.
 @export var legs: int = 6
+## ONRUSH: each leg runs straight through the thickest knot of the army, wherever
+## it is, and on to the edge of the map, instead of the fixed criss-cross pattern.
+@export var seeks_army: bool = false
 @export var count: int = 24
 
 @export_group("Stance")

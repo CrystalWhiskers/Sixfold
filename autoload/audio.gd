@@ -118,6 +118,21 @@ const VOICE_DB := -12.0
 ## without becoming the loudest thing on the field.
 const OVERKILL_DB := VOICE_DB + 3.0
 
+## Boss defence. All synthesized by tools/generate_sfx.gd. The charge-up is the
+## boss gathering herself for a big move (it used to borrow the round-start sound,
+## which says "a round begins", not "get out of the way"); the slam is any of her
+## moves landing (it used to borrow the critical-hit sting).
+const BOSS_CHARGE_DB := -8.0
+const BOSS_SLAM_DB := -9.0
+const SHADE_DB := -10.0
+const RECRUIT_DB := -9.0
+const UPGRADE_DB := -8.0
+var _boss_charge: AudioStream = null
+var _boss_slam: AudioStream = null
+var _shade_summon: AudioStream = null
+var _recruit: AudioStream = null
+var _upgrade: AudioStream = null
+
 var _music: AudioStreamPlayer = null
 var _music_now := ""
 var _voices: Array[AudioStreamPlayer] = []
@@ -310,6 +325,11 @@ func _ready() -> void:
 	_round_start = _load_one("round_start.wav")
 	_select = _load_one("select.wav")
 	_pickup = _load_one("pickup.wav")
+	_boss_charge = _load_one("boss_charge.wav")
+	_boss_slam = _load_one("boss_slam.wav")
+	_shade_summon = _load_one("shade_summon.wav")
+	_recruit = _load_one("recruit.wav")
+	_upgrade = _load_one("upgrade.wav")
 	_death_voice = _load_voice_run("death")
 	_overkill_voice = _load_voice_run("overkill")
 	while ResourceLoader.exists("%s/%s.ogg" % [
@@ -689,6 +709,27 @@ func play_round_start() -> void:
 
 func play_pickup() -> void:
 	_fire(_pickup, PICKUP_DB)
+
+
+func play_boss_charge() -> void:
+	_fire(_boss_charge, BOSS_CHARGE_DB)
+
+
+func play_boss_slam() -> void:
+	# A little pitch wander: Onrush lands nine of these in a row.
+	_fire(_boss_slam, BOSS_SLAM_DB, _rng.randf_range(0.95, 1.05))
+
+
+func play_shade_summon() -> void:
+	_fire(_shade_summon, SHADE_DB, _rng.randf_range(0.96, 1.04))
+
+
+func play_recruit() -> void:
+	_fire(_recruit, RECRUIT_DB)
+
+
+func play_upgrade() -> void:
+	_fire(_upgrade, UPGRADE_DB)
 
 
 func play_select() -> void:

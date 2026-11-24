@@ -177,7 +177,7 @@ func _apply(e: Dictionary) -> void:
 			for c in e.get("cells", []):
 				struck.append(c)
 			_view.flash_cells(struck, Color(1.0, 0.35, 0.25, 0.75), 0.30)
-			Audio.play_crit()
+			Audio.play_boss_slam()
 		"boss_phase":
 			_view.spawn_label(_at(int(e.uid), e.cell), String(e.name).to_upper(),
 				Color(1.0, 0.40, 0.36))
@@ -191,6 +191,22 @@ func _apply(e: Dictionary) -> void:
 				circles.append(c)
 			_view.flash_cells(circles, Color(0.70, 0.30, 0.85, 0.55),
 				float(e.get("seconds", 1.0)) / maxf(speed, 0.01))
+		"shade_burst":
+			# A shade tearing out of its circle: the blast round it, a dark ring, and
+			# its own sound.
+			var blast: Array[Vector2i] = []
+			for c in e.get("cells", []):
+				blast.append(c)
+			_view.flash_cells(blast, Color(0.62, 0.10, 0.30, 0.70), _fx_life(0.45))
+			_view.effects().ring(_view.cell_to_pos(e.cell), _view.tile_size * 0.2,
+				_view.tile_size * (float(e.get("radius", 1)) + 0.6),
+				Color(0.85, 0.18, 0.40), _fx_life(0.5))
+			Audio.play_shade_summon()
+		"boss_ward":
+			if int(e.get("shades", 0)) > 0:
+				_view.spawn_label(_at(int(e.uid), e.cell),
+					"WARDED -%d%%" % roundi(float(e.get("cut", 0.0)) * 100.0),
+					Color(0.85, 0.45, 0.75))
 		"boss_stance":
 			# The charge-up: the ground round her burns while the meter fills.
 			var around: Array[Vector2i] = []
@@ -212,7 +228,7 @@ func _apply(e: Dictionary) -> void:
 				float(e.get("seconds", 2.5)) / maxf(speed, 0.01))
 			_view.spawn_label(_at(int(e.uid), e.cell), "%s..." % String(e.name).to_upper(),
 				Color(1.0, 0.55, 0.35))
-			Audio.play_round_start()
+			Audio.play_boss_charge()
 		"boss_stance_broken":
 			_view.spawn_label(_at(int(e.uid), e.cell), "BROKEN", Color(0.70, 0.95, 0.70))
 		"boss_empowered":
