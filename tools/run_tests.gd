@@ -14251,6 +14251,73 @@ func _test_boss_polish() -> void:
 	_test_boss_retreat(data)
 	_test_boss_enrage(data)
 	_test_boss_attacks(data)
+	_test_boss_units(data)
+
+
+func _free_near(board: BoardModel, want: Vector2i) -> Vector2i:
+	for r in 6:
+		for dy in range(-r, r + 1):
+			for dx in range(-r, r + 1):
+				var c := want + Vector2i(dx, dy)
+				if board.in_bounds(c) and board.is_empty(c) and not BoardModel.is_blocked(c):
+					return c
+	return want
+
+
+func _test_boss_units(_data: BossData) -> void:
+	_section("Boss defence: how the army's units behave here")
+	# Soul kill: what she kills does not get back up.
+	var s := _boss_board([["revenant", "pariah", "paragon", "paragon"], ["herald"], []])
+	var bf: BossFight = s.bf
+	var sim: CombatSim = s.sim
+	sim._absorb_new_units()
+	var rev: UnitInstance = null
+	var herald: UnitInstance = null
+	var pariah: UnitInstance = null
+	var paragons: Array[UnitInstance] = []
+	for u in sim._units:
+		if u.team != bf.player_team() or u.structure:
+			continue
+		match String(u.data.id):
+			"revenant": rev = u
+			"herald": herald = u
+			"pariah": pariah = u
+			"paragon": paragons.append(u)
+	_check("a unit that opens with its ability opens the moment its wave lands",
+		herald != null and herald.has_opened)
+	if rev != null:
+		var before := sim._respawns.size()
+		sim._damage(rev, 1.0e6, bf.boss)
+		_check("what she kills, she takes whole: no second wind, nothing to raise",
+			not rev.is_alive() and sim._respawns.size() == before and not sim._fallen.has(rev)
+			and not _kind_events(sim, "soul_kill").is_empty())
+	# Paragons: empowered only with no other Paragon within three tiles.
+	if paragons.size() == 2 and pariah != null:
+		# Clear the bottom rows of everyone else so the spacing is all that matters.
+		for u in sim._units:
+			if u.team == bf.player_team() and not u.structure and u != pariah and not paragons.has(u):
+				sim.board.remove(u)
+				u.current_hp = 0.0
+				u.state = UnitInstance.State.DEAD
+		sim.board.move_unit(paragons[0], _free_near(sim.board, Vector2i(3, 22)))
+		sim.board.move_unit(paragons[1], _free_near(sim.board, paragons[0].cell + Vector2i(2, 0)))
+		bf._tick_solitude()
+		_check("two Paragons within three tiles: neither is empowered",
+			not paragons[0].empowered and not paragons[1].empowered)
+		sim.board.move_unit(paragons[1], _free_near(sim.board, paragons[0].cell + Vector2i(7, 0)))
+		bf._tick_solitude()
+		_check("spread four apart, both are", paragons[0].empowered and paragons[1].empowered,
+			"%s %s at %s %s, crowd %d %d" % [paragons[0].empowered, paragons[1].empowered, paragons[0].cell, paragons[1].cell, bf.solitude_crowding(paragons[0], paragons[0].cell), bf.solitude_crowding(paragons[1], paragons[1].cell)])
+		# The Pariah, crowded, walks off to be alone.
+		sim.board.move_unit(pariah, _free_near(sim.board, paragons[0].cell + Vector2i(1, 0)))
+		var was := bf.solitude_crowding(pariah, pariah.cell)
+		pariah.state = UnitInstance.State.IDLE
+		pariah.target = bf.boss
+		var stepped := bf.seek_solitude(pariah)
+		_check("a crowded Pariah steps away from its own side to be alone",
+			was > 0 and stepped and bf.solitude_crowding(pariah, pariah.cell) < was,
+			"was %d stepped %s now %d at %s" % [was, stepped, bf.solitude_crowding(pariah, pariah.cell), pariah.cell])
+	BoardModel.reset_map()
 
 
 func _test_boss_attacks(data: BossData) -> void:

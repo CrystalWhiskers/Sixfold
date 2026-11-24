@@ -96,6 +96,8 @@ const IMPATIENT_WALL_MULT := 2.0
 # impassable would let a Culverin wall a corridor off with one shell, which is a
 # different and much stronger unit than the one asked for.
 const FIELD_COST := 3
+## Boss defence: how much less a Powderkeg's blast does to its own side.
+const KEG_ALLY_REDUCTION := 0.9
 
 # Every point of damage in the game rolls for this, wherever it comes from — a
 # swing, a spell, a shell, a burning tile, a drain tick. Rolled off the seeded
@@ -583,6 +585,9 @@ func _decide(u: UnitInstance) -> void:
 		# its ordinary turn instead: cornered, it fights.
 		return
 	u.target = _mark_for(u)
+	if boss_fight != null and boss_fight.seek_solitude(u):
+		# Boss defence: a Pariah or Paragon walking off to be alone, where its power is.
+		return
 	if u.is_taunting():
 		# Planted. It cannot move and it cannot swing while it holds — that is
 		# what it is paying for the damage reduction and everyone's attention.
@@ -1759,6 +1764,16 @@ func _run_charge(u: UnitInstance, ab: AbilityData, tiles: int) -> void:
 			_end_charge(u, "wall")
 			return
 		var who := board.unit_at(next)
+		if boss_fight != null:
+			# Boss defence: the charge runs straight through its own side, as if they
+			# were not there, and lands on the far side of them.
+			while who != null and who.is_alive() and who.team == u.team and u.charge_left > 1:
+				next += u.charge_step
+				u.charge_left -= 1
+				if not board.in_bounds(next) or BoardModel.is_blocked(next):
+					_end_charge(u, "wall")
+					return
+				who = board.unit_at(next)
 		if who != null and who.is_alive():
 			# An ALLY stops the charge and takes nothing: there is no friendly fire
 			# anywhere else in this game and inventing it here would make the unit a
@@ -2601,6 +2616,11 @@ func _absorb_new_units() -> void:
 		_units.append(u)
 	_pending_units.clear()
 	_order.clear()
+	if boss_fight != null:
+		# Boss defence: units arrive in waves all fight long, not at an opening bell, so
+		# whatever opens a battle with its ability (an Usurper, a Herald, an Assassin)
+		# opens the moment it lands.
+		_resolve_openers()
 	for i in _units.size():
 		_order.append(i)
 
@@ -3731,7 +3751,9 @@ func _blast(u: UnitInstance) -> void:
 		if v != null and v != u and v.is_alive():
 			victims.append(v)
 	for v in victims:
-		_damage(v, dmg, u, true)
+		# Boss defence: its own side takes only a tenth of the blast (90% less).
+		var share := 1.0 - KEG_ALLY_REDUCTION if boss_fight != null and v.team == u.team else 1.0
+		_damage(v, dmg * share, u, true)
 	_bury(u, u.uid, false)
 
 
@@ -3870,7 +3892,11 @@ func _bury(victim: UnitInstance, killer_uid: int, frozen: bool,
 	if victim.structure:
 		# A crystal is not a body: nothing raises it and nobody grieves for it.
 		return
-	if not _try_queue_revive(victim):
+	if boss_fight != null and boss_fight.soul_kills(killer_uid, victim):
+		# Boss defence: what SHE kills, she takes whole. No second wind, and nothing
+		# raises it — the soul is gone with the body.
+		_emit("soul_kill", {uid = victim.uid, cell = victim.cell})
+	elif not _try_queue_revive(victim):
 		# Only a body nobody is already getting back up goes in the pile. A
 		# Revenant mid-revive is not available to be raised as well.
 		_fallen.append(victim)

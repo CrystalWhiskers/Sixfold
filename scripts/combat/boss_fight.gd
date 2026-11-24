@@ -1127,6 +1127,7 @@ func tick() -> void:
 	_tick_enrage()
 	_tick_death_power()
 	_tick_hazards()
+	_tick_solitude()
 	_tick_regen()
 	_tick_boosts()
 	_tick_rebuilds()
@@ -1707,3 +1708,122 @@ func minion_target(u: UnitInstance) -> UnitInstance:
 			best = v
 			best_d = d
 	return best
+
+
+# --- Souls, solitude ----------------------------------------------------------
+
+func soul_kills(killer_uid: int, victim: UnitInstance) -> bool:
+	## What she or her summons kill stays dead: no Revenant's second wind, and no
+	## Vigil raises it. Everything else the army loses can still come back.
+	if victim == null or victim.team != player_team() or killer_uid < 0:
+		return false
+	if killer_uid == boss.uid:
+		return true
+	for u in sim._units:
+		if u.uid == killer_uid:
+			return u.team == boss_team()
+	for u in sim._pending_units:
+		if u.uid == killer_uid:
+			return u.team == boss_team()
+	return false
+
+
+## Paragons are empowered only with no other Paragon within this many tiles, and a
+## Pariah strikes hardest with no ally near it at all — both re-read all fight long,
+## since in this mode the army never stands still at an opening bell.
+const PARAGON_SPACE := 3
+var _empower_mods: Dictionary = {}
+## uid -> seconds before a unit may step away again to find its solitude.
+var _solitude_cd: Dictionary = {}
+
+
+func wants_solitude(u: UnitInstance) -> bool:
+	return u.team == player_team() and (u.data.alone_hp_damage > 0.0 or u.data.solo_empower)
+
+
+func solitude_crowding(u: UnitInstance, at: Vector2i) -> int:
+	## How badly `at` spoils this unit's solitude: allies too close for a Pariah,
+	## other Paragons too close for a Paragon. 0 is alone.
+	var n := 0
+	for o in sim._units:
+		if o == u or o.team != u.team or not o.is_alive() or o.structure:
+			continue
+		var d := BoardModel.box_distance(o.cell, at)
+		if u.data.solo_empower:
+			if o.data.id == u.data.id and d <= PARAGON_SPACE:
+				n += PARAGON_SPACE + 1 - d
+		elif d <= CombatSim.ISOLATION_RADIUS:
+			n += 1
+	return n
+
+
+func _tick_solitude() -> void:
+	for u in sim._units:
+		if not u.is_alive() or not wants_solitude(u):
+			continue
+		if _solitude_cd.has(u.uid):
+			_solitude_cd[u.uid] = maxf(float(_solitude_cd[u.uid]) - CombatSim.TICK, 0.0)
+		var alone := solitude_crowding(u, u.cell) == 0
+		if u.data.alone_hp_damage > 0.0 and alone != u.isolated:
+			u.isolated = alone
+			sim._emit("isolated" if alone else "crowded", {uid = u.uid, cell = u.cell})
+		if u.data.solo_empower and alone != u.empowered:
+			_set_empowered(u, alone)
+
+
+func _set_empowered(u: UnitInstance, on: bool) -> void:
+	var frac := u.current_hp / maxf(u.stat(StatModifier.Stat.MAX_HP), 1.0)
+	for m in _empower_mods.get(u.uid, []):
+		u.battle_modifiers.erase(m)
+	_empower_mods.erase(u.uid)
+	u.empowered = on
+	if on:
+		var mods: Array[StatModifier] = []
+		if u.data.empower_hp_mult > 1.0:
+			mods.append(StatModifier.make(StatModifier.Stat.MAX_HP, StatModifier.Mode.PERCENT,
+				u.data.empower_hp_mult - 1.0))
+		if u.data.empower_damage_mult > 1.0:
+			mods.append(StatModifier.make(StatModifier.Stat.ATTACK_DAMAGE, StatModifier.Mode.PERCENT,
+				u.data.empower_damage_mult - 1.0))
+		if not is_equal_approx(u.data.empower_attack_speed_mult, 1.0):
+			mods.append(StatModifier.make(StatModifier.Stat.ATTACK_SPEED, StatModifier.Mode.PERCENT,
+				maxf(u.data.empower_attack_speed_mult, 0.05) - 1.0))
+		for m in mods:
+			u.add_battle_modifier(m)
+		_empower_mods[u.uid] = mods
+	# Same share of health either way, so stepping in and out is not a heal.
+	u.current_hp = maxf(frac * u.stat(StatModifier.Stat.MAX_HP), 1.0)
+	sim._emit("empowered" if on else "unempowered", {uid = u.uid, cell = u.cell,
+		hp = u.current_hp, max_hp = u.stat(StatModifier.Stat.MAX_HP)})
+
+
+func seek_solitude(u: UnitInstance) -> bool:
+	## A Pariah or Paragon crowded by its own side steps away to be alone — it
+	## goes looking for the room its power needs. One step at a time, at most once a
+	## second, and only to a tile that is less crowded; ties go towards its target.
+	if not wants_solitude(u) or not u.can_move_now():
+		return false
+	if float(_solitude_cd.get(u.uid, 0.0)) > 0.0:
+		return false
+	var here := solitude_crowding(u, u.cell)
+	if here == 0:
+		return false
+	var best := u.cell
+	var best_n := here
+	var best_d := 1 << 30
+	for off in sim._neighbour_offsets():
+		var c: Vector2i = u.cell + off
+		if not sim.board.in_bounds(c) or not sim.board.is_empty(c) or BoardModel.is_blocked(c):
+			continue
+		if BoardModel.blocks_between(u.cell, c) or not BoardModel.can_climb(u.cell, c):
+			continue
+		var n := solitude_crowding(u, c)
+		var d := BoardModel.tile_distance(c, u.target.cell) if u.target != null else 0
+		if n < best_n or (n == best_n and n < here and d < best_d):
+			best = c
+			best_n = n
+			best_d = d
+	if best == u.cell:
+		return false
+	_solitude_cd[u.uid] = 1.0
+	return sim._step_to(u, best)

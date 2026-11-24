@@ -424,7 +424,7 @@ func _process(delta: float) -> void:
 		# The Central Crystal's seal turns.
 		queue_redraw()
 	if unit != null and unit.data != null and (unit.data.id == SHADE_ID or unit.data.id == CHALICE_ID
-			or (unit.boss and boss_phase >= 2)):
+			or (unit.boss and boss_phase >= 2) or (unit.isolated and unit.data.alone_hp_damage > 0.0)):
 		# Its eyes burn.
 		queue_redraw()
 	if unit != null and unit.data != null and unit.data.tier >= APEX_TIER:
@@ -961,6 +961,13 @@ func _draw() -> void:
 			var at := Vector2(cos(ang), sin(ang)) * (half + 4.0)
 			draw_circle(at, maxf(tile_size * 0.035, 2.0),
 				Color(tint.lightened(0.45), (0.55 + 0.35 * pulse) * alpha))
+
+	if unit.isolated and unit.data.alone_hp_damage > 0.0 and not dying:
+		# Alone, and stronger for it: a calm pale ring, breathing slowly — it has found
+		# its room.
+		var calm := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.003)
+		draw_arc(Vector2.ZERO, half + 3.0 + calm * 2.0, 0.0, TAU, 32,
+			Color(0.70, 0.85, 1.0, (0.35 + 0.35 * calm) * alpha), 2.0)
 
 	if possessed:
 		# Somebody else is driving. The team ring has already changed colour, so this has
