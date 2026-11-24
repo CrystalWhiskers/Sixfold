@@ -14413,9 +14413,15 @@ func _test_boss_attacks(data: BossData) -> void:
 	_check("her cycles carry arcs, a sweep, burning ground, a mana seal and the tide",
 		by_id.has(&"crimson_arc") and by_id.has(&"scything_sweep") and by_id.has(&"crimson_pyre")
 		and by_id.has(&"silencing_edict") and by_id.has(&"scarlet_tide"), "%s" % [by_id.keys()])
+	var stepping := 0
+	for p in data.phases:
+		for m in p.moves:
+			if m.id == &"crimson_step" and m.shape == BossMove.Shape.DASH and m.reach <= 3 \
+					and m.windup <= 0.0:
+				stepping += 1
+				break
 	_check("every phase has a quick short dash that just moves her",
-		data.phases.all(func(p): return p.moves.any(func(m): return m.id == &"crimson_step"
-			and m.shape == BossMove.Shape.DASH and m.reach <= 3 and m.windup <= 0.0))))
+		stepping == data.phases.size(), "%d of %d phases" % [stepping, data.phases.size()])
 	var s := _boss_board([["warden", "warden", "warden", "warden", "warden", "warden"], [], []])
 	var bf: BossFight = s.bf
 	var sim: CombatSim = s.sim
