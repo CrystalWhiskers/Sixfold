@@ -80,8 +80,6 @@ var _results: Control = null
 
 func _ready() -> void:
 	boss_data = load(BOSS_PATH) as BossData
-	# On this crowded field the tier is told by coloured letters and a badge.
-	UnitView.bold_tiers = true
 	# The boss's own music from the moment the mode opens: phase one's track on the
 	# setup screen, carrying straight on into the fight. Only when that file is not
 	# on this machine — always the case in the web build — does an ordinary track
@@ -579,8 +577,3 @@ func _show_bar(hp: float) -> void:
 	_hp_bar.value = clampf(hp - bottom, 0.0, top - bottom)
 	_title.text = "%s — bar %d of %d: %s" % [boss_data.display_name, _bar_index + 1,
 		phases.size(), phases[_bar_index].display_name]
-
-
-func _exit_tree() -> void:
-	# The bold tier markings belong to this screen only.
-	UnitView.bold_tiers = false

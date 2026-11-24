@@ -3659,12 +3659,13 @@ boss measurement gives identical results seed for seed, 2–4x faster (decent pl
 34.9 s of simulation for a 4:54 fight before, 8.4 s after). On screen, in a crowded
 boss fight at x2 speed, frames slower than 50 fps went from 169 to 10 in 40 seconds.
 
-**Tiers in boss defence.** The boss screen sets `UnitView.bold_tiers` (cleared when
-it closes), and for the player's units the tier is then told three ways at once:
+**Tier markings.** A Settings switch (`GameSetup.bold_tiers`, written to
+`UnitView.bold_tiers`; on by default) applies everywhere, both modes. When on, every
+unit with a tier (not the boss, crystals or her summons) shows it three ways at once:
 the three-letter name is drawn in the tier's text colour (`UnitView.TIER_INKS` —
 white, green, sky blue, violet, gold, red) with a heavy black outline, a round badge
 in that colour carries the tier number on the top-left corner, and the rim goes full
 strength in the same colour. The plate behind the letters is pulled most of the way
 to dark grey so a letter is never on a plate of its own colour (a violet tier 4 on
-the violet Vexer was the worst case). The Barracks slots use the same scheme. The
-ordinary game is unchanged.
+the violet Vexer was the worst case). The Barracks slots follow the same switch. Off
+gives the plain look: the unit's own colour, a small corner number and a thin rim.

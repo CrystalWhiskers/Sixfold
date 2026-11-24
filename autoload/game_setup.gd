@@ -131,6 +131,14 @@ var portraits := false:
 		# exists — see UnitView.portraits_on.
 		UnitView.portraits_on = value
 
+## Bold tier markings: coloured letters, a numbered badge and a full-colour rim. On by
+## default; Settings switches it off for the plain corner number. Written down to
+## UnitView like `portraits`.
+var bold_tiers := true:
+	set(value):
+		bold_tiers = value
+		UnitView.bold_tiers = value
+
 ## How far one notch of the mouse wheel zooms the board; 1 is the original feel.
 ## Set in Settings, written down to BoardView for the same reason `portraits` is
 ## written to UnitView. Like the other settings it lasts until the game is closed.

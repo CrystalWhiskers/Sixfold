@@ -152,6 +152,16 @@ func _draw() -> void:
 func _draw_unit(r: Rect2, d: UnitData) -> void:
 	var font := ThemeDB.fallback_font
 	var inner := r.grow(-2.0)
+	if not UnitView.bold_tiers:
+		# The plain markings (Settings → Tier markings): the unit's own colour, dark
+		# letters, the tier as a small number in the corner and a thin tier rim.
+		draw_rect(inner, d.accent, true)
+		draw_rect(inner, UnitView.tier_color(d.tier), false, 2.0)
+		draw_string(font, inner.position + Vector2(3, inner.size.y - 8), UnitView.short_name(d),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0, 0, 0, 0.8))
+		draw_string(font, inner.position + Vector2(inner.size.x - 6, 7), str(d.tier),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 7, Color(0, 0, 0, 0.85))
+		return
 	var ink := UnitView.tier_ink(d.tier)
 	# The plate a little darker than on the board, so the tier-coloured letters on it
 	# stand out; the rim in the same colour as the letters, heavier the higher it is.

@@ -231,6 +231,28 @@ func _check_boss_music() -> void:
 	panel._on_done()
 
 
+func _check_tier_toggle() -> void:
+	print("
+Tier markings")
+	var panel: SettingsPanel = _menu._settings
+	panel.open()
+	var b: Button = panel._tier_button
+	_check("Settings has a tier markings switch", b != null)
+	if b == null:
+		return
+	_check("bold tier markings are on by default, and the button says so",
+		GameSetup.bold_tiers and UnitView.bold_tiers and b.button_pressed
+		and b.text.begins_with("Bold"), b.text)
+	b.pressed.emit()
+	_check("one click turns them plain, in the setting and the flag the drawing reads",
+		not GameSetup.bold_tiers and not UnitView.bold_tiers and b.text.begins_with("Plain"),
+		b.text)
+	b.pressed.emit()
+	_check("and another turns them back on",
+		GameSetup.bold_tiers and UnitView.bold_tiers, b.text)
+	panel._on_done()
+
+
 func _check_portrait_toggle() -> void:
 	# The switch that turns unit art off, so the coloured blocks can be used while
 	# the portraits are placeholder material.
@@ -817,6 +839,7 @@ func _run() -> void:
 	await _check_backdrop()
 	_check_playlist(buttons)
 	_check_portrait_toggle()
+	_check_tier_toggle()
 	_check_volume_slider()
 	_check_category_sliders()
 	await _check_scroll_speed()

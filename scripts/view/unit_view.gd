@@ -168,10 +168,11 @@ static func tier_color(tier: int) -> Color:
 	return TIER_COLORS[clampi(tier - 1, 0, TIER_COLORS.size() - 1)]
 
 
-## Boss defence turns this on: the tier is told by the colour of a unit's LETTERS, a
-## badge with its number, and a full-strength tier rim — on that crowded field the
-## corner digit and the pips are too small to read. Off everywhere else.
-static var bold_tiers := false
+## Bold tier markings: the tier is told by the colour of a unit's LETTERS, a badge with
+## its number, and a full-strength tier rim, rather than only a small corner digit and
+## the pips. A Settings switch (GameSetup.bold_tiers writes it here); on by default, and
+## true here too so the board draws it before that setter has ever run.
+static var bold_tiers := true
 
 ## Text colours for the tiers: TIER_COLORS pushed bright and apart so that letters in
 ## them read against any unit's plate behind a black outline. White, green, sky blue,
@@ -188,6 +189,16 @@ const TIER_INKS: Array[Color] = [
 
 static func tier_ink(tier: int) -> Color:
 	return TIER_INKS[clampi(tier - 1, 0, TIER_INKS.size() - 1)]
+
+
+func _bold() -> bool:
+	## Bold tier markings for this unit: the setting is on, and it is a unit with a
+	## tier to show — not the boss, a crystal, or one of her summons, which are drawn
+	## as pictures.
+	if not bold_tiers or unit == null or unit.boss or unit.structure:
+		return false
+	var id := unit.data.id
+	return id != SHADE_ID and id != THORN_ID and id != CHALICE_ID
 
 ## Set by the board on every zoom. A setter, not a plain field: a unit only repaints
 ## when something asks it to, so a unit standing still kept drawing itself at the OLD
@@ -797,7 +808,7 @@ func _draw() -> void:
 		# way to grey and darkened well below the portrait's own midtones. It is
 		# there to say whose unit this is and what tier, not to be looked at.
 		fill = fill.lerp(Color(0.16, 0.17, 0.20), 0.62).darkened(0.15)
-	if bold_tiers and unit.team == player_team and art_tex == null:
+	if _bold() and art_tex == null:
 		# Pulled most of the way to a dark grey, keeping a hint of the unit's own hue:
 		# the tier-coloured letters must never sit on a plate of their own colour (a
 		# violet tier 4 on a violet Vexer was the case that read worst).
@@ -831,7 +842,7 @@ func _draw() -> void:
 		var ink := Color(0.98, 0.97, 0.94, 0.95 * alpha)
 		var edge := Color(0.02, 0.02, 0.04, 0.9 * alpha)
 		var edge_w := maxi(size / 4, 2)
-		if bold_tiers and unit.team == player_team:
+		if _bold():
 			# Boss defence: the letters THEMSELVES carry the tier, in a bright text
 			# colour per tier and a heavier outline so each reads on any plate.
 			ink = Color(tier_ink(tier), 0.98 * alpha)
@@ -1006,7 +1017,7 @@ func _draw() -> void:
 	# unit; the tier is a detail, and the pips along the edge say it again. Just the
 	# digit in its tier colour with a thin dark outline — no chip behind it.
 	var tt := str(tier)
-	if bold_tiers and unit.team == player_team:
+	if _bold():
 		# A badge: the tier's colour, its number in black, on the top-left corner and
 		# hanging slightly off it so nothing on the tile covers it. The rim goes full
 		# strength in the same colour.

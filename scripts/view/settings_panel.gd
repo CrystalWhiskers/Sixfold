@@ -29,6 +29,7 @@ var _previewing := ""
 ## mean a fixed track name — it has to mean whatever this actually was.
 var _interrupted := ""
 var _portrait_button: Button = null
+var _tier_button: Button = null
 var _volume_slider: HSlider = null
 var _volume_label: Label = null
 
@@ -198,9 +199,46 @@ func _build_portrait_toggle() -> Control:
 	_portrait_button.pressed.connect(Audio.play_confirm)
 	_portrait_button.pressed.connect(_on_toggle_portraits)
 	box.add_child(_portrait_button)
-
 	_refresh_portraits()
-	return box
+
+	# Side by side with the tier switch: both change how a unit is drawn, and the
+	# panel has no height to spare for another row.
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 24)
+	row.add_child(box)
+	var tiers := VBoxContainer.new()
+	tiers.alignment = BoxContainer.ALIGNMENT_CENTER
+	tiers.add_theme_constant_override("separation", 6)
+	tiers.add_child(_heading("Tier markings"))
+	_tier_button = Button.new()
+	_tier_button.custom_minimum_size = Vector2(PANEL_WIDTH * 0.38, 34.0)
+	_tier_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_tier_button.add_theme_font_size_override("font_size", 15)
+	_tier_button.toggle_mode = true
+	_tier_button.pressed.connect(Audio.play_confirm)
+	_tier_button.pressed.connect(_on_toggle_tiers)
+	tiers.add_child(_tier_button)
+	row.add_child(tiers)
+	_refresh_tiers()
+	return row
+
+
+func _on_toggle_tiers() -> void:
+	GameSetup.bold_tiers = not GameSetup.bold_tiers
+	_refresh_tiers()
+	get_tree().root.propagate_call("queue_redraw")
+
+
+func _refresh_tiers() -> void:
+	if _tier_button == null:
+		return
+	var on := GameSetup.bold_tiers
+	# Says what you will see, like the unit art switch.
+	_tier_button.text = "Bold: coloured letters" if on else "Plain: corner number"
+	_tier_button.button_pressed = on
+	_tier_button.add_theme_color_override("font_color",
+		Color(0.86, 0.90, 0.96) if on else Color(0.48, 0.52, 0.60))
 
 
 func _on_toggle_portraits() -> void:
@@ -532,6 +570,7 @@ func _paint(b: Button, colour: Color) -> void:
 func open() -> void:
 	_refresh_volume()
 	_refresh_portraits()
+	_refresh_tiers()
 	_refresh_tracks()
 	_refresh_boss()
 	_refresh_scroll()
