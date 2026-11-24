@@ -13953,16 +13953,22 @@ func _test_boss_defence() -> void:
 	# --- Big moves are rarer than the rest, at a fixed spot in each cycle.
 	var share_ok := true
 	var shares: PackedStringArray = []
+	var last_share := -1.0
 	for p in data.phases:
 		var big := 0
 		for m in p.moves:
-			if m.shape == BossMove.Shape.STANCE or wide_shapes.has(m.shape):
+			if m.windup > 0.0 or m.shape == BossMove.Shape.STANCE:
 				big += 1
 		var share := float(big) / maxf(float(p.moves.size()), 1.0)
 		shares.append("%s %d/%d" % [p.display_name, big, p.moves.size()])
-		share_ok = share_ok and share <= 0.25
-	_check("no more than one move in four is a big one, in any phase", share_ok,
+		# Never more than one in three, and never fewer than the phase before.
+		share_ok = share_ok and share <= 0.34 and share >= last_share
+		last_share = share
+	_check("big moves come more often every phase, never more than one in three", share_ok,
 		", ".join(shares))
+	_check("and her surround whirl comes rarer early, more often late",
+		data.phases[0].surround_cooldown > data.phases[3].surround_cooldown
+		and data.phases[3].surround_cooldown > 0.0)
 	var all_wound := true
 	for p in data.phases:
 		for m in p.moves:
@@ -14579,6 +14585,12 @@ func _test_boss_enrage(data: BossData) -> void:
 			archer = u
 	_check("and a ranged hit is cut by her ranged resistance",
 		archer != null and is_equal_approx(bf3.shape_boss_damage(100.0, archer), 100.0 * (1.0 - data.ranged_resist)))
+	var gunner := UnitInstance.create(load("res://data/units/culverin_t1.tres") as UnitData, bf3.player_team())
+	_check("and a long-range hit even more",
+		is_equal_approx(bf3.shape_boss_damage(100.0, gunner), 100.0 * (1.0 - data.long_range_resist)),
+		"%.0f" % bf3.shape_boss_damage(100.0, gunner))
+	_check("the results screen counts every tier of a unit as one",
+		BossStats.base_name("Vexer IV") == "Vexer" and BossStats.base_name("Warden") == "Warden")
 	BoardModel.reset_map()
 	_check("with no army limit, every unit of a wave lands while there is room",
 		bf2.army_in_zone(0) == 6, "%d of 6 on the field" % bf2.army_in_zone(0))

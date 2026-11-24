@@ -39,8 +39,11 @@ func record(e: Dictionary, units: Dictionary) -> void:
 					to_boss += amount
 				else:
 					to_summons += amount
-				by_type[source.data.id] = float(by_type.get(source.data.id, 0.0)) + amount
-				names[source.data.id] = source.data.display_name
+				# One row per unit TYPE, whatever its tier: "Warden" and "Warden III" are
+				# the same unit, merged up.
+				var kind := base_name(source.data.display_name)
+				by_type[kind] = float(by_type.get(kind, 0.0)) + amount
+				names[kind] = kind
 			elif victim.team == player_team and not victim.structure:
 				taken += amount
 		"spawn", "summon":
@@ -63,6 +66,14 @@ func record(e: Dictionary, units: Dictionary) -> void:
 		"boss_retreat_end":
 			if bool(e.get("completed", false)):
 				retreats += 1
+
+
+static func base_name(display: String) -> String:
+	## A unit's name without its tier numeral: "Vexer IV" -> "Vexer".
+	var parts := display.split(" ")
+	if parts.size() > 1 and parts[parts.size() - 1] in ["I", "II", "III", "IV", "V", "VI"]:
+		parts.remove_at(parts.size() - 1)
+	return " ".join(parts)
 
 
 func top_dealers(n: int) -> Array:

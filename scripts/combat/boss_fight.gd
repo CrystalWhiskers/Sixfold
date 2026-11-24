@@ -119,8 +119,12 @@ func shape_boss_damage(amount: float, source: UnitInstance) -> float:
 	## Every hit on her, after all the usual multipliers: ranged blows are cut by her
 	## ranged resistance, and nothing lands bigger than her single-hit cap.
 	var out := amount
-	if source != null and source.is_ranged() and data.ranged_resist > 0.0:
-		out *= 1.0 - clampf(data.ranged_resist, 0.0, 0.95)
+	if source != null and source.is_ranged():
+		var reach := UnitData.band_tiles(source.stat_int(StatModifier.Stat.ATTACK_RANGE))
+		var resist := data.ranged_resist
+		if reach >= data.long_range_tiles:
+			resist = maxf(resist, data.long_range_resist)
+		out *= 1.0 - clampf(resist, 0.0, 0.95)
 	return minf(out, max_hit())
 
 
@@ -479,7 +483,7 @@ func _mark_next_move() -> void:
 	# Crowded: whatever was next in her cycle waits, and she answers the crowd with
 	# her surround move — a big one, wound up first like every big one.
 	if data.surround_move != null and surround_cd <= 0.0 and crowd_around() >= data.surround_count:
-		surround_cd = data.surround_cooldown
+		surround_cd = p.surround_cooldown if p != null and p.surround_cooldown > 0.0 else data.surround_cooldown
 		_mark(data.surround_move)
 		return
 	var mv := next_move()

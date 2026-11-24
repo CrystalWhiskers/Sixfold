@@ -37,6 +37,9 @@ extends Resource
 @export var attack_bonus: float = 0.0
 ## Health she regenerates every second in this phase, a share of her full health.
 @export var regen: float = 0.0
+## Seconds between her surround attacks in this phase (0: the boss's own value), so
+## the big crowd-clearers come rarely early on and more often as the fight goes.
+@export var surround_cooldown: float = 0.0
 
 @export var moves: Array[BossMove] = []
 

@@ -402,13 +402,13 @@ func _initialize() -> void:
 		# the first stance and the first map-wide sweep arrive. The big moves are
 		# spaced out with ordinary ones — about one in eight of the cycle.
 		_phase("Twin Blades", 0.75, 2.3, 1.25,
-			_cycle([crossed, arc, sweep, scythe, spear, edict, edge, dash], [gather, hunt, tide], 5), 0.03),
+			_cycle([crossed, arc, sweep, scythe, spear, edict, edge, dash], [gather, hunt, tide], 7), 0.03),
 		_phase("Rending Arts", 0.50, 2.0, 1.45,
-			_cycle([heaven, scythe, crossed, pyre, horizon, edict, pounce, spear], [ring, red_tide, tide, maelstrom, retreat, rain], 3), 0.05),
+			_cycle([heaven, scythe, crossed, pyre, horizon, edict, pounce, spear], [ring, red_tide, tide, maelstrom, retreat, rain], 4), 0.05),
 		# Its final form: the widest moves, and every blow feeds it.
 		_phase("Crimson Finale", 0.25, 1.8, 1.7,
 			_cycle([heaven, scythe, pounce, pyre, horizon, edict, spear, crossed], [onrush_long, last_breath, tide,
-				sanctum, ring_big, rain_big], 3),
+				sanctum, ring_big, rain_big], 2),
 			0.08),
 	]
 	# She hits harder every phase, as well as faster (the haste above), and mends
@@ -421,13 +421,18 @@ func _initialize() -> void:
 			# Long enough for the banner, before she opens with her signature.
 			b.phases[i].entry_pause = 3.0
 	var bonus := [[0.0, 0.0], [0.15, 0.0005], [0.30, 0.0008], [0.50, 0.001]]
+	# The big crowd-clearer when she is surrounded: rare early, often late.
+	var whirl_every := [30.0, 20.0, 14.0, 10.0]
 	for i in b.phases.size():
 		b.phases[i].attack_bonus = bonus[i][0]
+		b.phases[i].surround_cooldown = whirl_every[i]
 		b.phases[i].regen = bonus[i][1]
 	# No blow takes more than 1.2% of her health; ranged hits are cut by 30%; every
 	# fallen unit of the army makes her 0.2% stronger.
 	b.max_hit_percent = 0.012
-	b.ranged_resist = 0.3
+	b.ranged_resist = 0.45
+	# Long range (4 tiles and more) gets through even less: 60% less.
+	b.long_range_resist = 0.6
 	b.death_power = 0.002
 	# A lot more of them: [on entering, every N seconds, how many, power].
 	var summons := [[2, 22.0, 2, 1.0], [4, 16.0, 3, 1.1], [5, 14.0, 3, 1.25], [6, 12.0, 4, 1.4]]

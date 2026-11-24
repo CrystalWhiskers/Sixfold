@@ -135,6 +135,10 @@ extends Resource
 ## one of the army that dies makes her `death_power` stronger (attack, for good).
 @export var max_hit_percent: float = 0.0
 @export var ranged_resist: float = 0.0
+## Long-range units get through even less: `long_range_resist` instead, for anything
+## whose reach is `long_range_tiles` or more.
+@export var long_range_resist: float = 0.0
+@export var long_range_tiles: int = 4
 @export var death_power: float = 0.0
 ## What she does when the army crowds her: with `surround_count` or more of it within
 ## two tiles, her next move is `surround_move` (a big one, with a wind-up), at most
