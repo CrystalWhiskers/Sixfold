@@ -1555,6 +1555,8 @@ func _spawn_minion(cell: Vector2i, power: float, kind: BossMinion = null) -> Uni
 		_heal_rate[m.uid] = kind.heal_boss
 	if kind != null:
 		_targeting[m.uid] = kind.targeting
+		if kind.soul_taker:
+			_soul_takers[m.uid] = true
 		if kind.cleave_radius > 0:
 			# Its swings land on everything round what it hits.
 			m.empowered = true
@@ -1726,13 +1728,18 @@ func soul_kills(killer_uid: int, victim: UnitInstance) -> bool:
 	## executions they carry. What they kill stays dead: no Revenant's second wind,
 	## and no Vigil raises it. Her ordinary swings, her quick moves and her summons
 	## kill the ordinary way, and those can still come back.
-	if victim == null or victim.team != player_team() or killer_uid != boss.uid:
+	if victim == null or victim.team != player_team():
 		return false
-	return _soul_blow
+	if killer_uid == boss.uid:
+		return _soul_blow
+	# And the few summons that take souls too (the Headhunter).
+	return _soul_takers.has(killer_uid)
 
 
 ## True while one of her big (wound-up) attacks is landing, burning included.
 var _soul_blow := false
+## uids of her summons whose kills take souls.
+var _soul_takers: Dictionary = {}
 
 
 ## Paragons are empowered only with no other Paragon within this many tiles, and a

@@ -14497,6 +14497,14 @@ func _test_boss_attacks(data: BossData) -> void:
 			h != null and bf4.minion_target(h) != null
 			and bf4.minion_target(h).data.tier == top.data.tier)
 		var bz := bf4._spawn_minion(Vector2i(9, 6), 1.0, berserk)
+		var some_unit: UnitInstance = null
+		for u in sim4._units:
+			if u.team == bf4.player_team() and u.is_alive() and not u.structure:
+				some_unit = u
+		var shade_kid := bf4._spawn_minion(Vector2i(10, 6), 1.0)
+		_check("a Headhunter takes souls; her ordinary summons do not",
+			some_unit != null and bf4.soul_kills(h.uid, some_unit)
+			and shade_kid != null and not bf4.soul_kills(shade_kid.uid, some_unit))
 		_check("a Berserker cleaves round what it hits", bz != null and bz.empowered
 			and bz.data.empower_splash_radius >= 1)
 		bf4.phase = 2

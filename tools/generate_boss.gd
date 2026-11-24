@@ -379,6 +379,8 @@ func _initialize() -> void:
 	var hunter := _minion(&"headhunter", "Headhunter", 300.0, 60.0, 1.2, 0.5, 1,
 		Color(0.70, 0.10, 0.10))
 	hunter.targeting = BossMinion.Targeting.TOP_TIER
+	# The one summon whose kills take the soul: what it hunts down stays down.
+	hunter.soul_taker = true
 	var berserker := _minion(&"berserker", "Berserker", 600.0, 30.0, 0.8, 0.7, 1,
 		Color(0.75, 0.35, 0.12))
 	berserker.targeting = BossMinion.Targeting.CROWD

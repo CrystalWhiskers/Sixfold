@@ -30,4 +30,7 @@ extends Resource
 enum Targeting { NEAREST, TOP_TIER, CROWD }
 @export var targeting: Targeting = Targeting.NEAREST
 @export var cleave_radius: int = 0
+## Whether what it kills stays dead — no second wind, no raise. Only a few have it
+## (the Headhunter); her ordinary summons kill the ordinary way.
+@export var soul_taker: bool = false
 @export var accent: Color = Color(0.85, 0.25, 0.30)
