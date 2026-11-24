@@ -169,9 +169,18 @@ func _apply(e: Dictionary) -> void:
 			for c in e.get("cells", []):
 				marked.append(c)
 			var secs := float(e.get("seconds", 1.0)) / maxf(speed, 0.01)
-			_view.flash_cells(marked, Color(BOSS_RED, 0.42), secs)
-			_view.spawn_label(_at(int(e.uid), e.cell), String(e.name).to_upper(),
-				Color(1.0, 0.55, 0.50))
+			var doom := int(e.get("executes", 0))
+			# An execution is marked in near-black red, not the ordinary red, and says
+			# which tier it will kill: the one thing on the board worth moving for first.
+			_view.flash_cells(marked, Color(0.45, 0.0, 0.10, 0.62) if doom > 0
+				else Color(BOSS_RED, 0.42), secs)
+			var title := String(e.name).to_upper()
+			if doom > 0:
+				title += " — EXECUTES TIER %d" % doom
+			elif float(e.get("max_hp_percent", 0.0)) > 0.0:
+				title += " (+%d%% MAX HP)" % roundi(float(e.max_hp_percent) * 100.0)
+			_view.spawn_label(_at(int(e.uid), e.cell), title,
+				Color(1.0, 0.25, 0.35) if doom > 0 else Color(1.0, 0.55, 0.50))
 		"boss_strike":
 			var struck: Array[Vector2i] = []
 			for c in e.get("cells", []):
@@ -228,6 +237,13 @@ func _apply(e: Dictionary) -> void:
 			_view.spawn_label(_view.cell_to_pos(e.cell), "RETREATS TO HEAL — +%d%% DAMAGE TAKEN"
 				% roundi(float(e.get("vulnerability", 0.0)) * 100.0), Color(0.55, 1.0, 0.65))
 			Audio.play_boss_teleport()
+		"boss_execute":
+			for c in e.get("cells", []):
+				_view.spawn_label(_view.cell_to_pos(Vector2i(c)), "EXECUTED",
+					Color(1.0, 0.20, 0.30))
+				_view.effects().impact(_view.cell_to_pos(Vector2i(c)), Color(0.9, 0.05, 0.15),
+					_fx_life(0.5))
+			Audio.play_crit()
 		"boss_enrage":
 			_view.spawn_label(_at(int(e.uid), e.cell), "ENRAGED ×%d" % int(e.stacks),
 				Color(1.0, 0.30, 0.20))

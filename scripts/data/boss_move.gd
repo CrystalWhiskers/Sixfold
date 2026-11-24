@@ -82,6 +82,18 @@ enum Shape {
 
 ## ONRUSH: how many map-crossing dashes. RAIN: how many tiles.
 @export var legs: int = 6
+## On top of the ordinary blow, this share of each victim's OWN full health (0.10 =
+## 10% of its max HP): the hit that stays dangerous to a tier 6 with ten thousand
+## health. 0 for none.
+@export var max_hp_percent: float = 0.0
+
+## An execution: every unit it hits that is of the army's HIGHEST tier on the field
+## right now dies outright — no shield, resistance or reflect saves it (only an
+## invulnerable cast does). Never below `execute_min_tier`, so it does not wipe a
+## tier 1 opening army. The mark says which tier it will execute.
+@export var executes_top_tier: bool = false
+@export var execute_min_tier: int = 3
+
 ## ONRUSH: each leg runs straight through the thickest knot of the army, wherever
 ## it is, and on to the edge of the map, instead of the fixed criss-cross pattern.
 @export var seeks_army: bool = false

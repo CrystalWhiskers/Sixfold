@@ -256,6 +256,12 @@ func _initialize() -> void:
 	# Endless Onrush hunts: every leg runs through the thickest knot of the army.
 	onrush_long.seeks_army = true
 	var stripes := _move(&"thousand_cuts", "Thousand Cuts", S.STRIPES, 0, 1, 3.5, 1.2)
+	# % max HP on the heavy blows, and executions on the two stance finishers — break
+	# the stance, or her answer kills your best units outright.
+	for pair in [[heaven, 0.12], [horizon, 0.10], [pounce, 0.08], [spear, 0.06], [ring_big, 0.15], [rain_big, 0.10]]:
+		pair[0].max_hp_percent = pair[1]
+	cross.executes_top_tier = true
+	stripes.executes_top_tier = true
 	# The charge-up stances, and what each lets loose if it is not broken.
 	var gather := _stance(&"gathering_storm", "Gathering Storm", 5.0, 3000.0, cross)
 	var red_tide := _stance(&"red_tide", "Red Tide", 5.0, 4500.0, onrush)

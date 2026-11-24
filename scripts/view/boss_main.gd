@@ -389,6 +389,12 @@ func _on_event(e: Dictionary) -> void:
 			_status.text = "The %s Crystal stands again." % BossFight.ZONE_NAMES[int(e.lane)]
 		"boss_telegraph":
 			_next_move = String(e.name)
+			if int(e.get("executes", 0)) > 0:
+				_status.text = "%s will EXECUTE every tier %d it hits — get them out of the dark red!" % [
+					String(e.name), int(e.executes)]
+		"boss_execute":
+			_status.text = "%s executed %d of your tier %d units." % [String(e.name),
+				(e.cells as Array).size(), int(e.tier)]
 		"boss_strike":
 			_next_move = ""
 		"wave":

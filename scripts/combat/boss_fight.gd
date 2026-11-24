@@ -62,6 +62,24 @@ const LEAP_TIME := 0.18
 ## The sim's timeout when the boss has no time limit: never, in practice.
 const NO_TIME_LIMIT := 1.0e9
 
+
+func top_army_tier() -> int:
+	## The highest tier of anything in the army on the field right now, 0 if none.
+	var top := 0
+	for u in sim.board.units_view():
+		if u.team == player_team() and u.is_alive() and not u.structure and u.data != null:
+			top = maxi(top, u.data.tier)
+	return top
+
+
+func execute_tier(mv: BossMove) -> int:
+	## The tier a move will execute outright, or 0 if it executes nothing: the army's
+	## highest tier, as long as that is at least the move's minimum.
+	if mv == null or not mv.executes_top_tier:
+		return 0
+	var top := top_army_tier()
+	return top if top >= maxi(mv.execute_min_tier, 1) else 0
+
 ## How many times she has surged (see BossData.enrage_*), and the modifiers that carry
 ## it, one pair per surge.
 var enrage_stacks := 0
@@ -617,10 +635,11 @@ func _mark(mv: BossMove, step := 0, wound := false) -> void:
 	var aim := _aim_for(mv)
 	var cells := move_cells(mv, boss.cell, aim, step)
 	marked = {move = mv, cells = cells, left = maxf(mv.telegraph, CombatSim.TICK),
-		aim = aim, step = step}
+		aim = aim, step = step, doom = execute_tier(mv)}
 	boss.target = null
 	sim._emit("boss_telegraph", {uid = boss.uid, move = mv.id, name = mv.display_name,
-		cells = cells, seconds = mv.telegraph, cell = boss.cell, phase = phase})
+		cells = cells, seconds = mv.telegraph, cell = boss.cell, phase = phase,
+		executes = int(marked.doom), max_hp_percent = mv.max_hp_percent})
 
 
 func _aim_for(mv: BossMove) -> Vector2i:
@@ -842,6 +861,8 @@ func _strike() -> void:
 	var cells: Array[Vector2i] = marked.cells
 	var aim: Vector2i = marked.aim
 	var step := int(marked.get("step", 0))
+	# The tier announced when it was marked: what the mark said is what it does.
+	var doom := int(marked.get("doom", 0))
 	marked = {}
 	var p := _phase()
 	gap_left = p.gap if p != null else 4.0
@@ -860,8 +881,20 @@ func _strike() -> void:
 			# after does (see may_hurt_crystal).
 			continue
 		victims.append(v)
+	var doomed := doom
+	var executed: Array[Vector2i] = []
 	for v in victims:
-		sim._damage(v, dmg, boss, true)
+		if doomed > 0 and v.data.tier >= doomed:
+			# Her execution: the army's best die outright where they stand.
+			executed.append(v.cell)
+			sim._execute(boss, v)
+			continue
+		# And a share of the victim's own full health on top, for the moves that have it.
+		var hit := dmg + v.stat(StatModifier.Stat.MAX_HP) * maxf(mv.max_hp_percent, 0.0)
+		sim._damage(v, hit, boss, true)
+	if not executed.is_empty():
+		sim._emit("boss_execute", {uid = boss.uid, name = mv.display_name, cells = executed,
+			tier = doomed, cell = boss.cell})
 	if mv.shape == BossMove.Shape.DASH or mv.shape == BossMove.Shape.LEAP \
 			or mv.shape == BossMove.Shape.ONRUSH:
 		_land(mv, cells, aim)
