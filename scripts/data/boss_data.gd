@@ -36,7 +36,7 @@ extends Resource
 @export var central_crystal_hp: float = 6000.0
 ## A broken zone crystal rebuilds itself after this long, at this share of its health.
 ## While it is down, its section's waves go to the Central Crystal instead.
-@export var crystal_rebuild_seconds: float = 45.0
+@export var crystal_rebuild_seconds: float = 90.0
 @export var crystal_rebuild_fraction: float = 0.5
 
 @export_group("Economy")

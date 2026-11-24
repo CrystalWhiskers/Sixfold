@@ -13784,7 +13784,10 @@ func _test_boss_defence() -> void:
 	bf = s.bf
 	sim = s.sim
 	var full := bf.boss.stat(StatModifier.Stat.MAX_HP)
-	_check("more health than before: %d" % roundi(full), full >= 85000.0)
+	# Her health was cut from 90000 to 60000 in the balance pass that gave her a hit cap,
+	# regen, ranged resistance and a phase-by-phase attack climb: tougher by every other
+	# measure, so the bar itself came down.
+	_check("a big health pool: %d" % roundi(full), full >= 50000.0)
 	bf.boss.current_hp = full * 0.10
 	bf._check_phase()
 	_check("emptying the first bar in one blow only ends the first bar",

@@ -586,23 +586,20 @@ const RETREAT_ROWS := 3
 
 
 func retreat_cell() -> Vector2i:
-	## The free tile in the hub furthest from the whole of the army — measured to the
-	## nearest unit of it, so she goes where nobody is.
+	## The middle of the back of the field: the centre of the top row, or the free tile
+	## nearest it — where she can be seen healing, behind her summons.
+	var want := Vector2i(WIDTH / 2, 0)
+	if want == boss.cell or (sim.board.is_empty(want) and not BoardModel.is_blocked(want)):
+		return want
 	var best := boss.cell
-	var best_d := -1
+	var best_d := 1 << 30
 	for y in RETREAT_ROWS:
 		for x in WIDTH:
 			var c := Vector2i(x, y)
-			if c != boss.cell and (not sim.board.in_bounds(c) or not sim.board.is_empty(c)
-					or BoardModel.is_blocked(c)):
+			if not sim.board.is_empty(c) or BoardModel.is_blocked(c):
 				continue
-			var near := 1 << 20
-			for v in sim.board.units_view():
-				if v.team == player_team() and v.is_alive() and not v.structure:
-					near = mini(near, BoardModel.tile_distance(c, v.cell))
-			# Ties go to the middle of the hub, so the summons have room on both sides.
-			var d := near * 100 - absi(x - WIDTH / 2)
-			if d > best_d:
+			var d := BoardModel.tile_distance(c, want)
+			if d < best_d:
 				best = c
 				best_d = d
 	return best
@@ -1101,6 +1098,12 @@ func _nearest_free(centre: Vector2i, fallback: Vector2i) -> Vector2i:
 # --- The clocks ---------------------------------------------------------------
 
 func tick() -> void:
+	# No healing of hers — lifesteal included — ever climbs past the top of the bar
+	# she is on: healing undoes damage, never a phase.
+	if boss.is_alive() and not data.phases.is_empty():
+		var top := data.phases[phase].hp_threshold * boss.stat(StatModifier.Stat.MAX_HP)
+		if boss.current_hp > top:
+			boss.current_hp = top
 	if in_stance():
 		_tick_stance()
 	elif bool(marked.get("windup", false)):
@@ -1451,7 +1454,7 @@ func _refresh_ward() -> void:
 	if _ward_mod != null:
 		boss.battle_modifiers.erase(_ward_mod)
 		_ward_mod = null
-	var cut := clampf(data.minion_ward_per_shade * float(n), 0.0, 0.6)
+	var cut := clampf(data.minion_ward_per_shade * float(n), 0.0, 0.3)
 	if n > 0:
 		_ward_mod = StatModifier.make(StatModifier.Stat.DAMAGE_TAKEN,
 			StatModifier.Mode.PERCENT, -cut)

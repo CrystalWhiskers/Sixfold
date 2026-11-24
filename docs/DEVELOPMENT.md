@@ -3669,3 +3669,32 @@ strength in the same colour. The plate behind the letters is pulled most of the 
 to dark grey so a letter is never on a plate of its own colour (a violet tier 4 on
 the violet Vexer was the worst case). The Barracks slots follow the same switch. Off
 gives the plain look: the unit's own colour, a small corner number and a thin rim.
+
+## Boss defence, the big update (Nov 24)
+
+- **Army limit:** off by default (`BossFight.limit_army`, Settings "army size on the
+  field"); a wave lands in full wherever there is free ground on the field.
+- **Economy:** income upgrades uncapped, each giving `income_step_growth` (1.5x) the
+  last one's gain; unit upgrades to Lv10 at 1.7x the price per level and 1.2x health
+  and attack per level (`upgrade_cost_growth`, `upgrade_stat_growth`).
+- **Her toughness:** 60000 health; no single blow takes more than 1.2% of it
+  (`max_hit_percent`, and a unit's instakill on her deals exactly that); ranged hits
+  -30% (`ranged_resist`); per phase +0/15/30/50% attack, haste 1.0/1.25/1.45/1.7,
+  regen 0/0.05/0.08/0.1% a second and lifesteal 0/3/5/8%, none of it ever healing her
+  past the top of her current bar; +0.2% attack per fallen unit (`death_power`).
+- **New moves:** ARC (a slice in front of her; Scything Sweep is three beats round her),
+  BLAZE (burning ground, Crimson Pyre and the phase-3 Crimson Maelstrom), SUPPRESS (no
+  wind-up mana seal), Scarlet Tide (huge, weak, wound up — thins the horde), and
+  Bladestorm Whirl when six or more crowd her (`surround_move`). Big moves chip a
+  crystal standing in their way by `crystal_share`. Enrage widens bands, adds an Onrush
+  dash per surge and four Blade Rain tiles per surge.
+- **Phases:** each change shows a PHASE N cutscene banner, then she opens with the
+  phase's `entry_move` (Twin Fang Cross, Rending Storm, Vermilion Judgement).
+- **Summons:** up to 16, bigger waves each phase, from `summon_pool` (shades,
+  Headhunters that hunt the highest tier, Berserkers that cleave crowds, Thorns); they
+  come out a tier higher each phase. Her kills are soul kills (no revive, no raise).
+- **Units here:** openers fire when a wave lands; Breaker charges through its own
+  side; Powderkeg does 90% less to allies; Pariah and Paragon walk off to be alone
+  (Paragons need 3 tiles between them); crystal rebuild 90 s; she retreats to the
+  middle of the back row.
+- **Measured** (decent player, 4 seeds): 2 wins (6:33, 7:27), 2 losses (9:07, 11:07).

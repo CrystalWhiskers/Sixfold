@@ -275,7 +275,7 @@ func _initialize() -> void:
 	b.display_name = "The Vermilion Arbiter"
 	b.title = "Keeper of Every Blade"
 	b.note = "A duellist in lacquered red who has outlived every weapon she was handed and kept them all. She starts with one blade and a spear, picks up a second blade when she is hurt, and fights hardest at the end."
-	b.max_hp = 90000.0
+	b.max_hp = 60000.0
 	b.attack_damage = 100.0
 	b.attack_speed = 0.9
 	b.move_time = 0.9
@@ -308,7 +308,7 @@ func _initialize() -> void:
 	b.minion_name = "Crimson Shade"
 	b.minion_hp = 420.0
 	b.minion_attack = 35.0
-	b.minion_cap = 24
+	b.minion_cap = 16
 	# A shade tears out of its circle, hitting everything round it, and while shades
 	# stand she takes less damage — so they are worth killing, not just walking past.
 	b.minion_burst_mult = 2.5
@@ -400,14 +400,14 @@ func _initialize() -> void:
 		# the first stance and the first map-wide sweep arrive. The big moves are
 		# spaced out with ordinary ones — about one in eight of the cycle.
 		_phase("Twin Blades", 0.75, 2.3, 1.25,
-			_cycle([crossed, arc, sweep, scythe, spear, edict, edge, dash], [gather, hunt, tide], 5), 0.05),
+			_cycle([crossed, arc, sweep, scythe, spear, edict, edge, dash], [gather, hunt, tide], 5), 0.03),
 		_phase("Rending Arts", 0.50, 2.0, 1.45,
-			_cycle([heaven, scythe, crossed, pyre, horizon, edict, pounce, spear], [ring, red_tide, tide, maelstrom, retreat, rain], 3), 0.08),
+			_cycle([heaven, scythe, crossed, pyre, horizon, edict, pounce, spear], [ring, red_tide, tide, maelstrom, retreat, rain], 3), 0.05),
 		# Its final form: the widest moves, and every blow feeds it.
 		_phase("Crimson Finale", 0.25, 1.8, 1.7,
 			_cycle([heaven, scythe, pounce, pyre, horizon, edict, spear, crossed], [onrush_long, last_breath, tide,
 				sanctum, ring_big, rain_big], 3),
-			0.14),
+			0.08),
 	]
 	# She hits harder every phase, as well as faster (the haste above), and mends
 	# herself all the while: +0 / 15 / 30 / 50% attack, 0 / 0.1 / 0.15 / 0.2% of her
@@ -418,7 +418,7 @@ func _initialize() -> void:
 		if i > 0:
 			# Long enough for the banner, before she opens with her signature.
 			b.phases[i].entry_pause = 3.0
-	var bonus := [[0.0, 0.0], [0.15, 0.001], [0.30, 0.0015], [0.50, 0.002]]
+	var bonus := [[0.0, 0.0], [0.15, 0.0005], [0.30, 0.0008], [0.50, 0.001]]
 	for i in b.phases.size():
 		b.phases[i].attack_bonus = bonus[i][0]
 		b.phases[i].regen = bonus[i][1]
@@ -428,7 +428,7 @@ func _initialize() -> void:
 	b.ranged_resist = 0.3
 	b.death_power = 0.002
 	# A lot more of them: [on entering, every N seconds, how many, power].
-	var summons := [[2, 20.0, 2, 1.0], [5, 14.0, 3, 1.1], [7, 12.0, 4, 1.3], [9, 10.0, 5, 1.6]]
+	var summons := [[2, 22.0, 2, 1.0], [4, 16.0, 3, 1.1], [5, 14.0, 3, 1.25], [6, 12.0, 4, 1.4]]
 	for i in b.phases.size():
 		b.phases[i].summons_on_start = summons[i][0]
 		b.phases[i].summon_every = summons[i][1]
