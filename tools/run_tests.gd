@@ -14351,11 +14351,24 @@ func _test_boss_units(_data: BossData) -> void:
 	_check("a unit that opens with its ability opens the moment its wave lands",
 		herald != null and herald.has_opened)
 	if rev != null:
+		# An ordinary blow of hers kills the ordinary way: the body can still come back.
+		_check("her ordinary blows take no souls", not bf.soul_kills(bf.boss.uid, rev))
+		# A big, wound-up attack takes the soul with it.
+		var big: BossMove = null
+		for p in bf.data.phases:
+			for m in p.moves:
+				var plain_big := m.windup > 0.0 and m.shape != BossMove.Shape.RETREAT
+				plain_big = plain_big and m.shape != BossMove.Shape.STANCE and m.shape != BossMove.Shape.BLAZE
+				if big == null and plain_big:
+					big = m
 		var before := sim._respawns.size()
-		sim._damage(rev, 1.0e6, bf.boss)
-		_check("what she kills, she takes whole: no second wind, nothing to raise",
+		rev.shield = 0.0
+		rev.current_hp = 1.0
+		bf.marked = {move = big, cells = [rev.cell] as Array[Vector2i], left = 0.01, aim = rev.cell, step = 0}
+		bf._strike()
+		_check("what her big attacks kill, she takes whole: no second wind, nothing to raise",
 			not rev.is_alive() and sim._respawns.size() == before and not sim._fallen.has(rev)
-			and not _kind_events(sim, "soul_kill").is_empty())
+			and not _kind_events(sim, "soul_kill").is_empty(), "%s" % [big.id if big != null else &"none"])
 	# Paragons: empowered only with no other Paragon within three tiles.
 	if paragons.size() == 2 and pariah != null:
 		# Clear the bottom rows of everyone else so the spacing is all that matters.

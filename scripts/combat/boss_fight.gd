@@ -96,7 +96,9 @@ func _tick_hazards() -> void:
 			for c in b.cells:
 				var v := sim.board.unit_at(c)
 				if v != null and v.team == player_team() and v.is_alive() and not v.structure:
+					_soul_blow = bool(b.get("soul", false))
 					sim._damage(v, float(b.dps) * 0.5, boss, true)
+					_soul_blow = false
 		if float(b.left) <= 0.0:
 			_blazes.remove_at(i)
 		i -= 1
@@ -1015,7 +1017,7 @@ func _strike() -> void:
 		victims.append(v)
 	if mv.shape == BossMove.Shape.BLAZE:
 		# No burst: the ground starts burning, and keeps burning.
-		_blazes.append({cells = cells, left = mv.blaze_seconds, tick = 0.0,
+		_blazes.append({cells = cells, left = mv.blaze_seconds, tick = 0.0, soul = mv.windup > 0.0,
 			dps = boss.stat(StatModifier.Stat.ATTACK_DAMAGE) * mv.blaze_dps})
 		sim._emit("boss_blaze", {uid = boss.uid, cells = cells, seconds = mv.blaze_seconds,
 			name = mv.display_name})
@@ -1036,11 +1038,15 @@ func _strike() -> void:
 		if doomed > 0 and v.data.tier >= doomed:
 			# Her execution: the army's best die outright where they stand.
 			executed.append(v.cell)
+			_soul_blow = true
 			sim._execute(boss, v)
+			_soul_blow = false
 			continue
 		# And a share of the victim's own full health on top, for the moves that have it.
 		var hit := dmg + v.stat(StatModifier.Stat.MAX_HP) * maxf(mv.max_hp_percent, 0.0)
+		_soul_blow = mv.windup > 0.0
 		sim._damage(v, hit, boss, true)
+		_soul_blow = false
 	if not executed.is_empty():
 		sim._emit("boss_execute", {uid = boss.uid, name = mv.display_name, cells = executed,
 			tier = doomed, cell = boss.cell})
@@ -1716,19 +1722,17 @@ func minion_target(u: UnitInstance) -> UnitInstance:
 # --- Souls, solitude ----------------------------------------------------------
 
 func soul_kills(killer_uid: int, victim: UnitInstance) -> bool:
-	## What she or her summons kill stays dead: no Revenant's second wind, and no
-	## Vigil raises it. Everything else the army loses can still come back.
-	if victim == null or victim.team != player_team() or killer_uid < 0:
+	## Only her BIG attacks take souls — the ones she winds up first, and the
+	## executions they carry. What they kill stays dead: no Revenant's second wind,
+	## and no Vigil raises it. Her ordinary swings, her quick moves and her summons
+	## kill the ordinary way, and those can still come back.
+	if victim == null or victim.team != player_team() or killer_uid != boss.uid:
 		return false
-	if killer_uid == boss.uid:
-		return true
-	for u in sim._units:
-		if u.uid == killer_uid:
-			return u.team == boss_team()
-	for u in sim._pending_units:
-		if u.uid == killer_uid:
-			return u.team == boss_team()
-	return false
+	return _soul_blow
+
+
+## True while one of her big (wound-up) attacks is landing, burning included.
+var _soul_blow := false
 
 
 ## Paragons are empowered only with no other Paragon within this many tiles, and a
