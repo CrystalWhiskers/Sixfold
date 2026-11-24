@@ -3608,3 +3608,12 @@ One wheel notch zooms by `BoardView.wheel_step()`, which is `ZOOM_STEP` raised t
 Settings has a slider and a "Try it on a board" button that opens `ScrollDemo`: the
 current map with a few units on it, in a SubViewport, zoomed by the same BoardView
 wheel code a match uses.
+
+**Her four forms.** `UnitView.boss_phase` (set by BattlePlayer from `boss_start` and
+`boss_phase`) changes how the boss is drawn: First Blade is a red plate with one blade
+and her spear; Twin Blades adds a second crossed blade, gold trim and a little size;
+Rending Arts is darker and larger, crowned with three points, with glowing claw marks
+and a red aura; Crimson Finale is near-black and largest, a five-point crown, burning
+eyes, flames circling her and a fan of six blades behind. Each change flashes, pops and
+throws two rings of fire. Her own small health bar sits under her, since the crown
+takes the space above.

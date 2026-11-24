@@ -184,6 +184,17 @@ func _apply(e: Dictionary) -> void:
 			var bv := _view.view_for(int(e.uid))
 			if bv != null and e.has("hp"):
 				bv.set_hp(float(e.hp), bv.hp_max)
+			if bv != null:
+				# She changes shape: a flash, a burst of fire outward, and the new form.
+				bv.boss_phase = int(e.get("index", bv.boss_phase + 1))
+				bv.merge_pop()
+				bv.hit()
+				var at := _at(int(e.uid), e.cell)
+				_view.effects().ring(at, _view.tile_size * 0.4, _view.tile_size * 3.5,
+					Color(1.0, 0.35, 0.20), _fx_life(0.9))
+				_view.effects().ring(at, _view.tile_size * 0.2, _view.tile_size * 2.2,
+					Color(1.0, 0.85, 0.45), _fx_life(0.6))
+				Audio.play_boss_slam()
 		"boss_summon":
 			# Summoning circles: the tiles a shade will step out of, a beat early.
 			var circles: Array[Vector2i] = []
@@ -264,7 +275,9 @@ func _apply(e: Dictionary) -> void:
 		"wave":
 			pass
 		"boss_start":
-			pass
+			var sv0 := _view.view_for(int(e.uid))
+			if sv0 != null:
+				sv0.boss_phase = int(e.get("phase", 0))
 		"spawn":
 			_pos[e.uid] = _board(e.cell)
 			_hp[e.uid] = {cur = float(e.hp), max = float(e.max_hp)}

@@ -341,7 +341,8 @@ func _process(delta: float) -> void:
 	if unit != null and unit.sealed:
 		# The Central Crystal's seal turns.
 		queue_redraw()
-	if unit != null and unit.data != null and (unit.data.id == SHADE_ID or unit.data.id == CHALICE_ID):
+	if unit != null and unit.data != null and (unit.data.id == SHADE_ID or unit.data.id == CHALICE_ID
+			or (unit.boss and boss_phase >= 2)):
 		# Its eyes burn.
 		queue_redraw()
 	if unit != null and unit.data != null and unit.data.tier >= APEX_TIER:
@@ -585,27 +586,137 @@ func _draw_crystal() -> void:
 	draw_rect(filled, Color(0.55, 0.90, 1.0) if not unit.sealed else Color(0.98, 0.86, 0.46), true)
 
 
+## Which of her phases the boss is in, 0-3. Set by BattlePlayer off the "boss_start"
+## and "boss_phase" events, and it changes how she looks: she picks up her second
+## blade, then her crown, and ends wreathed in fire with every blade she owns.
+var boss_phase := 0:
+	set(value):
+		boss_phase = clampi(value, 0, 3)
+		queue_redraw()
+
+## The colours of her four forms, from lacquered red to near-black crimson.
+const BOSS_PLATES := [Color(0.80, 0.12, 0.14), Color(0.72, 0.08, 0.12),
+	Color(0.52, 0.04, 0.10), Color(0.30, 0.02, 0.06)]
+## How far past her tile she spills, a share of the tile, per phase: she grows.
+const BOSS_GROWTH := [0.0, 0.08, 0.16, 0.26]
+
+
+func _boss_blade(from: Vector2, to: Vector2, w: float, alpha: float, glow := 0.0) -> void:
+	## One blade: a pale edge with a gold guard and hilt, optionally burning red.
+	var dir := (to - from).normalized()
+	var side := Vector2(-dir.y, dir.x)
+	if glow > 0.0:
+		draw_line(from, to, Color(1.0, 0.30, 0.15, 0.30 * glow * alpha), w * 1.5)
+	var guard := from + (to - from) * 0.22
+	draw_colored_polygon(PackedVector2Array([guard + side * w * 0.55, to,
+		guard - side * w * 0.55]), Color(0.96, 0.94, 0.92, alpha))
+	draw_line(guard + side * w * 1.4, guard - side * w * 1.4, Color(0.92, 0.72, 0.30, alpha),
+		maxf(w * 0.6, 1.5))
+	draw_line(from, guard, Color(0.40, 0.16, 0.10, alpha), maxf(w * 0.7, 1.5))
+
+
+func _boss_crown(top: float, width: float, spikes: int, alpha: float) -> void:
+	## A crown sitting on the top edge of her plate, `spikes` points.
+	var pts := PackedVector2Array([Vector2(-width * 0.5, top)])
+	for i in spikes:
+		var x0 := -width * 0.5 + width * float(i) / float(spikes)
+		var x1 := -width * 0.5 + width * (float(i) + 0.5) / float(spikes)
+		pts.append(Vector2(x0, top))
+		pts.append(Vector2(x1, top - width * 0.32))
+	pts.append(Vector2(width * 0.5, top))
+	pts.append(Vector2(width * 0.5, top + width * 0.10))
+	pts.append(Vector2(-width * 0.5, top + width * 0.10))
+	draw_colored_polygon(pts, Color(0.95, 0.76, 0.32, alpha))
+	for i in spikes:
+		var x := -width * 0.5 + width * (float(i) + 0.5) / float(spikes)
+		draw_circle(Vector2(x, top - width * 0.30), maxf(width * 0.035, 1.5),
+			Color(1.0, 0.25, 0.20, alpha))
+
+
 func _draw_boss() -> void:
-	## The boss fills its tile and spills over it: a lacquered red plate, a blade
-	## drawn across it, and a thin bar of its own (the HUD carries the big one).
+	## The boss fills its tile and spills over it, and changes with every phase:
+	##   First Blade    — a lacquered red plate, one blade and her spear behind it.
+	##   Twin Blades    — a second blade crossing the first, gold trim, a little larger.
+	##   Rending Arts   — darker, larger, crowned, glowing claw marks across the plate.
+	##   Crimson Finale — near-black, largest, a crown of five, fire licking round her
+	##                    and a fan of every blade she has kept.
+	## A thin bar of her own rides on top (the HUD carries the big one).
 	var half := tile_size * 0.5
 	var alpha := death_t if dying else 1.0
-	var body := Rect2(-half + 1.0, -half + 1.0, tile_size - 2.0, tile_size - 2.0)
-	var red := unit.data.accent
-	draw_rect(body.grow(3.0), Color(red.darkened(0.6), 0.85 * alpha), true)
-	draw_rect(body, Color(red.darkened(0.15), alpha), true)
-	draw_rect(body, Color(1.0, 0.78, 0.55, alpha), false, 3.0)
-	var blade := Color(0.95, 0.93, 0.90, alpha)
-	draw_line(Vector2(-half * 0.55, half * 0.55), Vector2(half * 0.6, -half * 0.6), blade, 4.0)
-	draw_line(Vector2(-half * 0.25, half * 0.05), Vector2(half * 0.05, half * 0.35),
-		Color(0.85, 0.70, 0.30, alpha), 4.0)
+	var ph := boss_phase
+	var t := Time.get_ticks_msec() * 0.001
+	var grow: float = tile_size * float(BOSS_GROWTH[ph])
+	var body := Rect2(-half + 1.0, -half + 1.0, tile_size - 2.0, tile_size - 2.0).grow(grow)
+	var h := body.size.x * 0.5
+	var plate: Color = BOSS_PLATES[ph]
+	var w := maxf(tile_size * 0.07, 2.5)
+
+	# Behind her: the aura, and in the finale the fire and the fan of blades.
+	if ph >= 2:
+		var pulse := 0.75 + 0.25 * sin(t * 3.0)
+		draw_circle(Vector2.ZERO, h * (1.45 + 0.08 * pulse),
+			Color(0.95, 0.12, 0.10, (0.10 if ph == 2 else 0.18) * pulse * alpha))
+	if ph >= 3:
+		for i in 6:
+			var a := lerpf(-PI * 0.85, -PI * 0.15, float(i) / 5.0)
+			var dir := Vector2(cos(a), sin(a))
+			_boss_blade(dir * h * 0.95, dir * h * 1.85, w * 0.8, alpha, 0.6 + 0.4 * sin(t * 4.0 + i))
+		for i in 10:
+			var a := TAU * float(i) / 10.0 + t * 0.6
+			var flick := 0.5 + 0.5 * sin(t * 9.0 + float(i) * 1.7)
+			var at := Vector2(cos(a), sin(a)) * h * 1.12
+			draw_colored_polygon(PackedVector2Array([at + Vector2(cos(a + 1.57), sin(a + 1.57)) * h * 0.14,
+				at + Vector2(cos(a), sin(a)) * h * (0.32 + 0.22 * flick),
+				at - Vector2(cos(a + 1.57), sin(a + 1.57)) * h * 0.14]),
+				Color(1.0, 0.35 + 0.35 * flick, 0.10, 0.75 * alpha))
+
+	# The plate.
+	draw_rect(body.grow(3.0), Color(plate.darkened(0.6), 0.85 * alpha), true)
+	draw_rect(body, Color(plate, alpha), true)
+	var trim := Color(1.0, 0.78, 0.55, alpha) if ph == 0 else Color(0.98, 0.76, 0.30, alpha)
+	draw_rect(body, trim, false, 3.0 + float(ph))
+	if ph >= 1:
+		draw_rect(body.grow(-5.0 - float(ph)), Color(trim, 0.5 * alpha), false, 1.5)
+
+	# Claw marks, glowing, from the Rending Arts on.
+	if ph >= 2:
+		var glow := Color(1.0, 0.45, 0.25, (0.55 + 0.35 * sin(t * 5.0)) * alpha)
+		for k in 3:
+			var off := (float(k) - 1.0) * h * 0.28
+			draw_line(Vector2(-h * 0.55 + off, -h * 0.7), Vector2(-h * 0.15 + off, h * 0.7),
+				glow, maxf(w * 0.4, 1.5))
+
+	if ph == 0:
+		# Her spear, across the plate the other way and out past its corner.
+		draw_line(Vector2(h * 0.80, h * 0.80), Vector2(-h * 1.0, -h * 1.0),
+			Color(0.50, 0.26, 0.14, alpha), maxf(w * 0.55, 2.0))
+		draw_colored_polygon(PackedVector2Array([Vector2(-h * 1.32, -h * 1.32),
+			Vector2(-h * 0.92, -h * 1.10), Vector2(-h * 1.10, -h * 0.92)]),
+			Color(0.92, 0.92, 0.95, alpha))
+	# Her blades: one, then two crossed.
+	_boss_blade(Vector2(-h * 0.62, h * 0.62), Vector2(h * 0.70, -h * 0.70), w, alpha,
+		0.5 if ph >= 2 else 0.0)
+	if ph >= 1:
+		_boss_blade(Vector2(h * 0.62, h * 0.62), Vector2(-h * 0.70, -h * 0.70), w, alpha,
+			0.5 if ph >= 2 else 0.0)
+
+	# Crowned from the Rending Arts on; five points at the end.
+	if ph >= 2:
+		_boss_crown(body.position.y + 2.0, body.size.x * 0.62, 3 if ph == 2 else 5, alpha)
+	# In the finale her eyes burn through the plate.
+	if ph >= 3:
+		for side in [-1.0, 1.0]:
+			var eye := Vector2(h * 0.22 * side, -h * 0.28)
+			draw_circle(eye, h * 0.11, Color(1.0, 0.30, 0.15, 0.45 * alpha))
+			draw_circle(eye, h * 0.055, Color(1.0, 0.90, 0.60, alpha))
 	if held != HELD_NONE:
 		draw_rect(body.grow(5.0), Color(0.60, 0.82, 0.95, 0.9 * alpha), false, 2.0)
 	if flash > 0.0:
 		draw_rect(body, Color(1, 1, 1, 0.5 * flash), true)
 	if dying:
 		return
-	var bar := Rect2(-half + 2.0, -half - 8.0, tile_size - 4.0, 5.0)
+	# Under her rather than over: the crown sits on top from the third phase.
+	var bar := Rect2(body.position.x + 1.0, body.end.y + 4.0, body.size.x - 2.0, 5.0)
 	draw_rect(bar.grow(1.0), Color(0.02, 0.03, 0.05, 0.9), true)
 	var filled := bar
 	filled.size.x = bar.size.x * display_hp
