@@ -71,6 +71,10 @@ var _rebuild_at: Dictionary = {}
 ## The running tally: the counter on the HUD and, at the end, the results screen.
 var stats := BossStats.new()
 var _counter: Label = null
+## The fight clock and the enrage, right of the crystal line; and how many surges
+## the screen has shown so far.
+var _enrage_line: Label = null
+var _enrage_shown := 0
 var _results: Control = null
 
 
@@ -183,6 +187,9 @@ func _build_ui() -> void:
 	_counter.add_theme_constant_override("outline_size", 4)
 	_counter.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
 	root.add_child(_counter)
+	_enrage_line = _label(Vector2(24, 64), 14, Color(1.0, 0.62, 0.50))
+	_enrage_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	root.add_child(_enrage_line)
 
 	_panel = BarracksPanel.new()
 	_panel.position = BARRACKS_AREA.position
@@ -222,6 +229,8 @@ func _refresh_prep_hud() -> void:
 		boss_data.lane_crystal_hp, boss_data.central_crystal_hp]
 	_clock_line.text = "Every %.0fs each Barracks section sends a fresh copy of itself to its crystal." % boss_data.wave_seconds
 	_status.text = "Build your army in the Barracks — recruit, drag onto twins to merge, drill. Then Fight."
+	_enrage_line.text = ("No time limit  ·  she enrages from %s" % _mmss(boss_data.enrage_after)
+		if boss_data.enrage_every > 0.0 else "No time limit")
 
 
 # --- The fight ----------------------------------------------------------------
@@ -266,6 +275,7 @@ func _process(delta: float) -> void:
 	_panel.refresh()
 	if not _rebuild_at.is_empty():
 		_crystal_line.text = _crystal_text()
+	_enrage_line.text = enrage_text(_player.clock())
 	var left := maxf(_next_wave_at - _player.clock(), 0.0)
 	_clock_line.text = "Next wave in %.0fs  ·  wave %d  ·  %s%s%s" % [
 		left, _waves, _phase_name,
@@ -275,6 +285,21 @@ func _process(delta: float) -> void:
 		# The stance meter: how close the army is to breaking her charge.
 		_clock_line.text = "STANCE — break it: %d / %d damage" % [
 			roundi(minf(_stance_taken, _stance_need)), roundi(_stance_need)]
+
+
+static func _mmss(s: float) -> String:
+	return "%d:%02d" % [int(s) / 60, int(s) % 60]
+
+
+func enrage_text(now: float) -> String:
+	## "3:12 · enrage in 0:48", then "4:40 · ENRAGED ×1 · surge in 0:20".
+	if boss_data.enrage_every <= 0.0:
+		return _mmss(now)
+	var next := boss_data.enrage_after + boss_data.enrage_every * float(_enrage_shown)
+	if _enrage_shown == 0:
+		return "%s  ·  enrage in %s" % [_mmss(now), _mmss(maxf(next - now, 0.0))]
+	return "%s  ·  ENRAGED ×%d  ·  surge in %s" % [_mmss(now), _enrage_shown,
+		_mmss(maxf(next - now, 0.0))]
 
 
 func counter_text() -> String:
@@ -340,6 +365,11 @@ func _on_event(e: Dictionary) -> void:
 					roundi(float(e.speed) * 100.0)]
 			else:
 				_status.text = "Her retreat is cut short — she gains nothing from it."
+		"boss_enrage":
+			_enrage_shown = int(e.stacks)
+			_status.text = "%s surges! Enraged ×%d: +%d%% attack, +%d%% speed, summons +%d%%. Finish her!" % [
+				boss_data.display_name, int(e.stacks), roundi(float(e.attack) * 100.0),
+				roundi(float(e.speed) * 100.0), roundi(float(e.minions) * 100.0)]
 		"boss_ward":
 			if int(e.shades) > 0:
 				_status.text = "%d shade%s shield %s: she takes %d%% less damage. Kill them!" % [
@@ -420,6 +450,7 @@ func result_rows(won: bool, clock: String) -> Array:
 		["Summons killed", "%d" % stats.summons_killed],
 		["Crystals broken", "%d" % stats.crystals_broken],
 		["Retreats she finished", "%d" % stats.retreats],
+		["Enrage surges", "%d" % _enrage_shown],
 		["Waves", "%d" % _waves],
 		["Supply spent", "%d" % roundi(barracks.spent)],
 		["Recruits / upgrade levels", "%d / %d" % [barracks.recruits, levels]],

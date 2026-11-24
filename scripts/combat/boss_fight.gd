@@ -59,6 +59,37 @@ const ENGAGE_RANGE := 6
 const GUARD_RADIUS := 7
 ## How long a dash or leap takes on screen. The move itself is instant.
 const LEAP_TIME := 0.18
+## The sim's timeout when the boss has no time limit: never, in practice.
+const NO_TIME_LIMIT := 1.0e9
+
+## How many times she has surged (see BossData.enrage_*), and the modifiers that carry
+## it, one pair per surge.
+var enrage_stacks := 0
+var _enrage_mods: Array[StatModifier] = []
+
+
+func next_enrage_at() -> float:
+	## The fight time of her next surge, or INF if she never enrages.
+	if data.enrage_every <= 0.0:
+		return INF
+	return data.enrage_after + data.enrage_every * float(enrage_stacks)
+
+
+func _tick_enrage() -> void:
+	## The longer the fight, the stronger she gets: no clock runs out, but every surge
+	## makes her hit harder and faster, and her summons tougher, for good.
+	if not boss.is_alive() or sim.elapsed < next_enrage_at():
+		return
+	enrage_stacks += 1
+	for m in [StatModifier.make(StatModifier.Stat.ATTACK_DAMAGE, StatModifier.Mode.PERCENT,
+				data.enrage_attack),
+			StatModifier.make(StatModifier.Stat.ATTACK_SPEED, StatModifier.Mode.PERCENT,
+				data.enrage_speed)]:
+		boss.add_battle_modifier(m)
+		_enrage_mods.append(m)
+	sim._emit("boss_enrage", {uid = boss.uid, cell = boss.cell, stacks = enrage_stacks,
+		attack = data.enrage_attack * enrage_stacks, speed = data.enrage_speed * enrage_stacks,
+		minions = data.enrage_minions * enrage_stacks, next_at = next_enrage_at()})
 
 var data: BossData = null
 var sim: CombatSim = null
@@ -172,7 +203,8 @@ func attach(p_sim: CombatSim, p_barracks: Barracks) -> void:
 	barracks = p_barracks
 	sim.boss_fight = self
 	sim.sudden_death = 1.0e9
-	sim.timeout = data.time_limit
+	# No time limit unless the data sets one: the enrage settles a long fight instead.
+	sim.timeout = data.time_limit if data.time_limit > 0.0 else NO_TIME_LIMIT
 
 
 func start() -> void:
@@ -900,6 +932,7 @@ func tick() -> void:
 			boss.sealed = false
 	elif gap_left > 0.0:
 		gap_left -= CombatSim.TICK
+	_tick_enrage()
 	_tick_boosts()
 	_tick_rebuilds()
 	_tick_summons()
@@ -1247,6 +1280,7 @@ var _heal_rate: Dictionary = {}
 
 func _spawn_minion(cell: Vector2i, power: float, kind: BossMinion = null) -> UnitInstance:
 	## One summon stepping out of its circle: an ordinary shade, or `kind`.
+	power *= 1.0 + data.enrage_minions * float(enrage_stacks)
 	if not boss.is_alive():
 		return null
 	if not sim.board.is_empty(cell):

@@ -228,6 +228,12 @@ func _apply(e: Dictionary) -> void:
 			_view.spawn_label(_view.cell_to_pos(e.cell), "RETREATS TO HEAL — +%d%% DAMAGE TAKEN"
 				% roundi(float(e.get("vulnerability", 0.0)) * 100.0), Color(0.55, 1.0, 0.65))
 			Audio.play_boss_teleport()
+		"boss_enrage":
+			_view.spawn_label(_at(int(e.uid), e.cell), "ENRAGED ×%d" % int(e.stacks),
+				Color(1.0, 0.30, 0.20))
+			_view.effects().ring(_at(int(e.uid), e.cell), _view.tile_size * 0.3,
+				_view.tile_size * 2.8, Color(1.0, 0.20, 0.12), _fx_life(0.7))
+			Audio.play_boss_charge()
 		"boss_retreat_end":
 			if bool(e.get("completed", false)):
 				_view.spawn_label(_at(int(e.uid), e.cell), "STRONGER ×%d" % int(e.stacks),

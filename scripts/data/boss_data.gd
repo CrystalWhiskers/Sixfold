@@ -92,9 +92,18 @@ extends Resource
 @export_group("Rules")
 ## Seconds between reinforcement waves.
 @export var wave_seconds: float = 20.0
-## The boss takes the field if nobody has won by then. Long, so it only ever
-## settles a fight that has genuinely stalled.
-@export var time_limit: float = 480.0
+## The boss takes the field if nobody has won by then. 0 for no time limit: the
+## fight is decided by her falling or the Central Crystal falling, and the enrage
+## below is what stops it dragging on for ever.
+@export var time_limit: float = 0.0
+## Enrage: from `enrage_after` seconds she surges every `enrage_every` seconds, each
+## surge adding `enrage_attack` to her attack, `enrage_speed` to her attack speed and
+## `enrage_minions` to the power of everything she summons — stacking, without end.
+@export var enrage_after: float = 300.0
+@export var enrage_every: float = 30.0
+@export var enrage_attack: float = 0.15
+@export var enrage_speed: float = 0.08
+@export var enrage_minions: float = 0.10
 
 
 func phase_for(hp_fraction: float, central: bool) -> int:

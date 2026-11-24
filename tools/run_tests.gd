@@ -14153,6 +14153,40 @@ func _test_boss_polish() -> void:
 			"%.2f -> %.2f" % [hp_before, bf.boss.stat(StatModifier.Stat.DAMAGE_TAKEN)])
 	BoardModel.reset_map()
 	_test_boss_retreat(data)
+	_test_boss_enrage(data)
+
+
+func _test_boss_enrage(data: BossData) -> void:
+	_section("Boss defence: no time limit, but she enrages")
+	var s := _boss_board([["warden"], [], []])
+	var bf: BossFight = s.bf
+	var sim: CombatSim = s.sim
+	_check("there is no time limit: only her death or the Central Crystal ends it",
+		data.time_limit <= 0.0 and sim.timeout_at() >= BossFight.NO_TIME_LIMIT)
+	var atk := bf.boss.stat(StatModifier.Stat.ATTACK_DAMAGE)
+	var spd := bf.boss.stat(StatModifier.Stat.ATTACK_SPEED)
+	sim.elapsed = data.enrage_after - 1.0
+	bf._tick_enrage()
+	_check("before the enrage starts she is her ordinary self", bf.enrage_stacks == 0)
+	sim.elapsed = data.enrage_after
+	bf._tick_enrage()
+	_check("from %ds she surges: harder and faster" % roundi(data.enrage_after),
+		bf.enrage_stacks == 1
+		and is_equal_approx(bf.boss.stat(StatModifier.Stat.ATTACK_DAMAGE), atk * (1.0 + data.enrage_attack))
+		and bf.boss.stat(StatModifier.Stat.ATTACK_SPEED) > spd
+		and not _kind_events(sim, "boss_enrage").is_empty(),
+		"%.0f -> %.0f" % [atk, bf.boss.stat(StatModifier.Stat.ATTACK_DAMAGE)])
+	sim.elapsed = data.enrage_after + data.enrage_every
+	bf._tick_enrage()
+	_check("and again every %ds, stacking" % roundi(data.enrage_every),
+		bf.enrage_stacks == 2
+		and is_equal_approx(bf.boss.stat(StatModifier.Stat.ATTACK_DAMAGE), atk * (1.0 + 2.0 * data.enrage_attack)),
+		"%d stacks, %.0f attack" % [bf.enrage_stacks, bf.boss.stat(StatModifier.Stat.ATTACK_DAMAGE)])
+	var m := bf._spawn_minion(Vector2i(8, 3), 1.0)
+	_check("and what she summons comes out stronger too",
+		m != null and is_equal_approx(m.data.max_hp, data.minion_hp * (1.0 + 2.0 * data.enrage_minions)),
+		"%.0f" % (m.data.max_hp if m != null else 0.0))
+	BoardModel.reset_map()
 
 
 func _test_boss_retreat(data: BossData) -> void:

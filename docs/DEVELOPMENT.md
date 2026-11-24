@@ -3626,3 +3626,13 @@ the boss and to her summons), damage taken, units sent and lost, summons killed,
 crystal breaks, retreats she finished, waves, Supply spent, recruits and upgrade
 levels, and the top three unit types by damage (`boss_main.result_rows`). "See the
 field" closes it.
+
+**No time limit; the enrage instead.** `BossData.time_limit` is 0, so the sim's
+timeout is `BossFight.NO_TIME_LIMIT` and only her death or the Central Crystal's ends
+the fight. From `enrage_after` (5:00) she surges every `enrage_every` (30 s): +15%
+attack, +8% attack speed and +10% summon power per surge, stacking without end
+(`BossFight._tick_enrage`, event `boss_enrage`). The HUD shows the fight clock and
+"enrage in" / "ENRAGED ×N · surge in" right of the crystal line. Measured: the decent
+player won 6 of 6, 3:55 – 9:09 (average 5:49); the idle player still loses, now at
+9 – 16 minutes when the enraged boss breaks through. Starting the enrage at 4:00 let
+one decent run drag to 21 minutes, so it starts at 5:00.
