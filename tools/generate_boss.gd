@@ -322,6 +322,8 @@ func _initialize() -> void:
 	# Sweeps, burns and seals. A crescent cut in front of her; a three-beat sweep
 	# round her; burning ground under the thickest of the army; a seal on the mana of
 	# everything near her, with no wind-up at all.
+	# A quick step forward: a short dash with a light cut on the way, mostly to move her.
+	var step := _move(&"crimson_step", "Crimson Step", S.DASH, 3, 1, 1.0, 0.5)
 	var arc := _move(&"crimson_arc", "Crimson Arc", S.ARC, 4, 1, 2.5, 0.9)
 	arc.arc_degrees = 100.0
 	arc.legs = 1
@@ -397,17 +399,17 @@ func _initialize() -> void:
 	b.phases = [
 		# Four phases, each its own health bar. The crystals and the merge are a
 		# separate track: they change WHERE it fights, these change HOW.
-		_phase("First Blade", 1.0, 3.0, 1.0, [sweep, edge, arc, spear, dash]),
+		_phase("First Blade", 1.0, 3.0, 1.0, [sweep, edge, arc, spear, dash, step]),
 		# It takes up a second weapon: quicker, the two-row combo joins the cycle, and
 		# the first stance and the first map-wide sweep arrive. The big moves are
 		# spaced out with ordinary ones — about one in eight of the cycle.
 		_phase("Twin Blades", 0.75, 2.3, 1.25,
-			_cycle([crossed, arc, sweep, scythe, spear, edict, edge, dash], [gather, hunt, tide], 7), 0.03),
+			_cycle([crossed, arc, step, sweep, scythe, spear, edict, edge, dash], [gather, hunt, tide], 7), 0.03),
 		_phase("Rending Arts", 0.50, 2.0, 1.45,
-			_cycle([heaven, scythe, crossed, pyre, horizon, edict, pounce, spear], [ring, red_tide, tide, maelstrom, retreat, rain], 4), 0.05),
+			_cycle([heaven, scythe, step, crossed, pyre, horizon, edict, pounce, spear], [ring, red_tide, tide, maelstrom, retreat, rain], 4), 0.05),
 		# Its final form: the widest moves, and every blow feeds it.
 		_phase("Crimson Finale", 0.25, 1.8, 1.7,
-			_cycle([heaven, scythe, pounce, pyre, horizon, edict, spear, crossed], [onrush_long, last_breath, tide,
+			_cycle([heaven, scythe, step, pounce, pyre, horizon, edict, spear, crossed], [onrush_long, last_breath, tide,
 				sanctum, ring_big, rain_big], 2),
 			0.08),
 	]
