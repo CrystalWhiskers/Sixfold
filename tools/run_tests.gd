@@ -13294,9 +13294,9 @@ func _test_boss_defence() -> void:
 		for m in p.moves:
 			out.append(m.shape)
 		return out
-	_check("phase one: a row sweep, a column slash, a spear thrust and a dash",
+	_check("phase one: a row sweep, a column slash, an arc, a spear thrust and a dash",
 		shapes.call(data.phases[0]) == [BossMove.Shape.ROWS, BossMove.Shape.COLUMNS,
-			BossMove.Shape.THRUST, BossMove.Shape.DASH])
+			BossMove.Shape.ARC, BossMove.Shape.THRUST, BossMove.Shape.DASH])
 	var p2 := data.phases[1]
 	_check("phase two, at 75%: a second weapon — a faster cycle with the two-row combo",
 		is_equal_approx(p2.hp_threshold, 0.75)
@@ -13318,8 +13318,8 @@ func _test_boss_defence() -> void:
 	_check("every phase change is announced with a pause",
 		data.phases.slice(1).all(func(p): return p.entry_pause > 0.0))
 	_check("the moves reach across an open field, not a two-tile lane",
-		data.phases[0].moves[0].reach >= 3 and data.phases[0].moves[2].reach >= 7
-		and data.phases[0].moves[3].reach >= 8)
+		data.phases[0].moves[0].reach >= 3 and data.phases[0].moves[3].reach >= 7
+		and data.phases[0].moves[4].reach >= 8)
 
 	# --- The field: open, in four zones, with scattered rock rather than walls.
 	var s := _boss_board()
@@ -13978,8 +13978,11 @@ func _test_boss_defence() -> void:
 	var crossed_left := (bf.marked.cells as Array).has(left.cell)
 	var left_hp := left.current_hp
 	sim.step()
-	_check("a map-wide move passes over a crystal without touching it",
-		crossed_left and is_equal_approx(left.current_hp, left_hp))
+	var chip := bf.boss.stat(StatModifier.Stat.ATTACK_DAMAGE) * wide.damage_mult * data.crystal_share
+	_check("a big move that sweeps over a crystal in its way chips it, by accident",
+		crossed_left and absf((left_hp - left.current_hp) - chip) < 1.0,
+		"%.0f taken, expected %.0f" % [left_hp - left.current_hp, chip])
+	left_hp = left.current_hp
 	var mid_hp := mid.current_hp
 	sim._damage(mid, 500.0, bf.boss)
 	_check("her blow on a crystal she is NOT after does nothing",
@@ -14247,6 +14250,85 @@ func _test_boss_polish() -> void:
 	BoardModel.reset_map()
 	_test_boss_retreat(data)
 	_test_boss_enrage(data)
+	_test_boss_attacks(data)
+
+
+func _test_boss_attacks(data: BossData) -> void:
+	_section("Boss defence: sweeps, burns, seals, the whirl")
+	var by_id := {}
+	for p in data.phases:
+		for m in p.moves:
+			by_id[m.id] = m
+	_check("her cycles carry arcs, a sweep, burning ground, a mana seal and the tide",
+		by_id.has(&"crimson_arc") and by_id.has(&"scything_sweep") and by_id.has(&"crimson_pyre")
+		and by_id.has(&"silencing_edict") and by_id.has(&"scarlet_tide"), "%s" % [by_id.keys()])
+	var s := _boss_board([["warden", "warden", "warden", "warden", "warden", "warden"], [], []])
+	var bf: BossFight = s.bf
+	var sim: CombatSim = s.sim
+	var at := Vector2i(8, 10)
+	var arc: BossMove = by_id.get(&"crimson_arc", null)
+	if arc != null:
+		var cells := bf.move_cells(arc, at, Vector2i(8, 14))
+		var ahead := cells.has(Vector2i(8, 13))
+		var behind := cells.has(Vector2i(8, 7))
+		var far := cells.any(func(c): return Vector2(c - at).length() > arc.reach + 0.5)
+		_check("an arc cuts in front of her and leaves her back clear",
+			ahead and not behind and not far and cells.size() > 4, "%d tiles" % cells.size())
+	var scythe: BossMove = by_id.get(&"scything_sweep", null)
+	if scythe != null:
+		var a0 := bf.move_cells(scythe, at, Vector2i(8, 14), 0)
+		var a2 := bf.move_cells(scythe, at, Vector2i(8, 14), 2)
+		_check("a sweep moves round her beat by beat", scythe.legs >= 2 and a0 != a2
+			and not a0.is_empty() and not a2.is_empty())
+	var victim: UnitInstance = null
+	for u in sim._units:
+		if u.team == bf.player_team() and u.is_alive() and not u.structure:
+			victim = u
+	var pyre: BossMove = by_id.get(&"crimson_pyre", null)
+	if pyre != null and victim != null:
+		var hp0 := victim.current_hp + victim.shield
+		bf.marked = {move = pyre, cells = [victim.cell] as Array[Vector2i], left = 0.01,
+			aim = victim.cell, step = 0}
+		bf._strike()
+		var right_after := victim.current_hp + victim.shield
+		for i in 12:
+			bf._tick_hazards()
+		_check("burning ground does nothing at once, then burns every half second",
+			is_equal_approx(right_after, hp0) and victim.current_hp + victim.shield < hp0,
+			"%.0f -> %.0f -> %.0f" % [hp0, right_after, victim.current_hp + victim.shield])
+	var edict: BossMove = by_id.get(&"silencing_edict", null)
+	if edict != null and victim != null:
+		victim.mana = 50.0
+		bf.marked = {move = edict, cells = [victim.cell] as Array[Vector2i], left = 0.01,
+			aim = victim.cell, step = 0}
+		bf._strike()
+		victim.gain_mana(30.0)
+		_check("the seal empties the bar and stops it filling, with no wind-up",
+			edict.windup <= 0.0 and victim.mana == 0.0 and victim.mana_suppressed > 0.0
+			and not sim.can_cast(victim))
+	# Crowded: six of the army round her, and her next move is the whirl.
+	BoardModel.reset_map()
+	var s2 := _boss_board()
+	var bf2: BossFight = s2.bf
+	var sim2: CombatSim = s2.sim
+	var w := load("res://data/units/warden_t1.tres") as UnitData
+	var placed := 0
+	for dy in range(-1, 2):
+		for dx in range(-2, 3):
+			var c := bf2.boss.cell + Vector2i(dx, dy + 1)
+			if placed < 7 and c != bf2.boss.cell and sim2.board.in_bounds(c) and sim2.board.is_empty(c):
+				var u := UnitInstance.create(w, bf2.player_team())
+				if sim2.board.force_place(u, c):
+					sim2._units.append(u)
+					placed += 1
+	bf2.marked = {}
+	bf2.surround_cd = 0.0
+	bf2._mark_next_move()
+	var whirled: BossMove = bf2.marked.get("move", null)
+	_check("surrounded, she answers with her whirl — wound up first",
+		whirled != null and whirled.id == data.surround_move.id and bool(bf2.marked.get("windup", false)),
+		"%d round her, next %s" % [bf2.crowd_around(), whirled.id if whirled != null else &"none"])
+	BoardModel.reset_map()
 
 
 func _test_boss_enrage(data: BossData) -> void:

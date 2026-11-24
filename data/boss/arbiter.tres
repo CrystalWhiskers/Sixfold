@@ -22,6 +22,17 @@ damage_mult = 2.5
 
 [sub_resource type="Resource" id="Resource_b7mvm"]
 script = ExtResource("2_lqgl0")
+id = &"crimson_arc"
+display_name = "Crimson Arc"
+shape = 13
+reach = 4
+damage_mult = 2.5
+telegraph = 0.9
+legs = 1
+arc_degrees = 100.0
+
+[sub_resource type="Resource" id="Resource_pntgj"]
+script = ExtResource("2_lqgl0")
 id = &"longspear"
 display_name = "Longspear"
 shape = 2
@@ -30,23 +41,23 @@ damage_mult = 3.0
 telegraph = 1.2
 max_hp_percent = 0.06
 
-[sub_resource type="Resource" id="Resource_pntgj"]
+[sub_resource type="Resource" id="Resource_vvtju"]
 script = ExtResource("2_lqgl0")
 id = &"breach_dash"
 display_name = "Breach Dash"
 shape = 3
 reach = 8
 
-[sub_resource type="Resource" id="Resource_vvtju"]
+[sub_resource type="Resource" id="Resource_78j3i"]
 script = ExtResource("1_s8kb7")
 display_name = "First Blade"
 gap = 3.0
-moves = Array[ExtResource("2_lqgl0")]([SubResource("Resource_hylck"), SubResource("Resource_od8ds"), SubResource("Resource_b7mvm"), SubResource("Resource_pntgj")])
+moves = Array[ExtResource("2_lqgl0")]([SubResource("Resource_hylck"), SubResource("Resource_od8ds"), SubResource("Resource_b7mvm"), SubResource("Resource_pntgj"), SubResource("Resource_vvtju")])
 music_path = "res://audio/boss/gebura_battle.mp3"
 music_label = "Theme 1"
 music_to = 91.6364
 
-[sub_resource type="Resource" id="Resource_78j3i"]
+[sub_resource type="Resource" id="Resource_rvirp"]
 script = ExtResource("2_lqgl0")
 id = &"crossed_blades"
 display_name = "Crossed Blades"
@@ -55,7 +66,17 @@ span = 2
 damage_mult = 2.5
 telegraph = 0.9
 
-[sub_resource type="Resource" id="Resource_rvirp"]
+[sub_resource type="Resource" id="Resource_twyko"]
+script = ExtResource("2_lqgl0")
+id = &"scything_sweep"
+display_name = "Scything Sweep"
+shape = 13
+reach = 6
+telegraph = 0.7
+legs = 3
+arc_degrees = 70.0
+
+[sub_resource type="Resource" id="Resource_44d0m"]
 script = ExtResource("2_lqgl0")
 id = &"crimson_cross"
 display_name = "Crimson Cross"
@@ -67,7 +88,7 @@ telegraph = 1.5
 windup = 2.5
 executes_top_tier = true
 
-[sub_resource type="Resource" id="Resource_twyko"]
+[sub_resource type="Resource" id="Resource_qagpy"]
 script = ExtResource("2_lqgl0")
 id = &"gathering_storm"
 display_name = "Gathering Storm"
@@ -76,9 +97,18 @@ reach = 0
 span = 0
 damage_mult = 0.0
 telegraph = 5.0
-finisher = SubResource("Resource_rvirp")
+finisher = SubResource("Resource_44d0m")
 
-[sub_resource type="Resource" id="Resource_44d0m"]
+[sub_resource type="Resource" id="Resource_di884"]
+script = ExtResource("2_lqgl0")
+id = &"silencing_edict"
+display_name = "Silencing Edict"
+shape = 15
+reach = 6
+damage_mult = 0.0
+telegraph = 0.6
+
+[sub_resource type="Resource" id="Resource_ucgat"]
 script = ExtResource("2_lqgl0")
 id = &"hunting_sweep"
 display_name = "Hunting Sweep"
@@ -89,7 +119,18 @@ damage_mult = 2.5
 telegraph = 1.4
 windup = 2.5
 
-[sub_resource type="Resource" id="Resource_qagpy"]
+[sub_resource type="Resource" id="Resource_ybyqy"]
+script = ExtResource("2_lqgl0")
+id = &"scarlet_tide"
+display_name = "Scarlet Tide"
+shape = 8
+reach = 1
+span = 9
+damage_mult = 0.8
+telegraph = 1.4
+windup = 2.0
+
+[sub_resource type="Resource" id="Resource_p0xy4"]
 script = ExtResource("1_s8kb7")
 display_name = "Twin Blades"
 hp_threshold = 0.75
@@ -98,7 +139,7 @@ haste = 1.25
 lifesteal = 0.05
 attack_bonus = 0.15
 regen = 0.001
-moves = Array[ExtResource("2_lqgl0")]([SubResource("Resource_78j3i"), SubResource("Resource_hylck"), SubResource("Resource_b7mvm"), SubResource("Resource_od8ds"), SubResource("Resource_pntgj"), SubResource("Resource_twyko"), SubResource("Resource_78j3i"), SubResource("Resource_hylck"), SubResource("Resource_b7mvm"), SubResource("Resource_od8ds"), SubResource("Resource_pntgj"), SubResource("Resource_44d0m")])
+moves = Array[ExtResource("2_lqgl0")]([SubResource("Resource_rvirp"), SubResource("Resource_b7mvm"), SubResource("Resource_hylck"), SubResource("Resource_twyko"), SubResource("Resource_pntgj"), SubResource("Resource_qagpy"), SubResource("Resource_di884"), SubResource("Resource_od8ds"), SubResource("Resource_vvtju"), SubResource("Resource_rvirp"), SubResource("Resource_b7mvm"), SubResource("Resource_ucgat"), SubResource("Resource_hylck"), SubResource("Resource_twyko"), SubResource("Resource_pntgj"), SubResource("Resource_di884"), SubResource("Resource_od8ds"), SubResource("Resource_ybyqy")])
 summons_on_start = 2
 summon_every = 20.0
 summon_count = 1
@@ -107,7 +148,7 @@ music_label = "Theme 2"
 music_from = 91.6364
 music_to = 183.2727
 
-[sub_resource type="Resource" id="Resource_di884"]
+[sub_resource type="Resource" id="Resource_c23a0"]
 script = ExtResource("2_lqgl0")
 id = &"heaven_split"
 display_name = "Heaven Split"
@@ -119,18 +160,7 @@ telegraph = 1.6
 hits_crystals = true
 max_hp_percent = 0.12
 
-[sub_resource type="Resource" id="Resource_ucgat"]
-script = ExtResource("2_lqgl0")
-id = &"horizon_split"
-display_name = "Horizon Split"
-reach = 5
-span = 3
-damage_mult = 4.0
-telegraph = 1.6
-hits_crystals = true
-max_hp_percent = 0.1
-
-[sub_resource type="Resource" id="Resource_ybyqy"]
+[sub_resource type="Resource" id="Resource_1xfcm"]
 script = ExtResource("2_lqgl0")
 id = &"shockwave"
 display_name = "Shockwave"
@@ -141,17 +171,28 @@ damage_mult = 2.5
 telegraph = 1.4
 windup = 2.5
 
-[sub_resource type="Resource" id="Resource_p0xy4"]
+[sub_resource type="Resource" id="Resource_k1rwg"]
 script = ExtResource("2_lqgl0")
-id = &"pouncing_ruin"
-display_name = "Pouncing Ruin"
-shape = 4
-reach = 6
-damage_mult = 3.0
-telegraph = 1.2
-max_hp_percent = 0.08
+id = &"crimson_pyre"
+display_name = "Crimson Pyre"
+shape = 14
+reach = 0
+span = 2
+damage_mult = 0.0
+blaze_seconds = 6.0
 
-[sub_resource type="Resource" id="Resource_c23a0"]
+[sub_resource type="Resource" id="Resource_wk5wn"]
+script = ExtResource("2_lqgl0")
+id = &"horizon_split"
+display_name = "Horizon Split"
+reach = 5
+span = 3
+damage_mult = 4.0
+telegraph = 1.6
+hits_crystals = true
+max_hp_percent = 0.1
+
+[sub_resource type="Resource" id="Resource_kgdra"]
 script = ExtResource("2_lqgl0")
 id = &"onrush"
 display_name = "Onrush"
@@ -161,7 +202,7 @@ damage_mult = 4.0
 telegraph = 0.7
 windup = 2.5
 
-[sub_resource type="Resource" id="Resource_1xfcm"]
+[sub_resource type="Resource" id="Resource_xb0dc"]
 script = ExtResource("2_lqgl0")
 id = &"red_tide"
 display_name = "Red Tide"
@@ -171,9 +212,19 @@ span = 0
 damage_mult = 0.0
 telegraph = 5.0
 break_threshold = 4500.0
-finisher = SubResource("Resource_c23a0")
+finisher = SubResource("Resource_kgdra")
 
-[sub_resource type="Resource" id="Resource_k1rwg"]
+[sub_resource type="Resource" id="Resource_ycxfj"]
+script = ExtResource("2_lqgl0")
+id = &"pouncing_ruin"
+display_name = "Pouncing Ruin"
+shape = 4
+reach = 6
+damage_mult = 3.0
+telegraph = 1.2
+max_hp_percent = 0.08
+
+[sub_resource type="Resource" id="Resource_7qkaw"]
 script = ExtResource("3_xxu2h")
 id = &"crimson_shade"
 display_name = "Crimson Shade"
@@ -182,7 +233,7 @@ attack_damage = 35.0
 burst_mult = 2.5
 accent = Color(0.85, 0.34, 0.35500002, 1)
 
-[sub_resource type="Resource" id="Resource_wk5wn"]
+[sub_resource type="Resource" id="Resource_nys1i"]
 script = ExtResource("3_xxu2h")
 id = &"scarlet_thorn"
 display_name = "Scarlet Thorn"
@@ -194,7 +245,7 @@ attack_range = 3
 ranged = true
 accent = Color(0.78, 0.22, 0.34, 1)
 
-[sub_resource type="Resource" id="Resource_kgdra"]
+[sub_resource type="Resource" id="Resource_4acee"]
 script = ExtResource("3_xxu2h")
 id = &"blood_chalice"
 display_name = "Blood Chalice"
@@ -206,7 +257,7 @@ can_attack = false
 heal_boss = 0.003
 accent = Color(0.55, 0.14, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_xb0dc"]
+[sub_resource type="Resource" id="Resource_eim80"]
 script = ExtResource("2_lqgl0")
 id = &"crimson_retreat"
 display_name = "Crimson Retreat"
@@ -216,9 +267,9 @@ span = 0
 damage_mult = 0.0
 telegraph = 0.5
 windup = 1.5
-retreat_summons = Array[ExtResource("3_xxu2h")]([SubResource("Resource_k1rwg"), SubResource("Resource_k1rwg"), SubResource("Resource_wk5wn"), SubResource("Resource_wk5wn"), SubResource("Resource_kgdra"), SubResource("Resource_kgdra")])
+retreat_summons = Array[ExtResource("3_xxu2h")]([SubResource("Resource_7qkaw"), SubResource("Resource_7qkaw"), SubResource("Resource_nys1i"), SubResource("Resource_nys1i"), SubResource("Resource_4acee"), SubResource("Resource_4acee")])
 
-[sub_resource type="Resource" id="Resource_ycxfj"]
+[sub_resource type="Resource" id="Resource_u30k6"]
 script = ExtResource("2_lqgl0")
 id = &"blade_rain"
 display_name = "Blade Rain"
@@ -228,7 +279,7 @@ damage_mult = 3.0
 telegraph = 1.4
 windup = 2.5
 
-[sub_resource type="Resource" id="Resource_7qkaw"]
+[sub_resource type="Resource" id="Resource_w30pm"]
 script = ExtResource("1_s8kb7")
 display_name = "Rending Arts"
 hp_threshold = 0.5
@@ -237,7 +288,7 @@ haste = 1.45
 lifesteal = 0.08
 attack_bonus = 0.3
 regen = 0.0015
-moves = Array[ExtResource("2_lqgl0")]([SubResource("Resource_di884"), SubResource("Resource_78j3i"), SubResource("Resource_ucgat"), SubResource("Resource_ybyqy"), SubResource("Resource_p0xy4"), SubResource("Resource_b7mvm"), SubResource("Resource_di884"), SubResource("Resource_1xfcm"), SubResource("Resource_78j3i"), SubResource("Resource_ucgat"), SubResource("Resource_p0xy4"), SubResource("Resource_xb0dc"), SubResource("Resource_b7mvm"), SubResource("Resource_di884"), SubResource("Resource_78j3i"), SubResource("Resource_ycxfj")])
+moves = Array[ExtResource("2_lqgl0")]([SubResource("Resource_c23a0"), SubResource("Resource_twyko"), SubResource("Resource_rvirp"), SubResource("Resource_1xfcm"), SubResource("Resource_k1rwg"), SubResource("Resource_wk5wn"), SubResource("Resource_di884"), SubResource("Resource_xb0dc"), SubResource("Resource_ycxfj"), SubResource("Resource_pntgj"), SubResource("Resource_c23a0"), SubResource("Resource_ybyqy"), SubResource("Resource_twyko"), SubResource("Resource_rvirp"), SubResource("Resource_k1rwg"), SubResource("Resource_eim80"), SubResource("Resource_wk5wn"), SubResource("Resource_di884"), SubResource("Resource_ycxfj"), SubResource("Resource_u30k6")])
 summons_on_start = 3
 summon_every = 18.0
 summon_count = 2
@@ -246,19 +297,20 @@ music_path = "res://audio/boss/red_mist.mp3"
 music_label = "Theme 3"
 music_from = 0.0647
 
-[sub_resource type="Resource" id="Resource_nys1i"]
+[sub_resource type="Resource" id="Resource_3eth5"]
 script = ExtResource("2_lqgl0")
 id = &"endless_onrush"
 display_name = "Endless Onrush"
 shape = 6
 reach = 0
+span = 3
 damage_mult = 4.0
 telegraph = 0.6
 windup = 2.5
 legs = 9
 seeks_army = true
 
-[sub_resource type="Resource" id="Resource_4acee"]
+[sub_resource type="Resource" id="Resource_ritdj"]
 script = ExtResource("2_lqgl0")
 id = &"thousand_cuts"
 display_name = "Thousand Cuts"
@@ -269,7 +321,7 @@ telegraph = 1.2
 windup = 2.5
 executes_top_tier = true
 
-[sub_resource type="Resource" id="Resource_eim80"]
+[sub_resource type="Resource" id="Resource_t8u5n"]
 script = ExtResource("2_lqgl0")
 id = &"last_breath"
 display_name = "Last Breath"
@@ -279,9 +331,9 @@ span = 0
 damage_mult = 0.0
 telegraph = 5.0
 break_threshold = 6000.0
-finisher = SubResource("Resource_4acee")
+finisher = SubResource("Resource_ritdj")
 
-[sub_resource type="Resource" id="Resource_u30k6"]
+[sub_resource type="Resource" id="Resource_pk28w"]
 script = ExtResource("2_lqgl0")
 id = &"scarlet_sanctum"
 display_name = "Scarlet Sanctum"
@@ -293,9 +345,9 @@ telegraph = 0.5
 windup = 1.5
 retreat_seconds = 9.0
 retreat_heal = 0.007
-retreat_summons = Array[ExtResource("3_xxu2h")]([SubResource("Resource_k1rwg"), SubResource("Resource_k1rwg"), SubResource("Resource_k1rwg"), SubResource("Resource_wk5wn"), SubResource("Resource_wk5wn"), SubResource("Resource_wk5wn"), SubResource("Resource_kgdra"), SubResource("Resource_kgdra")])
+retreat_summons = Array[ExtResource("3_xxu2h")]([SubResource("Resource_7qkaw"), SubResource("Resource_7qkaw"), SubResource("Resource_7qkaw"), SubResource("Resource_nys1i"), SubResource("Resource_nys1i"), SubResource("Resource_nys1i"), SubResource("Resource_4acee"), SubResource("Resource_4acee")])
 
-[sub_resource type="Resource" id="Resource_w30pm"]
+[sub_resource type="Resource" id="Resource_m0rlo"]
 script = ExtResource("2_lqgl0")
 id = &"great_shockwave"
 display_name = "Great Shockwave"
@@ -307,7 +359,7 @@ telegraph = 1.5
 windup = 2.5
 max_hp_percent = 0.15
 
-[sub_resource type="Resource" id="Resource_3eth5"]
+[sub_resource type="Resource" id="Resource_fc1ov"]
 script = ExtResource("2_lqgl0")
 id = &"blade_storm"
 display_name = "Blade Storm"
@@ -319,7 +371,7 @@ windup = 2.5
 max_hp_percent = 0.1
 count = 40
 
-[sub_resource type="Resource" id="Resource_ritdj"]
+[sub_resource type="Resource" id="Resource_pay7v"]
 script = ExtResource("1_s8kb7")
 display_name = "Crimson Finale"
 hp_threshold = 0.25
@@ -328,7 +380,7 @@ haste = 1.7
 lifesteal = 0.14
 attack_bonus = 0.5
 regen = 0.002
-moves = Array[ExtResource("2_lqgl0")]([SubResource("Resource_di884"), SubResource("Resource_p0xy4"), SubResource("Resource_ucgat"), SubResource("Resource_nys1i"), SubResource("Resource_b7mvm"), SubResource("Resource_78j3i"), SubResource("Resource_di884"), SubResource("Resource_eim80"), SubResource("Resource_p0xy4"), SubResource("Resource_ucgat"), SubResource("Resource_b7mvm"), SubResource("Resource_u30k6"), SubResource("Resource_78j3i"), SubResource("Resource_di884"), SubResource("Resource_p0xy4"), SubResource("Resource_w30pm"), SubResource("Resource_ucgat"), SubResource("Resource_b7mvm"), SubResource("Resource_78j3i"), SubResource("Resource_3eth5")])
+moves = Array[ExtResource("2_lqgl0")]([SubResource("Resource_c23a0"), SubResource("Resource_twyko"), SubResource("Resource_ycxfj"), SubResource("Resource_3eth5"), SubResource("Resource_k1rwg"), SubResource("Resource_wk5wn"), SubResource("Resource_di884"), SubResource("Resource_t8u5n"), SubResource("Resource_pntgj"), SubResource("Resource_rvirp"), SubResource("Resource_c23a0"), SubResource("Resource_ybyqy"), SubResource("Resource_twyko"), SubResource("Resource_ycxfj"), SubResource("Resource_k1rwg"), SubResource("Resource_pk28w"), SubResource("Resource_wk5wn"), SubResource("Resource_di884"), SubResource("Resource_pntgj"), SubResource("Resource_m0rlo"), SubResource("Resource_rvirp"), SubResource("Resource_c23a0"), SubResource("Resource_twyko"), SubResource("Resource_fc1ov")])
 summons_on_start = 4
 summon_every = 15.0
 summon_count = 2
@@ -336,6 +388,16 @@ minion_power = 1.6
 music_path = "res://audio/boss/gebura_battle.mp3"
 music_label = "Theme 4"
 music_from = 183.2727
+
+[sub_resource type="Resource" id="Resource_sdnlc"]
+script = ExtResource("2_lqgl0")
+id = &"bladestorm_whirl"
+display_name = "Bladestorm Whirl"
+shape = 8
+reach = 1
+span = 3
+damage_mult = 3.5
+windup = 1.5
 
 [resource]
 script = ExtResource("4_78baq")
@@ -347,7 +409,7 @@ max_hp = 90000.0
 attack_damage = 100.0
 attack_speed = 0.9
 accent = Color(0.8, 0.12, 0.14, 1)
-phases = Array[ExtResource("1_s8kb7")]([SubResource("Resource_vvtju"), SubResource("Resource_qagpy"), SubResource("Resource_7qkaw"), SubResource("Resource_ritdj")])
+phases = Array[ExtResource("1_s8kb7")]([SubResource("Resource_78j3i"), SubResource("Resource_p0xy4"), SubResource("Resource_w30pm"), SubResource("Resource_pay7v")])
 crystal_order = PackedInt32Array(0, 1, 2)
 base_income = 4.0
 income_step = 2.0
@@ -364,3 +426,4 @@ minion_ward_per_shade = 0.06
 max_hit_percent = 0.012
 ranged_resist = 0.3
 death_power = 0.002
+surround_move = SubResource("Resource_sdnlc")

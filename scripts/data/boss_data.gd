@@ -131,6 +131,15 @@ extends Resource
 @export var max_hit_percent: float = 0.0
 @export var ranged_resist: float = 0.0
 @export var death_power: float = 0.0
+## What she does when the army crowds her: with `surround_count` or more of it within
+## two tiles, her next move is `surround_move` (a big one, with a wind-up), at most
+## once every `surround_cooldown` seconds.
+@export var surround_move: BossMove = null
+@export var surround_count: int = 6
+@export var surround_cooldown: float = 10.0
+## A big move (one with a wind-up) that sweeps over a crystal standing in the way
+## hurts it by this share of the blow. Only by accident: she never aims at them.
+@export var crystal_share: float = 0.5
 
 
 func phase_for(hp_fraction: float, central: bool) -> int:

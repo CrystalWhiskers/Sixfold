@@ -63,6 +63,49 @@ const LEAP_TIME := 0.18
 const NO_TIME_LIMIT := 1.0e9
 
 
+## True only while a big move's blow is landing on a crystal that stood in its way.
+var _crystal_accident := false
+## The aim a sweep started with, kept for its later beats.
+var _sweep_aim := Vector2i.ZERO
+## Seconds before she may answer a crowd with her surround move again.
+var surround_cd := 0.0
+## Burning ground: {cells, left, tick, dps}.
+var _blazes: Array[Dictionary] = []
+
+
+func crowd_around() -> int:
+	## How many of the army stand within two tiles of her.
+	var n := 0
+	for v in sim.board.units_in_box(boss.cell, 2, player_team()):
+		if v.is_alive() and not v.structure:
+			n += 1
+	return n
+
+
+func _tick_hazards() -> void:
+	if surround_cd > 0.0:
+		surround_cd -= CombatSim.TICK
+	# The burning ground: twice a second, everything of the army standing in it burns.
+	var i := _blazes.size() - 1
+	while i >= 0:
+		var b: Dictionary = _blazes[i]
+		b.left = float(b.left) - CombatSim.TICK
+		b.tick = float(b.tick) + CombatSim.TICK
+		if float(b.tick) >= 0.5:
+			b.tick = float(b.tick) - 0.5
+			for c in b.cells:
+				var v := sim.board.unit_at(c)
+				if v != null and v.team == player_team() and v.is_alive() and not v.structure:
+					sim._damage(v, float(b.dps) * 0.5, boss, true)
+		if float(b.left) <= 0.0:
+			_blazes.remove_at(i)
+		i -= 1
+	# The mana seal wears off.
+	for u in sim._units:
+		if u.mana_suppressed > 0.0:
+			u.mana_suppressed = maxf(u.mana_suppressed - CombatSim.TICK, 0.0)
+
+
 func max_hit() -> float:
 	## The most one blow can take off her, or INF with no cap.
 	if data.max_hit_percent <= 0.0:
@@ -324,7 +367,7 @@ func current_target() -> UnitInstance:
 func may_hurt_crystal(crystal: UnitInstance, source: UnitInstance) -> bool:
 	## A crystal takes damage from one thing only: the boss's own blow on the
 	## crystal she is after. Her moves, her minions and anything splashing never do.
-	return source == boss and crystal == current_target()
+	return _crystal_accident or source == boss and crystal == current_target()
 
 
 func current_target_uid() -> int:
@@ -431,6 +474,12 @@ func next_move() -> BossMove:
 
 func _mark_next_move() -> void:
 	var p := _phase()
+	# Crowded: whatever was next in her cycle waits, and she answers the crowd with
+	# her surround move — a big one, wound up first like every big one.
+	if data.surround_move != null and surround_cd <= 0.0 and crowd_around() >= data.surround_count:
+		surround_cd = data.surround_cooldown
+		_mark(data.surround_move)
+		return
 	var mv := next_move()
 	if mv == null:
 		gap_left = 999.0
@@ -677,6 +726,10 @@ func _mark(mv: BossMove, step := 0, wound := false) -> void:
 		_begin_retreat(mv)
 		return
 	var aim := _aim_for(mv)
+	if mv.shape == BossMove.Shape.ARC and step > 0:
+		# A sweep keeps the aim it started with, so each beat is the next slice round.
+		aim = _sweep_aim
+	_sweep_aim = aim
 	var cells := move_cells(mv, boss.cell, aim, step)
 	marked = {move = mv, cells = cells, left = maxf(mv.telegraph, CombatSim.TICK),
 		aim = aim, step = step, doom = execute_tier(mv)}
@@ -700,6 +753,9 @@ func _aim_for(mv: BossMove) -> Vector2i:
 	if mv.shape == BossMove.Shape.ONRUSH:
 		# A hunting Onrush aims each leg at the army; a plain one ignores the aim.
 		return _thickest_anywhere() if mv.seeks_army else NO_AIM
+	if mv.shape == BossMove.Shape.BLAZE:
+		var thick := _thickest_anywhere()
+		return thick if thick != NO_AIM else current_target().cell
 	var best: UnitInstance = null
 	var best_d := AIM_RADIUS + 1
 	for v in sim.board.units_in_box(boss.cell, AIM_RADIUS, player_team()):
@@ -822,10 +878,17 @@ func move_cells(mv: BossMove, at: Vector2i, aim: Vector2i, step := 0) -> Array[V
 	## Every tile a move will hit, worked out when it is marked and never again: the
 	## mark on the board IS the blow.
 	var out: Array[Vector2i] = []
+	# Enraged, her blows grow: every two surges widen a band by a row.
+	var span := mv.span + enrage_stacks / 2
 	match mv.shape:
 		BossMove.Shape.ONRUSH:
 			if mv.seeks_army and aim != NO_AIM and aim != at:
-				out.append_array(aimed_line(at, aim))
+				# A band, not a thread: `span` tiles wide across the line of the charge.
+				var d0 := aim - at
+				var side := Vector2i(0, 1) if absi(d0.x) >= absi(d0.y) else Vector2i(1, 0)
+				for c in aimed_line(at, aim):
+					for k in _band(span):
+						out.append(c + side * k)
 			else:
 				var d := onrush_direction(at, step)
 				var c := at + d
@@ -833,7 +896,7 @@ func move_cells(mv: BossMove, at: Vector2i, aim: Vector2i, step := 0) -> Array[V
 					out.append(c)
 					c += d
 		BossMove.Shape.CROSS:
-			for k in _band(mv.span):
+			for k in _band(span):
 				for x in WIDTH:
 					out.append(Vector2i(x, at.y + k))
 				for y in HEIGHT:
@@ -842,10 +905,11 @@ func move_cells(mv: BossMove, at: Vector2i, aim: Vector2i, step := 0) -> Array[V
 			for y in HEIGHT:
 				for x in WIDTH:
 					var r := BoardModel.box_distance(Vector2i(x, y), at)
-					if r >= mv.reach and r < mv.reach + maxi(mv.span, 1):
+					if r >= mv.reach and r < mv.reach + maxi(span, 1):
 						out.append(Vector2i(x, y))
 		BossMove.Shape.STRIPES:
-			for y in range(HUB_ROWS, HEIGHT):
+			# The whole stage, top to bottom: there is no row she leaves out.
+			for y in HEIGHT:
 				if y % 2 == step % 2:
 					for x in WIDTH:
 						out.append(Vector2i(x, y))
@@ -855,30 +919,53 @@ func move_cells(mv: BossMove, at: Vector2i, aim: Vector2i, step := 0) -> Array[V
 				for x in WIDTH:
 					if not BoardModel.is_blocked(Vector2i(x, y)):
 						open.append(Vector2i(x, y))
-			for i in mini(mv.count, open.size() / 2):
+			for i in mini(mv.count + 4 * enrage_stacks, open.size() / 2):
 				out.append(open.pop_at(sim.rng.randi_range(0, open.size() - 1)))
 		BossMove.Shape.HUNT:
-			for k in _band(mv.span):
+			for k in _band(span):
 				for x in WIDTH:
 					out.append(Vector2i(x, aim.y + k))
+		BossMove.Shape.ARC:
+			# A slice of a circle round her: within `reach`, inside `arc_degrees`. Beat
+			# `step` of a sweep is the next slice round from the one before.
+			var width := deg_to_rad(mv.arc_degrees + 10.0 * enrage_stacks)
+			var base := Vector2(aim - at).angle() if aim != at else PI * 0.5
+			var centre := base + (float(step) - float(maxi(mv.legs, 1) - 1) * 0.5) * width
+			var r := mv.reach + enrage_stacks / 2
+			for y in range(at.y - r, at.y + r + 1):
+				for x in range(at.x - r, at.x + r + 1):
+					var c := Vector2i(x, y)
+					if c == at or Vector2(c - at).length() > float(r) + 0.5:
+						continue
+					if absf(angle_difference(centre, Vector2(c - at).angle())) <= width * 0.5:
+						out.append(c)
+		BossMove.Shape.BLAZE:
+			for dy in range(-span, span + 1):
+				for dx in range(-span, span + 1):
+					out.append(aim + Vector2i(dx, dy))
+		BossMove.Shape.SUPPRESS:
+			for y in range(at.y - mv.reach, at.y + mv.reach + 1):
+				for x in range(at.x - mv.reach, at.x + mv.reach + 1):
+					if Vector2i(x, y) != at:
+						out.append(Vector2i(x, y))
 	var dir := _direction(at, aim)
 	var sy := dir.y if dir.y != 0 else 1
 	var sx := dir.x if dir.x != 0 else 1
 	match mv.shape:
 		BossMove.Shape.ROWS:
-			for k in _band(mv.span):
+			for k in _band(span):
 				for x in range(at.x - mv.reach, at.x + mv.reach + 1):
 					out.append(Vector2i(x, at.y + k * sy))
 		BossMove.Shape.COLUMNS:
-			for k in _band(mv.span):
+			for k in _band(span):
 				for i in range(1, mv.reach + 1):
 					out.append(Vector2i(at.x + k * sx, at.y + i * sy))
 		BossMove.Shape.THRUST, BossMove.Shape.DASH:
 			for i in range(1, mv.reach + 1):
 				out.append(at + dir * i)
 		BossMove.Shape.LEAP:
-			for dy in range(-mv.span, mv.span + 1):
-				for dx in range(-mv.span, mv.span + 1):
+			for dy in range(-span, span + 1):
+				for dx in range(-span, span + 1):
 					out.append(aim + Vector2i(dx, dy))
 	var kept: Array[Vector2i] = []
 	for c in out:
@@ -921,10 +1008,31 @@ func _strike() -> void:
 		if v == null or v.team == boss.team or not v.is_alive() or v.sealed:
 			continue
 		if v.structure:
-			# A move never hurts a crystal: only her own blow on the crystal she is
-			# after does (see may_hurt_crystal).
+			# She never aims a move at a crystal, but a BIG one (wound up first) that
+			# sweeps over one standing in the way hurts it, by `crystal_share` of the blow.
+			if mv.windup > 0.0 and data.crystal_share > 0.0:
+				_crystal_accident = true
+				sim._damage(v, dmg * data.crystal_share, boss, true)
+				_crystal_accident = false
 			continue
 		victims.append(v)
+	if mv.shape == BossMove.Shape.BLAZE:
+		# No burst: the ground starts burning, and keeps burning.
+		_blazes.append({cells = cells, left = mv.blaze_seconds, tick = 0.0,
+			dps = boss.stat(StatModifier.Stat.ATTACK_DAMAGE) * mv.blaze_dps})
+		sim._emit("boss_blaze", {uid = boss.uid, cells = cells, seconds = mv.blaze_seconds,
+			name = mv.display_name})
+		return
+	if mv.shape == BossMove.Shape.SUPPRESS:
+		var sealed_uids: Array[int] = []
+		for v in victims:
+			v.mana = 0.0
+			v.mana_suppressed = maxf(v.mana_suppressed, mv.suppress_seconds)
+			sealed_uids.append(v.uid)
+			sim._emit("mana", {uid = v.uid, mana = 0.0, cell = v.cell})
+		sim._emit("boss_suppress", {uid = boss.uid, cells = cells, uids = sealed_uids,
+			seconds = mv.suppress_seconds, name = mv.display_name})
+		return
 	var doomed := doom
 	var executed: Array[Vector2i] = []
 	for v in victims:
@@ -944,7 +1052,10 @@ func _strike() -> void:
 		_land(mv, cells, aim)
 	# Chained moves: the next leg or beat is marked the moment this one lands, so
 	# each part is telegraphed on its own before it comes.
-	if mv.shape == BossMove.Shape.ONRUSH and step + 1 < mv.legs:
+	# Enraged, every surge adds a dash to her Onrush.
+	if mv.shape == BossMove.Shape.ONRUSH and step + 1 < mv.legs + enrage_stacks:
+		_mark(mv, step + 1)
+	elif mv.shape == BossMove.Shape.ARC and step + 1 < maxi(mv.legs, 1):
 		_mark(mv, step + 1)
 	elif mv.shape == BossMove.Shape.STRIPES and step == 0:
 		_mark(mv, 1)
@@ -1011,6 +1122,7 @@ func tick() -> void:
 		gap_left -= CombatSim.TICK
 	_tick_enrage()
 	_tick_death_power()
+	_tick_hazards()
 	_tick_regen()
 	_tick_boosts()
 	_tick_rebuilds()

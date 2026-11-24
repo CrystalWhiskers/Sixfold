@@ -54,6 +54,17 @@ enum Shape {
 	## `retreat_vulnerability` MORE damage the whole time. Survive it and she comes
 	## back permanently stronger (`retreat_attack`, `retreat_speed`, stacking).
 	RETREAT,
+	## A sweep: every tile within `reach` of her inside an arc of `arc_degrees`, pointed at
+	## her aim. With `legs` above 1 it is a chain of arcs, each the next slice round, so
+	## the blade sweeps across in beats — each marked before it lands.
+	ARC,
+	## A burning patch: the box of radius `span` round the thickest knot of the army.
+	## It does not burst; it burns `blaze_dps` times her attack every second for
+	## `blaze_seconds` — get out of it.
+	BLAZE,
+	## No wind-up: everything of the army within `reach` of her loses its mana and
+	## cannot gain any or cast for `suppress_seconds`.
+	SUPPRESS,
 }
 
 @export var id: StringName = &""
@@ -97,6 +108,15 @@ enum Shape {
 ## ONRUSH: each leg runs straight through the thickest knot of the army, wherever
 ## it is, and on to the edge of the map, instead of the fixed criss-cross pattern.
 @export var seeks_army: bool = false
+
+@export_group("Sweeps, burns, seals")
+## ARC: the width of the sweep in degrees.
+@export var arc_degrees: float = 90.0
+## BLAZE: how long the ground burns, and how hard (times her attack, per second).
+@export var blaze_seconds: float = 5.0
+@export var blaze_dps: float = 0.6
+## SUPPRESS: how long the army in reach cannot gain mana or cast.
+@export var suppress_seconds: float = 5.0
 
 @export_group("Retreat")
 @export var retreat_seconds: float = 8.0

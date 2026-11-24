@@ -237,6 +237,27 @@ func _apply(e: Dictionary) -> void:
 			_view.spawn_label(_view.cell_to_pos(e.cell), "RETREATS TO HEAL — +%d%% DAMAGE TAKEN"
 				% roundi(float(e.get("vulnerability", 0.0)) * 100.0), Color(0.55, 1.0, 0.65))
 			Audio.play_boss_teleport()
+		"boss_blaze":
+			# Burning ground: orange for exactly as long as it burns.
+			var burn: Array[Vector2i] = []
+			for c in e.get("cells", []):
+				burn.append(c)
+			_view.flash_cells(burn, Color(1.0, 0.45, 0.05, 0.40),
+				float(e.get("seconds", 5.0)) / maxf(speed, 0.01))
+			if not burn.is_empty():
+				_view.spawn_label(_view.cell_to_pos(burn[burn.size() / 2]), "BURNING",
+					Color(1.0, 0.6, 0.2))
+		"boss_suppress":
+			var seal: Array[Vector2i] = []
+			for c in e.get("cells", []):
+				seal.append(c)
+			_view.flash_cells(seal, Color(0.55, 0.25, 0.95, 0.35), _fx_life(0.6))
+			for uid in e.get("uids", []):
+				var sv := _view.view_for(int(uid))
+				if sv != null:
+					sv.set_mana(0.0)
+			_view.spawn_label(_at(int(e.uid), Vector2i.ZERO), "MANA SEALED",
+				Color(0.75, 0.55, 1.0))
 		"boss_execute":
 			for c in e.get("cells", []):
 				_view.spawn_label(_view.cell_to_pos(Vector2i(c)), "EXECUTED",

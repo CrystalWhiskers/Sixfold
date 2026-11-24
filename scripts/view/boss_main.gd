@@ -393,6 +393,11 @@ func _on_event(e: Dictionary) -> void:
 			if int(e.get("executes", 0)) > 0:
 				_status.text = "%s will EXECUTE every tier %d it hits — get them out of the dark red!" % [
 					String(e.name), int(e.executes)]
+		"boss_blaze":
+			_status.text = "%s sets the ground burning — move out of the orange!" % String(e.name)
+		"boss_suppress":
+			_status.text = "%s seals the mana of %d of your units for %ds." % [String(e.name),
+				(e.uids as Array).size(), roundi(float(e.seconds))]
 		"boss_execute":
 			_status.text = "%s executed %d of your tier %d units." % [String(e.name),
 				(e.cells as Array).size(), int(e.tier)]

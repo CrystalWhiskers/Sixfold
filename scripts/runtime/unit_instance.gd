@@ -656,7 +656,13 @@ func effective_hp() -> float:
 	return current_hp + shield
 
 
+## Boss defence: seconds left of her mana seal. While it runs nothing fills the bar.
+var mana_suppressed: float = 0.0
+
+
 func gain_mana(amount: float) -> void:
+	if mana_suppressed > 0.0 and amount > 0.0:
+		return
 	mana = clampf(mana + amount, 0.0, MANA_MAX)
 
 

@@ -256,6 +256,8 @@ func _initialize() -> void:
 	onrush_long.legs = 9
 	# Endless Onrush hunts: every leg runs through the thickest knot of the army.
 	onrush_long.seeks_army = true
+	# And three tiles wide, not one.
+	onrush_long.span = 3
 	var stripes := _move(&"thousand_cuts", "Thousand Cuts", S.STRIPES, 0, 1, 3.5, 1.2)
 	# % max HP on the heavy blows, and executions on the two stance finishers — break
 	# the stance, or her answer kills your best units outright.
@@ -317,6 +319,30 @@ func _initialize() -> void:
 	# Every map-wide move and every stance finisher charges up before it is marked.
 	for big in [hunt, cross, ring, ring_big, rain, rain_big, onrush, onrush_long, stripes]:
 		big.windup = 2.5
+	# Sweeps, burns and seals. A crescent cut in front of her; a three-beat sweep
+	# round her; burning ground under the thickest of the army; a seal on the mana of
+	# everything near her, with no wind-up at all.
+	var arc := _move(&"crimson_arc", "Crimson Arc", S.ARC, 4, 1, 2.5, 0.9)
+	arc.arc_degrees = 100.0
+	arc.legs = 1
+	var scythe := _move(&"scything_sweep", "Scything Sweep", S.ARC, 6, 1, 2.0, 0.7)
+	scythe.arc_degrees = 70.0
+	scythe.legs = 3
+	var pyre := _move(&"crimson_pyre", "Crimson Pyre", S.BLAZE, 0, 2, 0.0, 1.0)
+	pyre.blaze_seconds = 6.0
+	pyre.blaze_dps = 0.6
+	var edict := _move(&"silencing_edict", "Silencing Edict", S.SUPPRESS, 6, 1, 0.0, 0.6)
+	edict.suppress_seconds = 5.0
+	# The horde-thinners: huge, wound up, and weak — they clear the cheap bodies and
+	# barely scratch a tier 5.
+	var tide := _move(&"scarlet_tide", "Scarlet Tide", S.RING, 1, 9, 0.8, 1.4)
+	tide.windup = 2.0
+	# Crowded, she answers with a whirl of blades round herself.
+	var whirl := _move(&"bladestorm_whirl", "Bladestorm Whirl", S.RING, 1, 3, 3.5, 1.0)
+	whirl.windup = 1.5
+	b.surround_move = whirl
+	b.surround_count = 6
+	b.surround_cooldown = 10.0
 	# The retreats: she vanishes to the back of the field, calls up all three kinds of
 	# summon, and heals while taking extra damage. Ride it out and she comes back
 	# stronger for good; beat her down a bar meanwhile and it is cut short.
@@ -342,17 +368,17 @@ func _initialize() -> void:
 	b.phases = [
 		# Four phases, each its own health bar. The crystals and the merge are a
 		# separate track: they change WHERE it fights, these change HOW.
-		_phase("First Blade", 1.0, 3.0, 1.0, [sweep, edge, spear, dash]),
+		_phase("First Blade", 1.0, 3.0, 1.0, [sweep, edge, arc, spear, dash]),
 		# It takes up a second weapon: quicker, the two-row combo joins the cycle, and
 		# the first stance and the first map-wide sweep arrive. The big moves are
 		# spaced out with ordinary ones — about one in eight of the cycle.
 		_phase("Twin Blades", 0.75, 2.3, 1.25,
-			_cycle([crossed, sweep, spear, edge, dash], [gather, hunt], 5), 0.05),
+			_cycle([crossed, arc, sweep, scythe, spear, edict, edge, dash], [gather, hunt, tide], 5), 0.05),
 		_phase("Rending Arts", 0.50, 2.0, 1.45,
-			_cycle([heaven, crossed, horizon, pounce, spear], [ring, red_tide, retreat, rain], 3), 0.08),
+			_cycle([heaven, scythe, crossed, pyre, horizon, edict, pounce, spear], [ring, red_tide, tide, retreat, rain], 3), 0.08),
 		# Its final form: the widest moves, and every blow feeds it.
 		_phase("Crimson Finale", 0.25, 1.8, 1.7,
-			_cycle([heaven, pounce, horizon, spear, crossed], [onrush_long, last_breath,
+			_cycle([heaven, scythe, pounce, pyre, horizon, edict, spear, crossed], [onrush_long, last_breath, tide,
 				sanctum, ring_big, rain_big], 3),
 			0.14),
 	]

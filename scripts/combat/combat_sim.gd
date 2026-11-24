@@ -2481,6 +2481,8 @@ func can_cast(u: UnitInstance) -> bool:
 	var ab := u.data.ability
 	if ab == null:
 		return true
+	if u.mana_suppressed > 0.0:
+		return false
 	if ab.requires_empowered and not u.empowered:
 		return false
 	if ab.kind == AbilityData.Kind.MEND:
