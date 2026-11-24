@@ -341,6 +341,7 @@ func _on_event(e: Dictionary) -> void:
 			_show_bar(float(e.get("hp", _boss_max)))
 			_play_phase_music(int(e.index))
 			_status.text = "%s takes up %s." % [boss_data.display_name, _phase_name]
+			_phase_cutscene(int(e.index), _phase_name)
 		"boss_stance":
 			_stance_need = float(e.threshold)
 			_stance_taken = 0.0
@@ -589,3 +590,55 @@ func _show_bar(hp: float) -> void:
 	_hp_bar.value = clampf(hp - bottom, 0.0, top - bottom)
 	_title.text = "%s — bar %d of %d: %s" % [boss_data.display_name, _bar_index + 1,
 		phases.size(), phases[_bar_index].display_name]
+
+## The phase-change cutscene: the field darkens, the camera turns to her, and the new
+## phase is announced across the screen while she is sealed and gathering herself —
+## then she opens with the phase's signature move.
+var _cutscene: Control = null
+var phase_banner_text := ""
+
+
+func _phase_cutscene(index: int, name: String) -> void:
+	phase_banner_text = "PHASE %d\n%s" % [index + 1, name.to_upper()]
+	if _cutscene != null and is_instance_valid(_cutscene):
+		_cutscene.queue_free()
+	var layer := CanvasLayer.new()
+	layer.layer = 4
+	add_child(layer)
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(root)
+	_cutscene = root
+	var dim := ColorRect.new()
+	dim.color = Color(0.10, 0.0, 0.02, 0.0)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(dim)
+	var banner := Label.new()
+	banner.text = phase_banner_text
+	banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	banner.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	banner.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	banner.offset_top = -120.0
+	banner.add_theme_font_size_override("font_size", 64)
+	banner.add_theme_color_override("font_color", Color(1.0, 0.82, 0.70))
+	banner.add_theme_constant_override("outline_size", 14)
+	banner.add_theme_color_override("font_outline_color", Color(0.25, 0.0, 0.02))
+	banner.modulate.a = 0.0
+	banner.scale = Vector2(1.3, 1.3)
+	banner.pivot_offset = Vector2(360, 640)
+	root.add_child(banner)
+	# Turn the camera to her, so the transformation is seen.
+	if fight != null and fight.boss != null:
+		_view.centre_on(fight.boss.cell)
+	var t := create_tween().set_parallel(true)
+	t.tween_property(dim, "color:a", 0.55, 0.35)
+	t.tween_property(banner, "modulate:a", 1.0, 0.35)
+	t.tween_property(banner, "scale", Vector2.ONE, 0.45).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	t.chain().tween_interval(1.6)
+	t.chain().set_parallel(true)
+	t.tween_property(dim, "color:a", 0.0, 0.6)
+	t.tween_property(banner, "modulate:a", 0.0, 0.6)
+	t.chain().tween_callback(layer.queue_free)
+	Audio.play_boss_slam()

@@ -1118,6 +1118,10 @@ func tick() -> void:
 		if pause_left <= 0.0:
 			# The bar's break is over: it can be hurt again.
 			boss.sealed = false
+			# And the new phase opens with its signature move.
+			var opener := _phase().entry_move if _phase() != null else null
+			if opener != null and boss.is_alive() and marked.is_empty():
+				_mark(opener)
 	elif gap_left > 0.0:
 		gap_left -= CombatSim.TICK
 	_tick_enrage()

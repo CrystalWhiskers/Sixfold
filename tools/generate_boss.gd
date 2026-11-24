@@ -341,6 +341,23 @@ func _initialize() -> void:
 	var whirl := _move(&"bladestorm_whirl", "Bladestorm Whirl", S.RING, 1, 3, 3.5, 1.0)
 	whirl.windup = 1.5
 	b.surround_move = whirl
+	# Each phase opens with a signature of its own, the moment its announcement ends.
+	var fang := _move(&"twin_fang_cross", "Twin Fang Cross", S.CROSS, 0, 3, 3.5, 1.6)
+	fang.windup = 2.0
+	fang.max_hp_percent = 0.08
+	var storm := _move(&"rending_storm", "Rending Storm", S.ARC, 9, 1, 3.0, 0.8)
+	storm.windup = 2.0
+	storm.arc_degrees = 90.0
+	storm.legs = 4
+	var judgement := _move(&"vermilion_judgement", "Vermilion Judgement", S.RING, 3, 12, 4.0, 2.0)
+	judgement.windup = 3.0
+	judgement.max_hp_percent = 0.12
+	# And the third phase carries one more big unique move in its cycle: a field of
+	# fire under the army that burns hard for six seconds.
+	var maelstrom := _move(&"crimson_maelstrom", "Crimson Maelstrom", S.BLAZE, 0, 4, 0.0, 1.2)
+	maelstrom.windup = 2.5
+	maelstrom.blaze_seconds = 6.0
+	maelstrom.blaze_dps = 1.0
 	b.surround_count = 6
 	b.surround_cooldown = 10.0
 	# The retreats: she vanishes to the back of the field, calls up all three kinds of
@@ -375,7 +392,7 @@ func _initialize() -> void:
 		_phase("Twin Blades", 0.75, 2.3, 1.25,
 			_cycle([crossed, arc, sweep, scythe, spear, edict, edge, dash], [gather, hunt, tide], 5), 0.05),
 		_phase("Rending Arts", 0.50, 2.0, 1.45,
-			_cycle([heaven, scythe, crossed, pyre, horizon, edict, pounce, spear], [ring, red_tide, tide, retreat, rain], 3), 0.08),
+			_cycle([heaven, scythe, crossed, pyre, horizon, edict, pounce, spear], [ring, red_tide, tide, maelstrom, retreat, rain], 3), 0.08),
 		# Its final form: the widest moves, and every blow feeds it.
 		_phase("Crimson Finale", 0.25, 1.8, 1.7,
 			_cycle([heaven, scythe, pounce, pyre, horizon, edict, spear, crossed], [onrush_long, last_breath, tide,
@@ -385,6 +402,12 @@ func _initialize() -> void:
 	# She hits harder every phase, as well as faster (the haste above), and mends
 	# herself all the while: +0 / 15 / 30 / 50% attack, 0 / 0.1 / 0.15 / 0.2% of her
 	# health a second.
+	var openers := [null, fang, storm, judgement]
+	for i in b.phases.size():
+		b.phases[i].entry_move = openers[i]
+		if i > 0:
+			# Long enough for the banner, before she opens with her signature.
+			b.phases[i].entry_pause = 3.0
 	var bonus := [[0.0, 0.0], [0.15, 0.001], [0.30, 0.0015], [0.50, 0.002]]
 	for i in b.phases.size():
 		b.phases[i].attack_bonus = bonus[i][0]

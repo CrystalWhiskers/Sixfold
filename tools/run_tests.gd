@@ -14328,6 +14328,22 @@ func _test_boss_attacks(data: BossData) -> void:
 	_check("surrounded, she answers with her whirl — wound up first",
 		whirled != null and whirled.id == data.surround_move.id and bool(bf2.marked.get("windup", false)),
 		"%d round her, next %s" % [bf2.crowd_around(), whirled.id if whirled != null else &"none"])
+	# Every phase after the first opens with a signature move of its own.
+	var openers := data.phases.slice(1).map(func(p): return p.entry_move)
+	_check("phases 2-4 each open with their own big move",
+		openers.all(func(m): return m != null and m.windup > 0.0)
+		and openers[0].id != openers[1].id and openers[1].id != openers[2].id)
+	var s3 := _boss_board([["warden"], [], []])
+	var bf3: BossFight = s3.bf
+	var sim3: CombatSim = s3.sim
+	bf3.boss.current_hp = bf3.boss.stat(StatModifier.Stat.MAX_HP) * (data.phases[1].hp_threshold - 0.01)
+	bf3.marked = {}
+	for i in int((data.phases[1].entry_pause + 0.3) / CombatSim.TICK):
+		sim3.step()
+	var opened: BossMove = bf3.marked.get("move", null)
+	_check("and once the announcement is over she opens with it",
+		bf3.phase == 1 and opened != null and opened.id == data.phases[1].entry_move.id,
+		"phase %d, marked %s" % [bf3.phase, opened.id if opened != null else &"nothing"])
 	BoardModel.reset_map()
 
 

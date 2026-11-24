@@ -20,6 +20,9 @@ extends Resource
 ## no swings, no walking. The breath before it changes stance, and the player's
 ## warning that the pattern they have learned is about to change.
 @export var entry_pause: float = 1.5
+## The move she opens this phase with the moment the pause is over: her signature for
+## the phase, wound up like every big one. None for the first phase.
+@export var entry_move: BossMove = null
 
 ## Seconds of ordinary fighting between one move landing and the next mark going up.
 @export var gap: float = 4.0
