@@ -1690,6 +1690,51 @@ func charge_lane(from: Vector2i, step: Vector2i, reach: int) -> Array[Vector2i]:
 	return cells
 
 
+func charge_path(u: UnitInstance, reach: int) -> Array[Vector2i]:
+	## Boss defence: the Breaker does not run a straight line, it runs AT something —
+	## the shortest way round walls and through its own side to the nearest enemy,
+	## within the tiles it has left. Empty when nothing can be reached; the charge
+	## then keeps the heading it has.
+	var out: Array[Vector2i] = []
+	if reach <= 0:
+		return out
+	var prev := {u.cell: u.cell}
+	var depth := {u.cell: 0}
+	var queue: Array[Vector2i] = [u.cell]
+	var head := 0
+	var goal := u.cell
+	while head < queue.size():
+		var c: Vector2i = queue[head]
+		head += 1
+		if int(depth[c]) >= reach:
+			continue
+		for off in _neighbour_offsets():
+			var nc := c + off
+			if prev.has(nc) or not board.in_bounds(nc) or BoardModel.is_blocked(nc):
+				continue
+			if BoardModel.blocks_between(c, nc) or not BoardModel.can_climb(c, nc):
+				continue
+			var who := board.unit_at(nc)
+			if who != null and who.is_alive() and who.team != u.team and not who.structure:
+				prev[nc] = c
+				goal = nc
+				break
+			if who != null and who.is_alive() and who.team != u.team:
+				continue
+			prev[nc] = c
+			depth[nc] = int(depth[c]) + 1
+			queue.append(nc)
+		if goal != u.cell:
+			break
+	if goal == u.cell:
+		return out
+	var back := goal
+	while back != u.cell:
+		out.push_front(back)
+		back = prev[back]
+	return out
+
+
 func _resolve_charge(u: UnitInstance, ab: AbilityData) -> void:
 	## Starts the run. It does NOT resolve it.
 	##
@@ -1704,6 +1749,11 @@ func _resolve_charge(u: UnitInstance, ab: AbilityData) -> void:
 	## lane is missed and a unit that wanders into it is hit instead.
 	var step := charge_direction(u.team)
 	var reach := maxi(ab.charge_distance, 1)
+	var route: Array[Vector2i] = []
+	if boss_fight != null:
+		route = charge_path(u, reach)
+		if not route.is_empty():
+			step = route[0] - u.cell
 	u.charge_step = step
 	u.charge_left = reach
 	u.charge_timer = charge_tile_seconds(ab)
@@ -1711,7 +1761,7 @@ func _resolve_charge(u: UnitInstance, ab: AbilityData) -> void:
 	u.state_timer = 0.0
 	u.target = null
 	_emit("charge", {uid = u.uid, from = u.cell, dir = step,
-		cells = charge_lane(u.cell, step, reach),
+		cells = route if not route.is_empty() else charge_lane(u.cell, step, reach),
 		per_tile = charge_tile_seconds(ab)})
 	if u.charge_timer <= 0.0:
 		# An instant charge still has to go somewhere, and it must not depend on the tick
@@ -1757,6 +1807,11 @@ func _run_charge(u: UnitInstance, ab: AbilityData, tiles: int) -> void:
 		if u.charge_left <= 0:
 			_end_charge(u, "spent")
 			return
+		if boss_fight != null:
+			# Steering: every tile it looks again for the way to the nearest enemy.
+			var route := charge_path(u, u.charge_left)
+			if not route.is_empty():
+				u.charge_step = route[0] - u.cell
 		var next := u.cell + u.charge_step
 		if not board.in_bounds(next) or BoardModel.is_blocked(next):
 			# Stone stops it dead. It does not break through — the charge is a body at

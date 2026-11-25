@@ -14415,6 +14415,39 @@ func _test_boss_executions(data: BossData) -> void:
 
 func _test_boss_units(_data: BossData) -> void:
 	_section("Boss defence: how the army's units behave here")
+	# The Breaker steers: it runs round to whatever enemy is nearest, not down its column.
+	var sb := _boss_board([["breaker"], [], []])
+	var bfb: BossFight = sb.bf
+	var simb: CombatSim = sb.sim
+	simb._absorb_new_units()
+	var br: UnitInstance = null
+	for u in simb._units:
+		if u.is_alive() and u.data.id == &"breaker":
+			br = u
+	var prey: UnitInstance = null
+	if br != null:
+		for off in [Vector2i(3, 1), Vector2i(-3, 1), Vector2i(3, -1), Vector2i(-3, -1), Vector2i(4, 0), Vector2i(-4, 0)]:
+			var c: Vector2i = br.cell + off
+			if simb.board.in_bounds(c) and simb.board.is_empty(c) and not BoardModel.is_blocked(c):
+				prey = bfb._spawn_minion(c, 1.0)
+				break
+	if br != null and prey != null:
+		simb._absorb_new_units()
+		var route := simb.charge_path(br, br.data.ability.charge_distance)
+		_check("the Breaker's charge finds a way to an enemy off to one side",
+			not route.is_empty() and simb.board.unit_at(route.back()) == prey
+			and route.any(func(c): return c.x != br.cell.x), "%s" % [route])
+		var hp_p := prey.current_hp
+		simb._resolve_charge(br, br.data.ability)
+		var guard_b := 0
+		while br.is_charging() and guard_b < 400:
+			simb.step()
+			guard_b += 1
+		_check("and runs round to it and slams into it",
+			prey.current_hp < hp_p or not prey.is_alive(), "%.0f -> %.0f" % [hp_p, prey.current_hp])
+	else:
+		_check("the Breaker steering test could set up", false)
+	BoardModel.reset_map()
 	# Soul kill: what she kills does not get back up.
 	var s := _boss_board([["revenant", "pariah", "paragon", "paragon"], ["herald"], []])
 	var bf: BossFight = s.bf
