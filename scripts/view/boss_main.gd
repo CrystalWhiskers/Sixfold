@@ -156,8 +156,8 @@ func _crystal_text() -> String:
 				parts.append("%s rebuilding %ds" % [name, ceili(maxf(back - _player.clock(), 0.0))])
 			else:
 				parts.append("%s BROKEN" % name)
-		elif i == 3 and _sealed:
-			parts.append("Central sealed")
+		elif i == 3 and (_sealed or _lanes_standing()):
+			parts.append("Central immune" if not _sealed else "Central sealed")
 		else:
 			parts.append("%s %.0f" % [name, float(_crystal_hp.get(uid, 0.0))])
 	return "Crystals: " + "  ·  ".join(parts)
@@ -375,7 +375,7 @@ func _on_event(e: Dictionary) -> void:
 			_stance_need = 0.0
 			_status.text = "%s is empowered — and lets loose!" % boss_data.display_name
 		"boss_summon":
-			_status.text = ("%s calls a swarm of thralls!" if bool(e.get("swarm", false)) else "%s calls her shades — stay out of the circles!") % boss_data.display_name
+			_status.text = ("%s calls a swarm of thralls!" if bool(e.get("swarm", false)) else ("%s's Stalkers close in on your ranged units from the edge!" if bool(e.get("flank", false)) else "%s calls her shades — stay out of the circles!")) % boss_data.display_name
 		"boss_retreat":
 			_status.text = "%s retreats to heal and calls everything she has — she takes %d%% more damage now. Hit her!" % [
 				boss_data.display_name, roundi(float(e.vulnerability) * 100.0)]
@@ -407,7 +407,7 @@ func _on_event(e: Dictionary) -> void:
 			_rebuild_at.erase(int(e.uid))
 			_crystal_hp[int(e.uid)] = float(e.hp)
 			_crystal_line.text = _crystal_text()
-			_status.text = "The %s Crystal stands again." % BossFight.ZONE_NAMES[int(e.lane)]
+			_status.text = "The %s Crystal stands again. The Central Crystal is immune until it falls again." % BossFight.ZONE_NAMES[int(e.lane)]
 		"boss_telegraph":
 			_next_move = String(e.name)
 			if int(e.get("executes", 0)) > 0:
@@ -690,3 +690,12 @@ func boss_stats_text() -> String:
 	return "Boss  ATK %d (x%.2f)  ·  SPD x%.2f  ·  Regen %d/s  ·  Steal %d%%  ·  Hit cap %s  ·  Ranged -%d%%" % [
 		roundi(atk), atk / base, spd, roundi(regen), roundi(steal * 100.0),
 		"none" if is_inf(cap) else str(roundi(cap)), roundi((p.ranged_resist if p.ranged_resist > 0.0 else boss_data.ranged_resist) * 100.0)]
+
+
+func _lanes_standing() -> bool:
+	## Whether any lane crystal stands, rebuilt ones included: the Central Crystal is
+	## immune while one does.
+	for i in mini(3, _crystal_uids.size()):
+		if not _crystal_down.has(_crystal_uids[i]):
+			return true
+	return false

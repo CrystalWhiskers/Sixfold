@@ -40,6 +40,10 @@ extends Resource
 ## Seconds between her surround attacks in this phase (0: the boss's own value), so
 ## the big crowd-clearers come rarely early on and more often as the fight goes.
 @export var surround_cooldown: float = 0.0
+## Her big moves are not at fixed places in the cycle: each time she acts there is
+## this chance it is one of them (picked at random from the phase's big moves),
+## otherwise the next of her ordinary moves. -1: the share of big moves in `moves`.
+@export var big_chance: float = -1.0
 ## Her resistance to ranged hits in this phase, and to long-range ones (0: the boss's
 ## own values). It climbs every phase, so bows matter early and less later.
 @export var ranged_resist: float = 0.0

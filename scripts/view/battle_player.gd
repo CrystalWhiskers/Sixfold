@@ -383,8 +383,6 @@ func _apply(e: Dictionary) -> void:
 			var cv := _view.view_for(int(e.uid))
 			if cv != null:
 				cv.queue_redraw()
-		"soul_kill":
-			_view.spawn_label(_view.cell_to_pos(e.cell), "SOUL TAKEN", Color(0.75, 0.55, 1.0))
 		"isolated":
 			# Fired at the bell, before anything has moved, so the player finds out
 			# whether their placement worked at the one moment they can still learn

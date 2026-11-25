@@ -13383,6 +13383,10 @@ func _test_boss_defence() -> void:
 		BoardModel.tile_distance(bf.crystals[3].cell, BossFight.BOSS_CELL) >= 20)
 	_check("the boss comes in at the top", bf.boss.cell.y < BossFight.HUB_ROWS and bf.boss.boss)
 
+	# Someone near her, or she walks on instead of swinging at empty ground.
+	var near_her := UnitInstance.create(load("res://data/units/warden_t1.tres") as UnitData, bf.player_team())
+	if sim.board.force_place(near_her, bf.boss.cell + Vector2i(0, 3)):
+		sim._units.append(near_her)
 	# --- The cycle: fixed and looping, per phase.
 	var seen: PackedStringArray = []
 	for i in 8:
@@ -13394,6 +13398,17 @@ func _test_boss_defence() -> void:
 		want.append(String(data.phases[0].moves[i % data.phases[0].moves.size()].id))
 	_check("the phase-one cycle runs in its listed order and loops", seen == want,
 		", ".join(seen))
+	# And with nobody near she marks nothing — she walks on.
+	near_her.current_hp = 0.0
+	near_her.state = UnitInstance.State.DEAD
+	sim.board.remove(near_her)
+	bf.marked = {}
+	bf._mark_next_move()
+	_check("with nobody near her she throws nothing, and walks on instead",
+		bf.marked.is_empty() and bf.gap_left > 0.0)
+	_check("her big moves come at random, more likely every phase",
+		bf.big_chance_of(data.phases[0]) == 0.0
+		and bf.big_chance_of(data.phases[1]) < bf.big_chance_of(data.phases[3]))
 	bf.boss.current_hp = bf.boss.stat(StatModifier.Stat.MAX_HP) * 0.76
 	bf._check_phase()
 	_check("at 76% it is still in phase one", bf.phase == 0)
@@ -14062,9 +14077,21 @@ func _test_boss_defence() -> void:
 		sim.step()
 	_check("all three down at once lifts the seal", bf.merged and not bf.crystals[3].sealed)
 	bf._restore_crystal(0)
-	_check("and a crystal rebuilding afterwards does not draw her back off the centre",
-		bf.crystals[0].is_alive() and bf.current_target() == bf.crystals[3]
-		and not bf.crystals[3].sealed)
+	var central_hp := bf.crystals[3].current_hp
+	sim._damage(bf.crystals[3], 500.0, bf.boss)
+	_check("a crystal rebuilding afterwards makes the Central Crystal immune and draws her back to it",
+		bf.crystals[0].is_alive() and bf.current_target() == bf.crystals[0]
+		and is_equal_approx(bf.crystals[3].current_hp, central_hp))
+	sim._damage(bf.crystals[0], 1.0e7, bf.boss)
+	_check("and once it falls again the centre is open to her again",
+		bf.current_target() == bf.crystals[3])
+	sim.step()
+	_check("each time a crystal breaks it takes twice as long to come back",
+		is_equal_approx(float(bf.rebuilding.get(0, 0.0)), bf.data.crystal_rebuild_seconds * 2.0 - CombatSim.TICK)
+		or float(bf.rebuilding.get(0, 0.0)) > bf.data.crystal_rebuild_seconds * 1.9,
+		"%.1f s" % float(bf.rebuilding.get(0, 0.0)))
+	_check("and no matter how she calls them, her summons stop at a ceiling",
+		bf.summon_ceiling() == bf.data.minion_cap * 2)
 	BoardModel.reset_map()
 
 	# --- A fallen crystal's section reinforces the centre instead.
@@ -14430,6 +14457,23 @@ func _test_boss_attacks(data: BossData) -> void:
 	for u in sims._units:
 		if u.is_alive() and u.data.id == &"thrall":
 			thralls += 1
+	# Flankers: Stalkers at the edge, hunting the ranged units.
+	var sf := _boss_board([["archer", "archer"], [], []])
+	var bff: BossFight = sf.bf
+	var simf: CombatSim = sf.sim
+	simf._absorb_new_units()
+	bff._flank()
+	for i in int((data.summon_warning + 0.2) / CombatSim.TICK):
+		simf.step()
+	var stalkers: Array[UnitInstance] = []
+	for u in simf._units:
+		if u.is_alive() and u.data.id == &"stalker":
+			stalkers.append(u)
+	var on_edge := stalkers.all(func(u): return u.cell.x <= 3 or u.cell.x >= BossFight.WIDTH - 4 or u.cell.y >= BossFight.HEIGHT - 4)
+	var hunts := stalkers.all(func(u): return bff.minion_target(u) != null and bff.minion_target(u).is_ranged())
+	_check("Stalkers step in at the edge of the arena and go for the ranged units",
+		stalkers.size() >= 2 and on_edge and hunts, "%d stalkers" % stalkers.size())
+	BoardModel.reset_map()
 	_check("now and then she calls a swarm of weak fodder, far past her ordinary cap",
 		data.swarm_kind != null and data.swarm_kind.max_hp < data.minion_hp and thralls >= 8
 		and thralls > 0, "%d thralls" % thralls)

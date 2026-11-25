@@ -104,10 +104,11 @@ const CHALICE_ID := &"blood_chalice"
 const HEADHUNTER_ID := &"headhunter"
 const BERSERKER_ID := &"berserker"
 const THRALL_ID := &"thrall"
+const STALKER_ID := &"stalker"
 
 
 static func is_summon_icon(id: StringName) -> bool:
-	return id in [SHADE_ID, THORN_ID, CHALICE_ID, HEADHUNTER_ID, BERSERKER_ID, THRALL_ID]
+	return id in [SHADE_ID, THORN_ID, CHALICE_ID, HEADHUNTER_ID, BERSERKER_ID, THRALL_ID, STALKER_ID]
 
 
 func _draw_summon_tier(body: Rect2, alpha: float) -> void:
@@ -137,6 +138,18 @@ func _draw_headhunter(body: Rect2, alpha: float) -> void:
 	for dir in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
 		draw_line(c + dir * s * 0.25, c + dir * s * 0.8, red, maxf(s * 0.08, 1.5))
 	draw_circle(c, s * 0.1, Color(1.0, 0.85, 0.6, alpha))
+
+
+func _draw_stalker(body: Rect2, alpha: float) -> void:
+	## Crimson Stalker, the flanker that hunts your bows: two crossed daggers on violet.
+	var c := body.get_center()
+	var s := body.size.x * 0.5 * 0.9
+	draw_circle(c, s * 0.82, Color(0.14, 0.04, 0.18, 0.92 * alpha))
+	for side in [-1.0, 1.0]:
+		var a := c + Vector2(-0.45 * side, 0.5) * s
+		var b := c + Vector2(0.45 * side, -0.55) * s
+		draw_line(a, a.lerp(b, 0.3), Color(0.35, 0.2, 0.1, alpha), maxf(s * 0.12, 1.5))
+		draw_line(a.lerp(b, 0.3), b, Color(0.85, 0.75, 1.0, alpha), maxf(s * 0.09, 1.5))
 
 
 func _draw_thrall(body: Rect2, alpha: float) -> void:
@@ -907,6 +920,9 @@ func _draw() -> void:
 		_draw_summon_tier(body, alpha)
 	elif unit.data.id == THRALL_ID:
 		_draw_thrall(body, alpha)
+		_draw_summon_tier(body, alpha)
+	elif unit.data.id == STALKER_ID:
+		_draw_stalker(body, alpha)
 		_draw_summon_tier(body, alpha)
 	else:
 		# Its short name, not an initial: with seven units starting "S" a single

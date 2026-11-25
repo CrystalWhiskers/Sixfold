@@ -361,9 +361,10 @@ func _phase_name() -> String:
 
 func current_target() -> UnitInstance:
 	## The crystal it is going for. Before the seal lifts: the first zone crystal
-	## standing in the fixed order — including one that has rebuilt. After it: the
-	## Central Crystal, for good, so a rebuilt crystal can never stall the end.
-	if merged:
+	## standing in the fixed order — including one that has rebuilt, even after the
+	## seal has lifted: while any lane crystal stands the Central Crystal is immune,
+	## so she has to go back and break it. Only with all three down is it the centre.
+	if merged and lane_crystals_left() == 0:
 		return crystals[3]
 	for zone in data.crystal_order:
 		var c := crystals[zone]
@@ -375,6 +376,10 @@ func current_target() -> UnitInstance:
 func may_hurt_crystal(crystal: UnitInstance, source: UnitInstance) -> bool:
 	## A crystal takes damage from one thing only: the boss's own blow on the
 	## crystal she is after. Her moves, her minions and anything splashing never do.
+	if crystal == crystals[3] and lane_crystals_left() > 0:
+		# The Central Crystal is immune while any lane crystal stands — a rebuilt one
+		# included. She has to break the lanes again first.
+		return false
 	return _crystal_accident or source == boss and crystal == current_target()
 
 
@@ -473,11 +478,56 @@ func _foe_in_reach() -> UnitInstance:
 	return best
 
 
+static func is_big(m: BossMove) -> bool:
+	return m != null and (m.windup > 0.0 or m.shape == BossMove.Shape.STANCE
+		or m.shape == BossMove.Shape.RETREAT)
+
+
+func _split(p: BossPhase) -> Array:
+	## [ordinary moves in cycle order, big moves].
+	var normals: Array[BossMove] = []
+	var bigs: Array[BossMove] = []
+	for m in p.moves:
+		if is_big(m):
+			if not bigs.has(m):
+				bigs.append(m)
+		else:
+			normals.append(m)
+	return [normals, bigs]
+
+
+func big_chance_of(p: BossPhase) -> float:
+	if p == null:
+		return 0.0
+	if p.big_chance >= 0.0:
+		return p.big_chance
+	var n := 0
+	for m in p.moves:
+		if is_big(m):
+			n += 1
+	return float(n) / maxf(float(p.moves.size()), 1.0)
+
+
 func next_move() -> BossMove:
+	## The next of her ORDINARY moves, which still come round in their listed order.
 	var p := _phase()
 	if p == null or p.moves.is_empty():
 		return null
-	return p.moves[move_index % p.moves.size()]
+	var normals: Array = _split(p)[0]
+	if normals.is_empty():
+		return p.moves[move_index % p.moves.size()]
+	return normals[move_index % normals.size()]
+
+
+func army_within(r: int) -> int:
+	var n := 0
+	for v in sim.board.units_in_box(boss.cell, r, player_team()):
+		if v.is_alive() and not v.structure:
+			n += 1
+	return n
+
+
+var _last_big: BossMove = null
 
 
 func _mark_next_move() -> void:
@@ -488,11 +538,29 @@ func _mark_next_move() -> void:
 		surround_cd = p.surround_cooldown if p != null and p.surround_cooldown > 0.0 else data.surround_cooldown
 		_mark(data.surround_move)
 		return
+	# A big one, at random — the chance grows phase by phase — but only if there is
+	# anyone near enough to be worth it. Otherwise the next ordinary move, and only if
+	# someone is in reach of it: she does not swing at empty ground; she walks on.
+	var bigs: Array = _split(p)[1] if p != null else []
+	if not bigs.is_empty() and sim.rng.randf() < big_chance_of(p) and army_within(10) > 0:
+		var pick: BossMove = bigs[sim.rng.randi_range(0, bigs.size() - 1)]
+		if pick == _last_big and bigs.size() > 1:
+			pick = bigs[(bigs.find(pick) + 1) % bigs.size()]
+		_last_big = pick
+		if pick.shape == BossMove.Shape.STANCE:
+			_begin_stance(pick)
+		else:
+			_mark(pick)
+		return
 	var mv := next_move()
 	if mv == null:
 		gap_left = 999.0
 		return
-	move_index = (move_index + 1) % p.moves.size()
+	if army_within(6) == 0:
+		gap_left = 0.5
+		return
+	var n_normals: int = maxi((_split(p)[0] as Array).size(), 1)
+	move_index = (move_index + 1) % n_normals
 	if mv.shape == BossMove.Shape.STANCE:
 		_begin_stance(mv)
 		return
@@ -646,7 +714,7 @@ func _summon_kinds(kinds: Array[BossMinion]) -> void:
 	var ring := [Vector2i(-2, 1), Vector2i(2, 1), Vector2i(-1, 2), Vector2i(1, 2), Vector2i(0, 2),
 		Vector2i(-3, 2), Vector2i(3, 2), Vector2i(-2, 3), Vector2i(2, 3), Vector2i(0, 3)]
 	for i in kinds.size():
-		if minions_alive() + cells.size() >= data.minion_cap + kinds.size():
+		if minions_alive() + cells.size() >= mini(data.minion_cap + kinds.size(), summon_ceiling()):
 			break
 		var want: Vector2i = boss.cell + ring[i % ring.size()]
 		var c := _nearest_free(want, boss.cell)
@@ -1383,6 +1451,11 @@ func minions_alive() -> int:
 
 func _tick_summons() -> void:
 	var p := _phase()
+	if data.flank_kind != null and data.flank_every > 0.0 and boss.is_alive():
+		flank_left -= CombatSim.TICK
+		if flank_left <= 0.0:
+			flank_left += data.flank_every
+			_flank()
 	if data.swarm_kind != null and data.swarm_every > 0.0 and boss.is_alive():
 		swarm_left -= CombatSim.TICK
 		if swarm_left <= 0.0:
@@ -1482,6 +1555,39 @@ func _refresh_ward() -> void:
 var _pool_n := 0
 ## Seconds until her next swarm of fodder.
 var swarm_left := 30.0
+## Seconds until her next flankers.
+var flank_left := 20.0
+
+
+func _flank() -> void:
+	## Stalkers step in at the edge of the arena nearest the army's ranged units —
+	## behind the back line, where the bows thought they were safe.
+	var shooters: Array[UnitInstance] = []
+	for v in sim._units:
+		if v.is_alive() and v.team == player_team() and not v.structure and v.is_ranged():
+			shooters.append(v)
+	if shooters.is_empty():
+		return
+	var cells: Array[Vector2i] = []
+	for i in data.flank_count + phase:
+		if minions_alive() + cells.size() >= summon_ceiling():
+			break
+		var prey: UnitInstance = shooters[i % shooters.size()]
+		var edges := [Vector2i(0, prey.cell.y), Vector2i(WIDTH - 1, prey.cell.y),
+			Vector2i(prey.cell.x, HEIGHT - 1)]
+		var edge: Vector2i = edges[0]
+		for e in edges:
+			if BoardModel.tile_distance(e, prey.cell) < BoardModel.tile_distance(edge, prey.cell):
+				edge = e
+		var c := _free_tile_near(edge, cells)
+		if c == NO_AIM:
+			continue
+		cells.append(c)
+		_summon_marks.append({cell = c, left = data.summon_warning,
+			power = _phase().minion_power if _phase() != null else 1.0, kind = data.flank_kind})
+	if not cells.is_empty():
+		sim._emit("boss_summon", {uid = boss.uid, cells = cells, seconds = data.summon_warning,
+			cell = boss.cell, flank = true})
 
 
 func _free_tile_near(want: Vector2i, taken: Array[Vector2i]) -> Vector2i:
@@ -1507,10 +1613,19 @@ func _free_tile_near(want: Vector2i, taken: Array[Vector2i]) -> Vector2i:
 	return NO_AIM
 
 
+func summon_ceiling() -> int:
+	## However she calls them — waves, swarms, flankers, retreats — no more than this
+	## many of her summons stand at once: twice her ordinary cap. Unkilled, they would
+	## otherwise pile up until they boxed her in.
+	return maxi(data.minion_cap, 1) * 2
+
+
 func _swarm() -> void:
 	## A crowd of fodder at once, in circles spread round her.
 	var cells: Array[Vector2i] = []
 	for i in data.swarm_count:
+		if minions_alive() + cells.size() >= summon_ceiling():
+			break
 		var ang := TAU * float(i) / float(maxi(data.swarm_count, 1))
 		var r := 2.0 + float(i % 3)
 		var want := boss.cell + Vector2i(roundi(cos(ang) * r), roundi(sin(ang) * r) + 3)
@@ -1701,6 +1816,8 @@ func _apply_phase_mods() -> void:
 
 ## lane -> seconds until a broken zone crystal stands again.
 var rebuilding: Dictionary = {}
+## lane -> how many times that crystal has been broken.
+var times_broken: Dictionary = {}
 
 
 func _tick_rebuilds() -> void:
@@ -1713,9 +1830,16 @@ func _tick_rebuilds() -> void:
 		if c.is_alive():
 			continue
 		if not rebuilding.has(i):
-			rebuilding[i] = data.crystal_rebuild_seconds
+			# Each time a crystal is broken it takes twice as long to come back: 90 s,
+			# 180, 360... A rebuilt crystal makes the centre immune again, and without
+			# this the three could keep rebuilding faster than she can cross the field
+			# between them, and the fight would never end.
+			var n := int(times_broken.get(i, 0))
+			times_broken[i] = n + 1
+			var secs := data.crystal_rebuild_seconds * pow(2.0, n)
+			rebuilding[i] = secs
 			sim._emit("crystal_rebuilding", {uid = c.uid, cell = c.cell, lane = i,
-				seconds = data.crystal_rebuild_seconds})
+				seconds = secs})
 		rebuilding[i] = float(rebuilding[i]) - CombatSim.TICK
 		if float(rebuilding[i]) <= 0.0 and _restore_crystal(i):
 			rebuilding.erase(i)
@@ -1730,6 +1854,8 @@ func _restore_crystal(i: int) -> bool:
 	if not sim.board.force_place(c, cell):
 		return false
 	c.state = UnitInstance.State.IDLE
+	# Its rebuild is done, however it was brought back: the next break starts a new one.
+	rebuilding.erase(i)
 	c.target = null
 	c.shield = 0.0
 	c.current_hp = c.stat(StatModifier.Stat.MAX_HP) * clampf(data.crystal_rebuild_fraction, 0.05, 1.0)
@@ -1757,6 +1883,20 @@ func minion_target(u: UnitInstance) -> UnitInstance:
 				prey = v
 		if prey != null:
 			return prey
+	elif how == BossMinion.Targeting.RANGED:
+		var shooter: UnitInstance = null
+		var best_d := 1 << 30
+		for v in sim._units:
+			if not v.is_alive() or v.team != player_team() or v.structure or v.is_hidden():
+				continue
+			if not v.is_ranged():
+				continue
+			var d := BoardModel.tile_distance(u.cell, v.cell)
+			if d < best_d:
+				shooter = v
+				best_d = d
+		if shooter != null:
+			return shooter
 	elif how == BossMinion.Targeting.CROWD:
 		var knot := _thickest_anywhere()
 		if knot != NO_AIM:

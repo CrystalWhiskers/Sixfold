@@ -362,6 +362,8 @@ func _initialize() -> void:
 	maelstrom.blaze_dps = 1.0
 	b.surround_count = 6
 	b.surround_cooldown = 10.0
+	# A big move chipping a crystal in its way does only 5% of its blow to it.
+	b.crystal_share = 0.05
 	# The retreats: she vanishes to the back of the field, calls up all three kinds of
 	# summon, and heals while taking extra damage. Ride it out and she comes back
 	# stronger for good; beat her down a bar meanwhile and it is cut short.
@@ -394,6 +396,14 @@ func _initialize() -> void:
 	b.swarm_kind = thrall
 	b.swarm_every = 40.0
 	b.swarm_count = 14
+	# Flankers: Stalkers at the edge of the arena behind your bows, two (plus one per
+	# phase) every 25 seconds, going straight for the ranged units.
+	var stalker := _minion(&"stalker", "Crimson Stalker", 260.0, 45.0, 1.3, 0.45, 1,
+		Color(0.45, 0.15, 0.55))
+	stalker.targeting = BossMinion.Targeting.RANGED
+	b.flank_kind = stalker
+	b.flank_every = 25.0
+	b.flank_count = 2
 	var retreat := _move(&"crimson_retreat", "Crimson Retreat", S.RETREAT, 0, 0, 0.0, 0.5)
 	retreat.windup = 1.5
 	retreat.retreat_summons = [shade, shade, hunter, berserker, thorn, thorn, chalice, chalice] as Array[BossMinion]
@@ -434,6 +444,8 @@ func _initialize() -> void:
 	for i in b.phases.size():
 		b.phases[i].attack_bonus = bonus[i][0]
 		b.phases[i].surround_cooldown = whirl_every[i]
+		# Big moves at random, more likely each phase.
+		b.phases[i].big_chance = [0.0, 0.12, 0.2, 0.33][i]
 		# Ranged resistance climbs with every phase: 30/40/50/60%, and 45/55/65/75%
 		# against long range.
 		b.phases[i].ranged_resist = [0.30, 0.40, 0.50, 0.60][i]

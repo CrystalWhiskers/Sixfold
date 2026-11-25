@@ -26,8 +26,9 @@ extends Resource
 ## Who it hunts. NEAREST: whatever of the army is closest (the default). TOP_TIER:
 ## the highest-tier unit on the field, wherever it is — a Headhunter. CROWD: the
 ## thickest knot of the army — a Berserker, whose swings land on everything round
-## its target (`cleave_radius`).
-enum Targeting { NEAREST, TOP_TIER, CROWD }
+## its target (`cleave_radius`). RANGED: the army's bows and casters, wherever they
+## stand — a Stalker, called in at the edge of the arena behind them.
+enum Targeting { NEAREST, TOP_TIER, CROWD, RANGED }
 @export var targeting: Targeting = Targeting.NEAREST
 @export var cleave_radius: int = 0
 ## Whether what it kills stays dead — no second wind, no raise. Only a few have it
