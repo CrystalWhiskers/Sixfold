@@ -2964,14 +2964,15 @@ func _resolve_ascend(u: UnitInstance, ab: AbilityData) -> void:
 
 
 static func cross_cells(centre: Vector2i, arm: int) -> Array[Vector2i]:
-	# A plus sign, centre first. Not a box and not a diamond — the arms run along
-	# the axes only, so where the shell is aimed decides which rank it catches.
+	# A diamond, centre first: every tile within `arm` steps along the axes. At arm 1
+	# that is the old plus sign exactly; as the arm grows the blast fills in between
+	# the arms rather than only stretching them, so a bigger shell covers ground, not
+	# just two lines.
 	var out: Array[Vector2i] = [centre]
-	for step in range(1, arm + 1):
-		out.append(centre + Vector2i(step, 0))
-		out.append(centre + Vector2i(-step, 0))
-		out.append(centre + Vector2i(0, step))
-		out.append(centre + Vector2i(0, -step))
+	for dy in range(-arm, arm + 1):
+		for dx in range(-arm, arm + 1):
+			if (dx != 0 or dy != 0) and absi(dx) + absi(dy) <= arm:
+				out.append(centre + Vector2i(dx, dy))
 	return out
 
 

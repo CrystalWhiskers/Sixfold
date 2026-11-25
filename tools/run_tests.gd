@@ -8808,6 +8808,10 @@ func _test_the_shell_takes_time() -> void:
 
 	# The cross is a plus sign, not a box: the corners must be untouched or it is
 	# just a splash radius with extra words.
+	_check("a bigger blast fills in as a diamond: arm 2 is thirteen tiles, arm 3 twenty-five",
+		CombatSim.cross_cells(Vector2i(5, 5), 2).size() == 13
+		and CombatSim.cross_cells(Vector2i(5, 5), 3).size() == 25
+		and CombatSim.cross_cells(Vector2i(5, 5), 2).has(Vector2i(6, 6)))
 	var arms := CombatSim.cross_cells(Vector2i(3, 5), 1)
 	_check("the cross is five tiles", arms.size() == 5, "%d tiles" % arms.size())
 	_check("and it does not include the corners",
@@ -13669,7 +13673,7 @@ func _test_boss_defence() -> void:
 	var ub := s.barracks as Barracks
 	var ubf := s.bf as BossFight
 	var usim := s.sim as CombatSim
-	ub.supply = 10000.0
+	ub.supply = 1.0e9
 	var lancer := _find("lancer")
 	_check("the upgrade bar holds the loadout's unit types",
 		ub.types.size() == 5 and ub.level.has(&"lancer"),

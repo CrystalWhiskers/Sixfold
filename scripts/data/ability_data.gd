@@ -342,7 +342,8 @@ enum Kind {
 ## Seconds between firing and impact. The whole character of the unit: long
 ## enough that the shell can be seen coming and walked out from under.
 @export var shell_flight: float = 1.6
-## How many tiles out each arm of the cross reaches. 1 is a five-tile plus sign.
+## How many tiles out the blast reaches, as a diamond. 1 is a five-tile plus sign; each step
+## more fills in the diamond (2 is thirteen tiles).
 @export var shell_arm: int = 1
 ## Damage a second to enemies standing in what it leaves behind, as a fraction of
 ## the shell, and how long the ground burns for.
@@ -561,7 +562,7 @@ func describe() -> String:
 			return "Calls %d of your fallen back per tier, chosen at random, at %d%% health." % [
 				raise_per_tier, roundi(raise_hp_percent * 100.0)]
 		Kind.SHELL:
-			return "Lobs a shell worth %.0fx its own attack at the thickest cluster it can see. %.0f%% to the tile it lands on, %.0f%% to each arm of the cross, and the ground burns for %.0fs afterwards. It takes %.1fs to arrive." % [
+			return "Lobs a shell worth %.0fx its own attack at the thickest cluster it can see. %.0f%% to the tile it lands on, %.0f%% to the rest of the blast, and the ground burns for %.0fs afterwards. It takes %.1fs to arrive." % [
 				shell_attack_multiple, shell_direct * 100.0, shell_splash * 100.0,
 				field_seconds, shell_flight]
 		Kind.DRAIN:

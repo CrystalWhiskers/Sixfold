@@ -18,6 +18,9 @@ extends Resource
 @export var levels: Dictionary = {}
 
 const MAX_LEVEL := 5
+## Ceilings for values carried on past Lv5, where an unbounded step would get silly:
+## the Culverin's blast diamond and anyone's attack range.
+const LV10_CAPS := {"a.shell_arm": 5, "u.attack_range": 7}
 
 
 func has_unit(id: StringName) -> bool:
@@ -48,6 +51,8 @@ func level_values(id: StringName, level: int, cap := MAX_LEVEL) -> Dictionary:
 			x = maxf(x, float(v) * 0.5)
 		if String(key).contains("chance"):
 			x = minf(x, 1.0)
+		if LV10_CAPS.has(key):
+			x = minf(x, float(LV10_CAPS[key]))
 		out[key] = roundi(x) if v is int else x
 	return out
 

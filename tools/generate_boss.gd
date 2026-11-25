@@ -294,10 +294,10 @@ func _initialize() -> void:
 	b.recruit_growth = 1.0
 	b.upgrade_costs = PackedFloat32Array([30, 50, 80, 120, 180])
 	b.upgrade_stat_per_level = 0.15
-	# Exponential upgrades: up to Lv10, each level x1.7 the price of the last and x1.2
+	# Exponential upgrades: up to Lv10, each level x2.2 the price of the last (50, 110, 242, 532, 1171...) and x1.2
 	# health and attack (Lv5 x2.5, Lv10 x6.2). The ability table tops out at Lv5.
-	b.upgrade_cost_base = 30.0
-	b.upgrade_cost_growth = 1.7
+	b.upgrade_cost_base = 50.0
+	b.upgrade_cost_growth = 2.2
 	b.upgrade_max_level = 10
 	b.upgrade_stat_growth = 1.2
 	# Income: no cap, each upgrade x1.5 the last one's gain (+2, +3, +4.5...).
