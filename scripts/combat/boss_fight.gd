@@ -1671,6 +1671,19 @@ func _next_pool_kind() -> BossMinion:
 	return k
 
 
+func summon_scale() -> float:
+	## Her attack against her base (everything she has gained so far), times the army's
+	## average upgrade bump across its unit types.
+	var hers := boss.stat(StatModifier.Stat.ATTACK_DAMAGE) / maxf(data.attack_damage, 1.0)
+	var army := 1.0
+	if barracks != null and not barracks.types.is_empty():
+		var total := 0.0
+		for t in barracks.types:
+			total += barracks.stat_bump(barracks.level_of(t.id))
+		army = total / float(barracks.types.size())
+	return maxf(hers, 1.0) * maxf(army, 1.0)
+
+
 func minion_tier() -> int:
 	return clampi(data.minion_base_tier + phase + enrage_stacks / 2, 1, 6)
 
@@ -1701,6 +1714,10 @@ var _heal_rate: Dictionary = {}
 func _spawn_minion(cell: Vector2i, power: float, kind: BossMinion = null) -> UnitInstance:
 	## One summon stepping out of its circle: an ordinary shade, or `kind`.
 	power *= 1.0 + data.enrage_minions * float(enrage_stacks)
+	# And they grow with the fight on both sides: with everything she has gained
+	# (phase, enrage, fallen units, retreats) and with how far the army has been
+	# upgraded — so a max-level army does not walk through them.
+	power *= summon_scale()
 	if not boss.is_alive():
 		return null
 	if not sim.board.is_empty(cell):

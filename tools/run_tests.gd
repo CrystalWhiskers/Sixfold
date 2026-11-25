@@ -14321,6 +14321,10 @@ func _test_boss_polish() -> void:
 	_test_boss_executions(data)
 
 
+func sf4_barracks_of(bf: BossFight) -> Barracks:
+	return bf.barracks
+
+
 func _free_near(board: BoardModel, want: Vector2i) -> Vector2i:
 	for r in 6:
 		for dy in range(-r, r + 1):
@@ -14602,6 +14606,12 @@ func _test_boss_attacks(data: BossData) -> void:
 		_check("a Berserker cleaves round what it hits", bz != null and bz.empowered
 			and bz.data.empower_splash_radius >= 1)
 		bf4.phase = 2
+		var weak := bf4.summon_scale()
+		var bk4: Barracks = sf4_barracks_of(bf4)
+		for t in bk4.types:
+			bk4.level[t.id] = 10
+		_check("her summons grow with how far the army has been upgraded",
+			bf4.summon_scale() > weak * 5.0, "%.2f -> %.2f" % [weak, bf4.summon_scale()])
 		_check("and summons come out at a higher tier each phase",
 			bf4.minion_tier() == data.minion_base_tier + 2 and h.data.tier == data.minion_base_tier)
 	BoardModel.reset_map()
@@ -14650,7 +14660,7 @@ func _test_boss_enrage(data: BossData) -> void:
 		"%d stacks, %.0f attack" % [bf.enrage_stacks, bf.boss.stat(StatModifier.Stat.ATTACK_DAMAGE)])
 	var m := bf._spawn_minion(Vector2i(8, 3), 1.0)
 	_check("and what she summons comes out stronger too",
-		m != null and is_equal_approx(m.data.max_hp, data.minion_hp * (1.0 + 2.0 * data.enrage_minions)),
+		m != null and is_equal_approx(m.data.max_hp, data.minion_hp * (1.0 + 2.0 * data.enrage_minions) * bf.summon_scale()),
 		"%.0f" % (m.data.max_hp if m != null else 0.0))
 	BoardModel.reset_map()
 	# No army limit by default: a capped boss still lets a whole wave land.
