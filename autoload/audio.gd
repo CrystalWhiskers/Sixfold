@@ -139,6 +139,12 @@ var _music: AudioStreamPlayer = null
 var _music_now := ""
 var _voices: Array[AudioStreamPlayer] = []
 var _next_voice := 0
+## Deaths get a ring of their own. Sharing the eight above with every swing meant a
+## death was cut off by the next hit, or by the next death, so a wipe sounded like one
+## thump restarting over and over. With their own players they overlap and ring out.
+const DEATH_VOICES := 12
+var _death_voices: Array[AudioStreamPlayer] = []
+var _next_death := 0
 
 var _melee: Array[AudioStream] = []
 var _ranged: Array[AudioStream] = []
@@ -313,6 +319,11 @@ func _ready() -> void:
 		v.volume_db = SFX_DB
 		add_child(v)
 		_voices.append(v)
+	for i in DEATH_VOICES:
+		var dv := AudioStreamPlayer.new()
+		dv.bus = SFX_BUS
+		add_child(dv)
+		_death_voices.append(dv)
 
 	_melee = _load_run("melee_%d.wav", 6)
 	_ranged = _load_run("ranged_%d.wav", 2)
@@ -628,6 +639,19 @@ func stop_music() -> void:
 	_music.stop()
 
 
+func _free_death_voice() -> AudioStreamPlayer:
+	## The death ring: an idle player if there is one, else the oldest — with twelve
+	## of them that is a death from well over a second ago, long past its thump.
+	for i in _death_voices.size():
+		var idx := (_next_death + i) % _death_voices.size()
+		if not _death_voices[idx].playing:
+			_next_death = (idx + 1) % _death_voices.size()
+			return _death_voices[idx]
+	var take := _death_voices[_next_death]
+	_next_death = (_next_death + 1) % _death_voices.size()
+	return take
+
+
 func _free_voice() -> AudioStreamPlayer:
 	# Prefer one that is idle; if every voice is busy, take the oldest anyway
 	# rather than dropping the sound. A clipped tail is better than silence on the
@@ -642,7 +666,7 @@ func _free_voice() -> AudioStreamPlayer:
 	return take
 
 
-func _fire(stream: AudioStream, db: float, pitch := 1.0, bus := SFX_BUS) -> void:
+func _fire(stream: AudioStream, db: float, pitch := 1.0, bus := SFX_BUS, death := false) -> void:
 	## `bus` is what lets the voice lines be faded separately from the game's own sounds
 	## while still sharing this one pool of players. Set per PLAY rather than per player,
 	## because the pool is a ring of eight reused for everything — pinning a bus to a
@@ -650,7 +674,7 @@ func _fire(stream: AudioStream, db: float, pitch := 1.0, bus := SFX_BUS) -> void
 	## through the effects fader about seven times out of eight.
 	if not enabled or stream == null:
 		return
-	var v := _free_voice()
+	var v := _free_death_voice() if death and not _death_voices.is_empty() else _free_voice()
 	v.bus = bus
 	v.stream = stream
 	v.volume_db = db
@@ -748,7 +772,7 @@ func play_select() -> void:
 func play_death() -> void:
 	# A little pitch wander for the same reason the swings have it: a wipe kills
 	# six units in two seconds, and six identical sounds read as one glitch.
-	_fire(_death, DEATH_DB, _rng.randf_range(0.93, 1.07))
+	_fire(_death, DEATH_DB, _rng.randf_range(0.93, 1.07), SFX_BUS, true)
 
 
 func play_shield_hit() -> void:
@@ -771,4 +795,4 @@ func play_death_voice(overkill := false) -> void:
 	var pool := _overkill_voice if overkill else _death_voice
 	# No pitch wander here. It works on a thump because a thump has no pitch to
 	# speak of; on a voice it sounds like a broken tape.
-	_fire(_pick(pool), OVERKILL_DB if overkill else VOICE_DB, 1.0, VOICE_BUS)
+	_fire(_pick(pool), OVERKILL_DB if overkill else VOICE_DB, 1.0, VOICE_BUS, true)

@@ -13578,6 +13578,16 @@ func _test_boss_defence() -> void:
 	pb.tick(data.passive_income_every * 2.0)
 	_check("and keeps growing every %ds" % roundi(data.passive_income_every),
 		is_equal_approx(pb.income, base_rate + 3.0 * data.passive_income), "%.1f/s" % pb.income)
+	var s0 := pb.supply
+	var got_b := pb.earn_from_damage(1000.0, true)
+	_check("hurting her earns Supply", got_b > 0.0
+		and is_equal_approx(pb.supply - s0, 1000.0 * data.damage_income), "%.1f" % got_b)
+	var got_s := pb.earn_from_damage(1000.0, false)
+	_check("and so does hurting her summons", got_s > 0.0
+		and is_equal_approx(got_s, 1000.0 * data.summon_damage_income), "%.1f" % got_s)
+	_check("and it pays more the stronger she has grown",
+		is_equal_approx(pb.earn_from_damage(1000.0, true, 3.0), got_b * 3.0)
+		and is_equal_approx(pb.damage_earned, got_b * 4.0 + got_s))
 	var count1 := b.unit_count(1)
 	var supply := b.supply
 	_check("a recruit buys one unit into that section",

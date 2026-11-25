@@ -329,8 +329,24 @@ func counter_text() -> String:
 	return "Dealt %s   ·   Lost %d" % [BossStats.short(stats.dealt), stats.lost]
 
 
+func _earn_from(e: Dictionary) -> void:
+	## Supply for the army hurting her or her summons, paid as the blow is SEEN, not
+	## when the simulation ahead of the screen worked it out.
+	if fight == null or barracks == null or bool(e.get("bleed", false)):
+		return
+	var victim: UnitInstance = units.get(int(e.uid))
+	var source: UnitInstance = units.get(int(e.get("source_uid", -1)))
+	if victim == null or source == null or victim.structure:
+		return
+	if victim.team != fight.boss_team() or source.team != fight.player_team():
+		return
+	barracks.earn_from_damage(float(e.get("amount", 0.0)), victim == fight.boss, fight.boss_scale())
+
+
 func _on_event(e: Dictionary) -> void:
 	stats.record(e, units)
+	if e.kind == "damage":
+		_earn_from(e)
 	if _counter != null and (e.kind == "damage" or e.kind == "death"):
 		_counter.text = counter_text()
 	match e.kind:
@@ -490,6 +506,7 @@ func result_rows(won: bool, clock: String) -> Array:
 		["Retreats she finished", "%d" % stats.retreats],
 		["Enrage surges", "%d" % _enrage_shown],
 		["Waves", "%d" % _waves],
+		["Supply from damage", "%d" % roundi(barracks.damage_earned)],
 		["Supply spent", "%d" % roundi(barracks.spent)],
 		["Recruits / upgrade levels", "%d / %d" % [barracks.recruits, levels]],
 	]

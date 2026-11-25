@@ -64,6 +64,10 @@ extends Resource
 ## you have to answer her enrage with. 0 for none.
 @export var passive_income: float = 1.0
 @export var passive_income_every: float = 30.0
+## Supply for hurting her: this much per point of damage on the boss, and per point on
+## one of her summons, both scaled by how far she has grown. 0 for none.
+@export var damage_income: float = 0.0
+@export var summon_damage_income: float = 0.0
 ## A recruit: one random draw from the player's loadout, at tier 1, into a section.
 ## The first costs `recruit_cost`; each after it costs `recruit_step` more (10, 12, 14...).
 ## `recruit_growth` can make it climb by a multiple instead (1 = flat steps only).

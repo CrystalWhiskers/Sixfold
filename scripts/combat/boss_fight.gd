@@ -1733,6 +1733,11 @@ func _next_pool_kind() -> BossMinion:
 	return k
 
 
+func boss_scale() -> float:
+	## How far she has grown: her attack now over her base attack, never below 1.
+	return maxf(boss.stat(StatModifier.Stat.ATTACK_DAMAGE) / maxf(data.attack_damage, 1.0), 1.0)
+
+
 func summon_scale() -> float:
 	## Her attack against her base (everything she has gained so far), times the army's
 	## average upgrade bump across its unit types.

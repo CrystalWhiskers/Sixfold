@@ -305,6 +305,10 @@ func _initialize() -> void:
 	b.income_max_level = 0
 	b.income_step_growth = 1.0
 	b.income_step_quad = 0.5
+	# Hurting her pays: 1 Supply per 50 damage on her, 1 per 100 on her summons, and
+	# more as she grows stronger (times her attack over her base).
+	b.damage_income = 0.02
+	b.summon_damage_income = 0.01
 	b.start_draws = 6
 	b.section_cols = 3
 	b.section_rows = 4

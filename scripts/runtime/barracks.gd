@@ -24,6 +24,8 @@ var income := 0.0
 var income_level := 0
 var recruits := 0
 var spent := 0.0
+## Supply earned by hurting her and her summons (BossData.damage_income), all fight.
+var damage_earned := 0.0
 ## The player's unit types, one per loadout entry (no repeats), in loadout order.
 var types: Array[UnitData] = []
 ## unit id -> upgrade level 0..5.
@@ -67,6 +69,7 @@ func setup(p_data: BossData, loadout: LoadoutData, seed_value: int) -> void:
 	clock = 0.0
 	passive_gained = 0.0
 	recruits = 0
+	damage_earned = 0.0
 	spent = 0.0
 	types.clear()
 	level.clear()
@@ -100,6 +103,19 @@ func tick(seconds: float) -> void:
 		while clock >= data.passive_income_every * (passive_gained / data.passive_income + 1.0) - 0.0001:
 			income += data.passive_income
 			passive_gained += data.passive_income
+
+
+func earn_from_damage(amount: float, on_boss: bool, boss_scale := 1.0) -> float:
+	## Supply for a blow the army landed: `damage_income` a point on her,
+	## `summon_damage_income` a point on one of her summons, both times how far she has
+	## grown (her attack over her base) — the stronger she gets, the more a hit is worth.
+	var rate := data.damage_income if on_boss else data.summon_damage_income
+	if amount <= 0.0 or rate <= 0.0:
+		return 0.0
+	var got := amount * rate * maxf(boss_scale, 1.0)
+	supply += got
+	damage_earned += got
+	return got
 
 
 func next_passive_in() -> float:

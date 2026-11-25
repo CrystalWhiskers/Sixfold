@@ -1443,9 +1443,19 @@ func _check_category_sliders() -> void:
 	if not Audio._death_voice.is_empty():
 		Audio.play_death_voice(false)
 		var found := false
-		for v in Audio._voices:
+		for v in Audio._voices + Audio._death_voices:
 			if v.bus == Audio.VOICE_BUS:
 				found = true
 		_check("and a voice line plays through the voice bus", found)
+	# Deaths have their own ring, so a wipe's deaths overlap instead of cutting each
+	# other (and the swings) off.
+	var busy := 0
+	for i in 5:
+		Audio.play_death()
+	for v in Audio._death_voices:
+		if v.stream != null:
+			busy += 1
+	_check("five deaths in a row land on five different players, overlapping",
+		Audio._death_voices.size() >= 8 and busy >= 5, "%d of %d" % [busy, Audio._death_voices.size()])
 	for prop in props:
 		Audio.set(prop, 1.0)
