@@ -14415,6 +14415,27 @@ func _test_boss_executions(data: BossData) -> void:
 
 func _test_boss_units(_data: BossData) -> void:
 	_section("Boss defence: how the army's units behave here")
+	# Hit her and she turns on you, leaving the crystal.
+	var sr := _boss_board([["warden"], [], []])
+	var bfr: BossFight = sr.bf
+	var simr: CombatSim = sr.sim
+	simr._absorb_new_units()
+	var wr: UnitInstance = null
+	for u in simr._units:
+		if u.is_alive() and u.data.id == &"warden":
+			wr = u
+	if wr != null:
+		var near := bfr._nearest_free(bfr.boss.cell + Vector2i(0, 3), bfr.boss.cell)
+		simr.board.move_unit(wr, near)
+		_check("before anyone hits her she is not after anyone", bfr.retaliation_target() == null)
+		simr._damage(bfr.boss, 10.0, wr)
+		_check("hit her and she turns on whoever hit her", bfr.retaliation_target() == wr)
+		var beside := bfr._nearest_free(bfr.boss.cell + Vector2i(1, 0), bfr.boss.cell)
+		simr.board.move_unit(wr, beside)
+		_check("and in arm's reach she hits them before the crystal", bfr._foe_in_reach() == wr)
+		simr.elapsed += BossFight.RETALIATE_MEMORY + 1.0
+		_check("stop hitting her and she forgets you", bfr.retaliation_target() == null)
+	BoardModel.reset_map()
 	# The Breaker steers: it runs round to whatever enemy is nearest, not down its column.
 	var sb := _boss_board([["breaker"], [], []])
 	var bfb: BossFight = sb.bf
@@ -14777,6 +14798,36 @@ func _test_boss_enrage(data: BossData) -> void:
 	bf3.phase = 0
 	_check("the results screen counts every tier of a unit as one",
 		BossStats.base_name("Vexer IV") == "Vexer" and BossStats.base_name("Warden") == "Warden")
+	# Top Damage: a Sentry's damage is its Engineer's.
+	var st := BossStats.new()
+	var sen := UnitInstance.create(load("res://data/units/sentry_t1.tres") as UnitData, BoardModel.TEAM_B)
+	sen.uid = 9001
+	var foe_s := UnitInstance.create(load("res://data/units/warden_t1.tres") as UnitData, BoardModel.TEAM_A)
+	foe_s.uid = 9002
+	st.record({kind = "damage", uid = 9002, source_uid = 9001, amount = 50.0}, {9001: sen, 9002: foe_s})
+	_check("a Sentry's damage counts under its Engineer in Top Damage",
+		st.by_type.has("Engineer") and not st.by_type.has("Sentry"), "%s" % [st.by_type])
+	# Fixed merges in the Barracks: an Amalgam merges with anything, a Transcendence
+	# makes more of itself.
+	var mb := Barracks.new()
+	mb.setup(data, load("res://data/loadouts/starter.tres") as LoadoutData, 5)
+	var am := load("res://data/units/amalgam_t1.tres") as UnitData
+	var wd := load("res://data/units/warden_t1.tres") as UnitData
+	var tr := load("res://data/units/transcendence_t1.tres") as UnitData
+	for i in mb.slot_count():
+		mb.sections[0][i] = null
+	mb.sections[0][0] = am
+	mb.sections[0][1] = wd
+	_check("an Amalgam merges with anything of its tier in the Barracks",
+		mb.can_merge(am, wd) and mb.drop(0, 0, 0, 1) == "merged" and mb.at(0, 1).tier == 2)
+	mb.sections[0][0] = tr
+	mb.sections[0][1] = tr
+	_check("two Transcendence merge into a tier 2 Transcendence",
+		mb.drop(0, 0, 0, 1) == "merged" and mb.at(0, 1) == tr.next_tier)
+	mb.sections[0][0] = tr
+	mb.sections[0][1] = am
+	_check("and an Amalgam merged into a Transcendence comes out Transcendence",
+		mb.drop(0, 1, 0, 0) == "merged" and mb.at(0, 0) == tr.next_tier)
 	BoardModel.reset_map()
 	_check("with no army limit, every unit of a wave lands while there is room",
 		bf2.army_in_zone(0) == 6, "%d of 6 on the field" % bf2.army_in_zone(0))

@@ -141,6 +141,9 @@ func shape_boss_damage(amount: float, source: UnitInstance) -> float:
 	## Every hit on her, after all the usual multipliers: ranged blows are cut by her
 	## ranged resistance, and nothing lands bigger than her single-hit cap.
 	var out := amount
+	if source != null and source.team == player_team() and not source.structure:
+		# Remembered, so she turns on whoever is hitting her.
+		_struck_by[source.uid] = sim.elapsed
 	if source != null and source.is_ranged():
 		var reach := UnitData.band_tiles(source.stat_int(StatModifier.Stat.ATTACK_RANGE))
 		var p := _phase()
@@ -530,11 +533,49 @@ func boss_turn() -> void:
 		if u.can_attack_now():
 			sim._begin_attack(u)
 		return
+	var striker := retaliation_target()
+	if striker != null:
+		# Turned on by whoever is hitting her: she goes after them, not the crystal.
+		if u.can_move_now():
+			u.target = striker
+			sim._begin_move(u)
+		return
 	var aim := current_target()
 	if aim == null or not u.can_move_now():
 		return
 	u.target = aim
 	sim._begin_move(u)
+
+
+## uid -> when that unit of the army last hit her. Anyone who hit her in the last
+## RETALIATE_MEMORY seconds and stands within RETALIATE_LEASH tiles, she turns on —
+## leaving the crystal until they are dealt with.
+var _struck_by: Dictionary = {}
+const RETALIATE_MEMORY := 4.0
+const RETALIATE_LEASH := 6
+
+
+func is_retaliating_on(v: UnitInstance) -> bool:
+	return (v != null and v.is_alive() and _struck_by.has(v.uid)
+		and sim.elapsed - float(_struck_by[v.uid]) <= RETALIATE_MEMORY)
+
+
+func retaliation_target() -> UnitInstance:
+	## The nearest of the army that has hit her lately and is close enough to go after.
+	var best: UnitInstance = null
+	var best_d := RETALIATE_LEASH + 1
+	for uid in _struck_by.keys():
+		if sim.elapsed - float(_struck_by[uid]) > RETALIATE_MEMORY:
+			_struck_by.erase(uid)
+			continue
+	for v in sim.board.units_in_box(boss.cell, RETALIATE_LEASH, player_team()):
+		if v.structure or v.sealed or not is_retaliating_on(v):
+			continue
+		var d := BoardModel.box_distance(boss.cell, v.cell)
+		if d < best_d or (d == best_d and best != null and v.uid < best.uid):
+			best = v
+			best_d = d
+	return best
 
 
 func _foe_in_reach() -> UnitInstance:
@@ -543,6 +584,15 @@ func _foe_in_reach() -> UnitInstance:
 	## way through, not picking a fight.
 	var want := current_target()
 	var best: UnitInstance = null
+	var striker: UnitInstance = null
+	for v in sim.board.units_in_box(boss.cell, 1, player_team()):
+		if v.structure or v.sealed or not is_retaliating_on(v):
+			continue
+		if striker == null or v.current_hp < striker.current_hp or (is_equal_approx(v.current_hp, striker.current_hp) and v.uid < striker.uid):
+			striker = v
+	if striker != null:
+		# Something is hitting her: she hits back before the crystal.
+		return striker
 	for v in sim.board.units_in_box(boss.cell, 1, player_team()):
 		if not v.is_alive() or v.sealed:
 			continue

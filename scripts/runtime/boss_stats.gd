@@ -42,6 +42,7 @@ func record(e: Dictionary, units: Dictionary) -> void:
 				# One row per unit TYPE, whatever its tier: "Warden" and "Warden III" are
 				# the same unit, merged up.
 				var kind := base_name(source.data.display_name)
+				kind = LUMPED.get(kind, kind)
 				by_type[kind] = float(by_type.get(kind, 0.0)) + amount
 				names[kind] = kind
 			elif victim.team == player_team and not victim.structure:
@@ -66,6 +67,10 @@ func record(e: Dictionary, units: Dictionary) -> void:
 		"boss_retreat_end":
 			if bool(e.get("completed", false)):
 				retreats += 1
+
+
+## Units counted under another's row in Top Damage: what a unit builds is its work.
+const LUMPED := {"Sentry": "Engineer"}
 
 
 static func base_name(display: String) -> String:

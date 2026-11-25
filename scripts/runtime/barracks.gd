@@ -368,7 +368,23 @@ func _place(section: int, d: UnitData) -> int:
 
 
 func can_merge(a: UnitData, b: UnitData) -> bool:
-	return a != null and b != null and a == b and not a.is_max_tier()
+	## Twins merge; so does an Amalgam (wild) with anything of its tier — the same
+	## rules as a merge on the board.
+	if a == null or b == null or a.is_max_tier() or b.is_max_tier():
+		return false
+	if a == b:
+		return true
+	return a.tier == b.tier and (a.wild_merge or b.wild_merge)
+
+
+func merge_result(a: UnitData, b: UnitData) -> UnitData:
+	## What a merge of the two makes: a magnet (Transcendence) always makes more of
+	## itself; anything else rolls the lottery the way a board merge does.
+	if a.merge_magnet:
+		return a.next_tier
+	if b.merge_magnet:
+		return b.next_tier
+	return _merger.roll_merge_result(b)
 
 
 func drop(from_section: int, from_slot: int, to_section: int, to_slot: int) -> String:
@@ -387,7 +403,7 @@ func drop(from_section: int, from_slot: int, to_section: int, to_slot: int) -> S
 		changes += 1
 		return "moved"
 	if can_merge(a, b):
-		sections[to_section][to_slot] = _merger.roll_merge_result(b)
+		sections[to_section][to_slot] = merge_result(a, b)
 		sections[from_section][from_slot] = null
 		changes += 1
 		return "merged"
