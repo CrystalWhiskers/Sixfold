@@ -98,9 +98,10 @@ extends Resource
 @export var minion_cap: int = 8
 ## What her ordinary summoning waves call, taken in turn (shades when empty), and the
 ## tier they come out at by phase: phase 1 at `minion_base_tier`, one higher each
-## phase after, and one more for every two enrage surges — up to tier 6.
+## phase after, and one more for every `minion_tier_surges` enrage surges — up to tier 6.
 @export var summon_pool: Array[BossMinion] = []
 @export var minion_base_tier: int = 1
+@export var minion_tier_surges: int = 5
 ## Fodder: every `swarm_every` seconds she calls `swarm_count` of `swarm_kind` at once —
 ## weak bodies in a crowd, to soak blows and clog the field. Not held to the ordinary
 ## cap. 0 seconds for none.

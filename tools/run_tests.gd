@@ -14627,6 +14627,12 @@ func _test_boss_attacks(data: BossData) -> void:
 			bf4.summon_scale() > weak * 5.0, "%.2f -> %.2f" % [weak, bf4.summon_scale()])
 		_check("and summons come out at a higher tier each phase",
 			bf4.minion_tier() == data.minion_base_tier + 2 and h.data.tier == data.minion_base_tier)
+		bf4.enrage_stacks = data.minion_tier_surges - 1
+		var t_before := bf4.minion_tier()
+		bf4.enrage_stacks = data.minion_tier_surges
+		_check("enrage only lifts her summons a tier every few surges, not every one",
+			t_before == data.minion_base_tier + 2 and bf4.minion_tier() == t_before + 1)
+		bf4.enrage_stacks = 0
 	BoardModel.reset_map()
 	_check("phases 2-4 each open with their own big move",
 		openers.all(func(m): return m != null and m.windup > 0.0)

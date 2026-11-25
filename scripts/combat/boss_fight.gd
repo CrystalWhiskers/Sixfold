@@ -1693,7 +1693,8 @@ func summon_scale() -> float:
 
 
 func minion_tier() -> int:
-	return clampi(data.minion_base_tier + phase + enrage_stacks / 2, 1, 6)
+	return clampi(data.minion_base_tier + phase
+		+ enrage_stacks / maxi(data.minion_tier_surges, 1), 1, 6)
 
 
 func _summon_wave(count: int, power: float) -> void:
