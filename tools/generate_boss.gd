@@ -464,9 +464,9 @@ func _initialize() -> void:
 		b.phases[i].ranged_resist = [0.30, 0.40, 0.50, 0.60][i]
 		b.phases[i].long_range_resist = [0.45, 0.55, 0.65, 0.75][i]
 		b.phases[i].regen = bonus[i][1]
-	# No blow takes more than 1.2% of her health; ranged hits are cut by 30%; every
+	# No blow takes more than 1% of her health (1000 of 100,000); ranged hits are cut by 30%; every
 	# fallen unit of the army makes her 0.2% stronger.
-	b.max_hit_percent = 0.012
+	b.max_hit_percent = 0.01
 	b.ranged_resist = 0.45
 	# Long range (4 tiles and more) gets through even less: 60% less.
 	b.long_range_resist = 0.6
