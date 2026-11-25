@@ -377,7 +377,9 @@ func _initialize() -> void:
 	# Her blows on crystals are a flat 150 however strong she gets, so her damage to the
 	# army can climb steeply — +40/100/200% by phase, +40% per enrage surge — without
 	# the crystals melting.
-	b.crystal_hit_damage = 150.0
+	# Her blows on a crystal: a fixed 100 on a lane crystal, 50 on the Central.
+	b.crystal_hit_damage = 100.0
+	b.central_hit_damage = 50.0
 	# Her summons climb a tier per phase, but only one more per five enrage surges.
 	b.minion_tier_surges = 5
 	b.enrage_attack = 0.40

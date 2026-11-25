@@ -127,11 +127,13 @@ func army_level() -> float:
 	return float(total) / float(barracks.types.size())
 
 
-func shape_crystal_damage(amount: float, source: UnitInstance) -> float:
+func shape_crystal_damage(amount: float, source: UnitInstance, crystal: UnitInstance = null) -> float:
 	## Her own blow on a crystal deals a fixed `crystal_hit_damage`; an accidental chip
 	## from a big move keeps its own small, capped amount.
 	if _crystal_accident or source != boss or data.crystal_hit_damage <= 0.0:
 		return amount
+	if crystal == crystals[3] and data.central_hit_damage > 0.0:
+		return data.central_hit_damage
 	return data.crystal_hit_damage
 
 

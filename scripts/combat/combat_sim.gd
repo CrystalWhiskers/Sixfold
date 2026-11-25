@@ -3813,7 +3813,7 @@ func _damage(victim: UnitInstance, amount: float, source: UnitInstance,
 		total *= CRIT_MULT
 	if boss_fight != null and victim.structure:
 		# Boss defence: her blows on a crystal are a fixed amount, not her attack.
-		total = boss_fight.shape_crystal_damage(total, source)
+		total = boss_fight.shape_crystal_damage(total, source, victim)
 	if boss_fight != null and victim.boss:
 		# Boss defence: her ranged resistance and the cap on any single blow, last,
 		# on the final figure — so nothing can delete a health bar in one hit.

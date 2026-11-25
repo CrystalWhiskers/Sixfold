@@ -13528,7 +13528,10 @@ func _test_boss_defence() -> void:
 		"%d by the centre, was %d" % [near_centre_after, near_centre_before])
 	sim._damage(central, 300.0, bf.boss)
 	_check("the Central Crystal now takes damage",
-		central.current_hp < central.stat(StatModifier.Stat.MAX_HP))
+		central.current_hp < central.stat(StatModifier.Stat.MAX_HP)
+		and is_equal_approx(central.stat(StatModifier.Stat.MAX_HP) - central.current_hp - central.shield,
+			bf.data.central_hit_damage),
+		"%.0f taken" % (central.stat(StatModifier.Stat.MAX_HP) - central.current_hp))
 	_break(sim, central, bf.boss)
 	sim.step()
 	_check("and when it breaks, the boss wins", sim.is_finished()

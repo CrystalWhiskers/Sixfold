@@ -591,4 +591,5 @@ death_power = 0.002
 surround_move = SubResource("Resource_kd7dq")
 crystal_share = 0.01
 crystal_big_cap = 10.0
-crystal_hit_damage = 150.0
+crystal_hit_damage = 100.0
+central_hit_damage = 50.0

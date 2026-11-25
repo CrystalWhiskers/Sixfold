@@ -189,6 +189,8 @@ extends Resource
 ## grown — her damage to the army can climb as high as it likes without the crystals
 ## melting. 0 to let it scale with her attack.
 @export var crystal_hit_damage: float = 0.0
+## The same for the Central Crystal (0 to use `crystal_hit_damage`).
+@export var central_hit_damage: float = 0.0
 
 
 func phase_for(hp_fraction: float, central: bool) -> int:
