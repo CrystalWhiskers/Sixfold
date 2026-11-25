@@ -115,6 +115,14 @@ func max_hit() -> float:
 	return boss.stat(StatModifier.Stat.MAX_HP) * data.max_hit_percent
 
 
+func shape_crystal_damage(amount: float, source: UnitInstance) -> float:
+	## Her own blow on a crystal deals a fixed `crystal_hit_damage`; an accidental chip
+	## from a big move keeps its own small, capped amount.
+	if _crystal_accident or source != boss or data.crystal_hit_damage <= 0.0:
+		return amount
+	return data.crystal_hit_damage
+
+
 func shape_boss_damage(amount: float, source: UnitInstance) -> float:
 	## Every hit on her, after all the usual multipliers: ranged blows are cut by her
 	## ranged resistance, and nothing lands bigger than her single-hit cap.

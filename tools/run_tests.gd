@@ -13497,10 +13497,15 @@ func _test_boss_defence() -> void:
 	sim._damage(central, 500.0, bf.boss)
 	_check("the Central Crystal is sealed while any zone crystal stands",
 		is_equal_approx(central.current_hp, central.stat(StatModifier.Stat.MAX_HP)))
-	sim._damage(bf.crystals[0], 1.0e7, bf.boss)
+	var lc0: UnitInstance = bf.crystals[0]
+	var lc0_before := lc0.current_hp + lc0.shield
+	sim._damage(lc0, 1.0e7, bf.boss)
+	_check("her blow on a crystal deals a fixed amount, not her attack",
+		is_equal_approx(lc0_before - (lc0.current_hp + lc0.shield), bf.data.crystal_hit_damage))
+	_break(sim, bf.crystals[0], bf.boss)
 	sim.step()
 	_check("with the Left down it goes for the Middle", bf.current_target() == bf.crystals[1])
-	sim._damage(bf.crystals[1], 1.0e7, bf.boss)
+	_break(sim, bf.crystals[1], bf.boss)
 	sim.step()
 	_check("then the Right", bf.current_target() == bf.crystals[2] and not bf.merged)
 	_check("the fight does not end when a zone crystal breaks", not sim.is_finished())
@@ -13508,7 +13513,7 @@ func _test_boss_defence() -> void:
 	for u in s.board.units_of(BoardModel.TEAM_B):
 		if not u.structure and BoardModel.box_distance(u.cell, central.cell) <= 6:
 			near_centre_before += 1
-	sim._damage(bf.crystals[2], 1.0e7, bf.boss)
+	_break(sim, bf.crystals[2], bf.boss)
 	sim.step()
 	_check("after all three it turns on the Central Crystal, unsealed",
 		bf.current_target() == central and not central.sealed and bf.merged)
@@ -13524,7 +13529,7 @@ func _test_boss_defence() -> void:
 	sim._damage(central, 300.0, bf.boss)
 	_check("the Central Crystal now takes damage",
 		central.current_hp < central.stat(StatModifier.Stat.MAX_HP))
-	sim._damage(central, 1.0e7, bf.boss)
+	_break(sim, central, bf.boss)
 	sim.step()
 	_check("and when it breaks, the boss wins", sim.is_finished()
 		and sim.result() == BoardModel.TEAM_A)
@@ -14055,7 +14060,7 @@ func _test_boss_defence() -> void:
 	bf = s.bf
 	sim = s.sim
 	var lc := bf.crystals[0]
-	sim._damage(lc, 1.0e7, bf.boss)
+	_break(sim, lc, bf.boss)
 	sim.step()
 	_check("a broken zone crystal starts rebuilding",
 		bf.rebuilding.has(0) and _kind_events(sim, "crystal_rebuilding").size() == 1)
@@ -14094,7 +14099,7 @@ func _test_boss_defence() -> void:
 	bf = s.bf
 	sim = s.sim
 	for i in 3:
-		sim._damage(bf.crystals[i], 1.0e7, bf.boss)
+		_break(sim, bf.crystals[i], bf.boss)
 		sim.step()
 	_check("all three down at once lifts the seal", bf.merged and not bf.crystals[3].sealed)
 	bf._restore_crystal(0)
@@ -14103,7 +14108,7 @@ func _test_boss_defence() -> void:
 	_check("a crystal rebuilding afterwards makes the Central Crystal immune and draws her back to it",
 		bf.crystals[0].is_alive() and bf.current_target() == bf.crystals[0]
 		and is_equal_approx(bf.crystals[3].current_hp, central_hp))
-	sim._damage(bf.crystals[0], 1.0e7, bf.boss)
+	_break(sim, bf.crystals[0], bf.boss)
 	_check("and once it falls again the centre is open to her again",
 		bf.current_target() == bf.crystals[3])
 	sim.step()
@@ -14119,7 +14124,7 @@ func _test_boss_defence() -> void:
 	s = _boss_board([["warden"], ["warden"], ["warden"]])
 	bf = s.bf
 	sim = s.sim
-	sim._damage(bf.crystals[0], 1.0e7, bf.boss)
+	_break(sim, bf.crystals[0], bf.boss)
 	sim.step()
 	var summons_before := _kind_events(sim, "summon").size()
 	bf.send_wave()
@@ -14323,6 +14328,14 @@ func _test_boss_polish() -> void:
 
 func sf4_barracks_of(bf: BossFight) -> Barracks:
 	return bf.barracks
+
+
+func _break(sim: CombatSim, crystal: UnitInstance, src: UnitInstance) -> void:
+	## Her blows on a crystal are a fixed amount now, so a test that wants one broken
+	## brings it to the edge first and lets one blow finish it.
+	crystal.shield = 0.0
+	crystal.current_hp = minf(crystal.current_hp, 1.0)
+	sim._damage(crystal, 1.0e7, src)
 
 
 func _free_near(board: BoardModel, want: Vector2i) -> Vector2i:

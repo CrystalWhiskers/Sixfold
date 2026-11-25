@@ -167,6 +167,10 @@ extends Resource
 @export var crystal_share: float = 0.5
 ## And never more than this from any one such blow. 0 for no cap.
 @export var crystal_big_cap: float = 0.0
+## Her own blow on the crystal she is after deals exactly this, however strong she has
+## grown — her damage to the army can climb as high as it likes without the crystals
+## melting. 0 to let it scale with her attack.
+@export var crystal_hit_damage: float = 0.0
 
 
 func phase_for(hp_fraction: float, central: bool) -> int:

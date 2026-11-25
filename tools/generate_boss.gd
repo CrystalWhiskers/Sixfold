@@ -370,6 +370,11 @@ func _initialize() -> void:
 	# A big move chipping a crystal in its way: 99% resisted, and never more than 10.
 	b.crystal_share = 0.01
 	b.crystal_big_cap = 10.0
+	# Her blows on crystals are a flat 150 however strong she gets, so her damage to the
+	# army can climb steeply — +40/100/200% by phase, +40% per enrage surge — without
+	# the crystals melting.
+	b.crystal_hit_damage = 150.0
+	b.enrage_attack = 0.40
 	# The retreats: she vanishes to the back of the field, calls up all three kinds of
 	# summon, and heals while taking extra damage. Ride it out and she comes back
 	# stronger for good; beat her down a bar meanwhile and it is cut short.
@@ -444,7 +449,7 @@ func _initialize() -> void:
 		if i > 0:
 			# Long enough for the banner, before she opens with her signature.
 			b.phases[i].entry_pause = 3.0
-	var bonus := [[0.0, 0.0], [0.15, 0.0005], [0.30, 0.0008], [0.50, 0.001]]
+	var bonus := [[0.0, 0.0], [0.40, 0.0005], [1.00, 0.0008], [2.00, 0.001]]
 	# The big crowd-clearer when she is surrounded: rare early, often late.
 	var whirl_every := [30.0, 20.0, 14.0, 10.0]
 	for i in b.phases.size():
