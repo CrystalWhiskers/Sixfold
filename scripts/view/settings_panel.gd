@@ -32,6 +32,8 @@ var _portrait_button: Button = null
 var _tier_button: Button = null
 var _army_button: Button = null
 var _ability_button: Button = null
+var _uncap_button: Button = null
+var _income_exp_button: Button = null
 var _volume_slider: HSlider = null
 var _volume_label: Label = null
 
@@ -619,6 +621,19 @@ func _build_army_limit_toggle() -> Control:
 		GameSetup.boss_ability_lv10 = not GameSetup.boss_ability_lv10
 		_refresh_army_limit())
 	box.add_child(_ability_button)
+	# Uncapped upgrades and exponential income, side by side.
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+	box.add_child(row)
+	_uncap_button = _small_switch(func():
+		GameSetup.boss_uncapped_upgrades = not GameSetup.boss_uncapped_upgrades
+		_refresh_army_limit())
+	row.add_child(_uncap_button)
+	_income_exp_button = _small_switch(func():
+		GameSetup.boss_income_exponential = not GameSetup.boss_income_exponential
+		_refresh_army_limit())
+	row.add_child(_income_exp_button)
 	_refresh_army_limit()
 	return box
 
@@ -631,9 +646,31 @@ func _refresh_army_limit() -> void:
 	_army_button.button_pressed = not on
 	_army_button.add_theme_color_override("font_color",
 		Color(0.86, 0.90, 0.96) if not on else Color(0.48, 0.52, 0.60))
+	if _uncap_button != null:
+		_paint_switch(_uncap_button, GameSetup.boss_uncapped_upgrades,
+			"Upgrades: no max level", "Upgrades stop at Lv10")
+		_paint_switch(_income_exp_button, GameSetup.boss_income_exponential,
+			"Income gain: exponential", "Income gain: quadratic")
 	if _ability_button != null:
 		var ten := GameSetup.boss_ability_lv10
 		_ability_button.text = "Ability upgrades to Lv10" if ten else "Ability upgrades stop at Lv5"
 		_ability_button.button_pressed = ten
 		_ability_button.add_theme_color_override("font_color",
 			Color(0.86, 0.90, 0.96) if ten else Color(0.48, 0.52, 0.60))
+
+
+func _small_switch(on_press: Callable) -> Button:
+	var b := Button.new()
+	b.custom_minimum_size = Vector2(PANEL_WIDTH * 0.42, 30.0)
+	b.add_theme_font_size_override("font_size", 13)
+	b.toggle_mode = true
+	b.pressed.connect(Audio.play_confirm)
+	b.pressed.connect(on_press)
+	return b
+
+
+func _paint_switch(b: Button, on: bool, on_text: String, off_text: String) -> void:
+	b.text = on_text if on else off_text
+	b.button_pressed = on
+	b.add_theme_color_override("font_color",
+		Color(0.86, 0.90, 0.96) if on else Color(0.48, 0.52, 0.60))

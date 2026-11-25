@@ -13689,6 +13689,18 @@ func _test_boss_defence() -> void:
 	_check("each level costs more than the last", rising, str(lv_prices))
 	for i in 10:
 		ub.upgrade_type(&"lancer")
+	var free := Barracks.new()
+	free.setup(data, load("res://data/loadouts/starter.tres") as LoadoutData, 11)
+	free.uncapped = true
+	free.income_exponential = true
+	free.supply = 1.0e15
+	for i in 14:
+		free.upgrade_type(&"lancer")
+	var g0 := free.next_income_gain()
+	free.upgrade_income()
+	_check("with upgrades uncapped a type goes past Lv10, and income can grow exponentially",
+		free.level_of(&"lancer") == 14 and is_equal_approx(free.next_income_gain(), g0 * Barracks.INCOME_EXP_GROWTH),
+		"Lv%d" % free.level_of(&"lancer"))
 	var line := ub.statline(lancer, ub.max_level())
 	_check("a maxed unit's tooltip shows its statline", line.size() >= 3
 		and line[0].begins_with("Health") and line[1].begins_with("Attacks"), " | ".join(line))

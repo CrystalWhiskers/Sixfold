@@ -137,6 +137,10 @@ var boss_army_limit := false
 ## Boss defence: unit ability upgrades carry on to Lv10, or stop at Lv5 (health and
 ## attack keep growing either way). On by default.
 var boss_ability_lv10 := true
+## Boss defence: no top level for unit upgrades; and income gains growing
+## exponentially instead of quadratically. Both off by default.
+var boss_uncapped_upgrades := false
+var boss_income_exponential := false
 
 ## Bold tier markings: coloured letters, a numbered badge and a full-colour rim. On by
 ## default; Settings switches it off for the plain corner number. Written down to

@@ -33,6 +33,12 @@ var revision := 0
 ## How far the ability table runs: Lv10 (carrying each unit's Lv4->Lv5 step on), or
 ## Lv5 and no further, past which only health and attack grow. Settings decides.
 var ability_cap := 10
+## Settings: no top level at all (prices and stats keep climbing, and with the Lv10
+## ability setting on the abilities keep their step too), and income gains that grow
+## exponentially (x1.5 each) instead of quadratically.
+var uncapped := false
+var income_exponential := false
+const INCOME_EXP_GROWTH := 1.5
 
 var _loadout: LoadoutData = null
 var _rng := RandomNumberGenerator.new()
@@ -104,6 +110,8 @@ func next_passive_in() -> float:
 
 func next_income_gain() -> float:
 	## What the next income upgrade adds: each one `income_step_growth` times the last.
+	if income_exponential:
+		return data.income_step * pow(INCOME_EXP_GROWTH, income_level)
 	if data.income_step_quad > 0.0:
 		return data.income_step * (1.0 + data.income_step_quad * float(income_level * income_level))
 	return data.income_step * pow(maxf(data.income_step_growth, 0.0001), income_level)
@@ -136,6 +144,8 @@ func level_of(id: StringName) -> int:
 
 
 func max_level() -> int:
+	if uncapped:
+		return 1 << 20
 	if data.upgrade_cost_growth > 0.0:
 		return maxi(data.upgrade_max_level, 1)
 	return data.upgrade_costs.size()
