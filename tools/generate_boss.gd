@@ -284,9 +284,10 @@ func _initialize() -> void:
 	b.base_income = 4.0
 	b.income_step = 2.0
 	b.income_cost = 30.0
-	# Income upgrades get dear fast: each costs 2.2x the last (30, 66, 145, 319, 702,
-	# 1546...) while every one gives the same flat +2, so each takes longer to pay for
-	# itself — 15 s for the first, about 160 s for the fourth, 770 s for the sixth.
+	# Income upgrades: the price climbs exponentially, x2.2 each (30, 66, 145, 319, 702,
+	# 1546...), the gain only quadratically (+2, +3, +6, +11, +18, +27...), so each takes
+	# longer to pay for itself — 15 s for the first, ~30 s for the fourth, ~57 s for the
+	# sixth, ~250 s for the ninth.
 	b.income_growth = 2.2
 	# Recruits: 10 Supply, then 2 more each time — 10, 12, 14, 16...
 	b.recruit_cost = 10.0
@@ -303,6 +304,7 @@ func _initialize() -> void:
 	# Income: no cap, each upgrade x1.5 the last one's gain (+2, +3, +4.5...).
 	b.income_max_level = 0
 	b.income_step_growth = 1.0
+	b.income_step_quad = 0.5
 	b.start_draws = 6
 	b.section_cols = 3
 	b.section_rows = 4

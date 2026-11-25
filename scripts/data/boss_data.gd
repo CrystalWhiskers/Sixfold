@@ -55,6 +55,10 @@ extends Resource
 ## +3, +4.5, +6.75... Its price climbs faster (income_growth), so every next one is
 ## still worth less per Supply spent. 1 for a flat `income_step` every time.
 @export var income_step_growth: float = 1.5
+## Or a quadratic climb: the n-th upgrade (from 0) gives `income_step` times
+## (1 + `income_step_quad` x n squared) — +2, +3, +6, +11, +18, +27... at 0.5. It still
+## falls behind the price, which climbs exponentially. 0 to leave it off.
+@export var income_step_quad: float = 0.0
 ## Passive growth: every `passive_income_every` seconds of the fight, income rises by
 ## `passive_income` on its own, with nothing bought — so the longer you hold, the more
 ## you have to answer her enrage with. 0 for none.

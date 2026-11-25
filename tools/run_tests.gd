@@ -13601,8 +13601,9 @@ func _test_boss_defence() -> void:
 			bought += 1
 	var income_want := data.base_income
 	for k in 20:
-		income_want += data.income_step * pow(data.income_step_growth, k)
-	_check("income has no cap, and each upgrade gives x%.1f the last" % data.income_step_growth,
+		income_want += data.income_step * ((1.0 + data.income_step_quad * k * k) if data.income_step_quad > 0.0
+			else pow(data.income_step_growth, k))
+	_check("income has no cap, and each upgrade gives a little more than the last",
 		data.income_max_level == 0 and bought == 20 and not ib.income_maxed()
 		and is_equal_approx(ib.income, income_want),
 		"%d bought, %.0f/s against %.0f" % [bought, ib.income, income_want])

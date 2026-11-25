@@ -104,6 +104,8 @@ func next_passive_in() -> float:
 
 func next_income_gain() -> float:
 	## What the next income upgrade adds: each one `income_step_growth` times the last.
+	if data.income_step_quad > 0.0:
+		return data.income_step * (1.0 + data.income_step_quad * float(income_level * income_level))
 	return data.income_step * pow(maxf(data.income_step_growth, 0.0001), income_level)
 
 
