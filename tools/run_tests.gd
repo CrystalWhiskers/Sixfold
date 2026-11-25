@@ -14696,6 +14696,16 @@ func _test_boss_enrage(data: BossData) -> void:
 	_check("no single blow takes more than her cap",
 		absf((hp0 - bf3.boss.current_hp) - bf3.max_hit()) < 1.0 and bf3.max_hit() < hp0 * 0.05,
 		"%.0f taken, cap %.0f" % [hp0 - bf3.boss.current_hp, bf3.max_hit()])
+	var cap0 := bf3.max_hit()
+	var bk3: Barracks = sf4_barracks_of(bf3)
+	if bk3 != null:
+		for t in bk3.types:
+			bk3.level[t.id] = 10
+		_check("her hit cap grows very slowly as the army is upgraded",
+			is_equal_approx(bf3.max_hit(), cap0 * (1.0 + bf3.data.max_hit_growth * 10.0))
+			and bf3.max_hit() < cap0 * 2.0, "%.0f -> %.0f" % [cap0, bf3.max_hit()])
+		for t in bk3.types:
+			bk3.level[t.id] = 0
 	var archer: UnitInstance = null
 	for u in sim3._units:
 		if u.team == bf3.player_team() and u.is_ranged():

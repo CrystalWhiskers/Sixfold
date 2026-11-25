@@ -151,6 +151,9 @@ extends Resource
 ## (0 for no cap); ranged hits are cut by `ranged_resist` (0.3 = 30% less); and every
 ## one of the army that dies makes her `death_power` stronger (attack, for good).
 @export var max_hit_percent: float = 0.0
+## The cap grows by this much of itself per average upgrade level of the army (0.05
+## = +5% a level), so upgrades still pay off against her, just slowly.
+@export var max_hit_growth: float = 0.0
 @export var ranged_resist: float = 0.0
 ## Long-range units get through even less: `long_range_resist` instead, for anything
 ## whose reach is `long_range_tiles` or more.

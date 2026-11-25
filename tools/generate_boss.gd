@@ -467,6 +467,8 @@ func _initialize() -> void:
 	# No blow takes more than 1% of her health (1000 of 100,000); ranged hits are cut by 30%; every
 	# fallen unit of the army makes her 0.2% stronger.
 	b.max_hit_percent = 0.01
+	# ...growing very slowly with the army: +5% of that per average upgrade level.
+	b.max_hit_growth = 0.05
 	b.ranged_resist = 0.45
 	# Long range (4 tiles and more) gets through even less: 60% less.
 	b.long_range_resist = 0.6

@@ -109,10 +109,22 @@ func _tick_hazards() -> void:
 
 
 func max_hit() -> float:
-	## The most one blow can take off her, or INF with no cap.
+	## The most one blow can take off her, or INF with no cap. It creeps up with the
+	## army: `max_hit_growth` more of the base cap per average upgrade level.
 	if data.max_hit_percent <= 0.0:
 		return INF
-	return boss.stat(StatModifier.Stat.MAX_HP) * data.max_hit_percent
+	var base := boss.stat(StatModifier.Stat.MAX_HP) * data.max_hit_percent
+	return base * (1.0 + data.max_hit_growth * army_level())
+
+
+func army_level() -> float:
+	## The army's average upgrade level across its unit types, 0 with no barracks.
+	if barracks == null or barracks.types.is_empty():
+		return 0.0
+	var total := 0
+	for t in barracks.types:
+		total += barracks.level_of(t.id)
+	return float(total) / float(barracks.types.size())
 
 
 func shape_crystal_damage(amount: float, source: UnitInstance) -> float:
