@@ -238,6 +238,28 @@ func field_data_at(d: UnitData, lv: int) -> UnitData:
 	return out
 
 
+func statline(d: UnitData, lv: int) -> PackedStringArray:
+	## What a unit type is at upgrade level `lv`: its core stats, then each of the
+	## ability values its upgrades raise — for the tooltip of a maxed type.
+	var out: PackedStringArray = []
+	if d == null:
+		return out
+	var f := field_data_at(d, lv)
+	out.append("Health %d   Attack %d" % [roundi(f.max_hp), roundi(f.attack_damage)])
+	out.append("Attacks %.2f/s   Range %d   Step %.2fs" % [f.attack_speed,
+		UnitData.band_tiles(f.attack_range), f.move_time])
+	if data.upgrades != null:
+		var vals := data.upgrades.level_values(d.id, lv, ability_cap)
+		for raw in vals:
+			var k := String(raw)
+			var field := k.substr(2).trim_suffix("*")
+			var obj: Object = f.ability if k.begins_with("a.") else f
+			if obj == null or obj.get(field) == null:
+				continue
+			out.append("%s %s" % [field.replace("_", " ").capitalize(), _num(obj.get(field))])
+	return out
+
+
 func level_changes(d: UnitData, lv: int) -> PackedStringArray:
 	## What buying level `lv` changes, one line per improvement, read off the unit
 	## itself before and after — so the numbers are the real ones for this tier, not

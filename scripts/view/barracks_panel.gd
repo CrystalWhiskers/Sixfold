@@ -134,7 +134,10 @@ func refresh() -> void:
 			for line in barracks.level_changes(t, lv + 1):
 				tip += "\n  • " + line
 		else:
-			tip += " (maxed)"
+			tip += " (maxed) — at tier 1:"
+			for line in barracks.statline(t, lv):
+				tip += "
+  • " + line
 		_type_btns[i].tooltip_text = tip
 	queue_redraw()
 

@@ -13689,6 +13689,9 @@ func _test_boss_defence() -> void:
 	_check("each level costs more than the last", rising, str(lv_prices))
 	for i in 10:
 		ub.upgrade_type(&"lancer")
+	var line := ub.statline(lancer, ub.max_level())
+	_check("a maxed unit's tooltip shows its statline", line.size() >= 3
+		and line[0].begins_with("Health") and line[1].begins_with("Attacks"), " | ".join(line))
 	_check("and the top is Lv%d" % ub.max_level(), ub.level_of(&"lancer") == ub.max_level()
 		and not ub.upgrade_type(&"lancer") and is_inf(ub.upgrade_price(&"lancer")),
 		"Lv%d" % ub.level_of(&"lancer"))
