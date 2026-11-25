@@ -14813,6 +14813,43 @@ func _test_boss_retreat(data: BossData) -> void:
 	_check("knock her down a bar while she heals and the retreat is cut short",
 		not bool(bf.marked.get("retreat", false)) and not bool(last.completed)
 		and bf.retreats_completed == 1)
+
+	# The health gate: halfway down her last bar she can't be hurt, and recovers.
+	bf.marked = {}
+	bf.gap_left = 999.0
+	bf.pause_left = 0.0
+	bf.boss.sealed = false
+	bf.phase = data.gate_phase
+	var gate := bf.gate_hp()
+	_check("her last phase has a health gate halfway down its bar",
+		data.gate_move != null and data.gate_phase == data.phases.size() - 1
+		and gate < full * data.phases[data.gate_phase].hp_threshold and gate > 0.0)
+	bf.boss.current_hp = gate + 300.0
+	sim._damage(bf.boss, 1.0e7, bf.crystals[0])
+	_check("no blow takes her past the gate", is_equal_approx(bf.boss.current_hp, gate),
+		"%.0f, gate %.0f" % [bf.boss.current_hp, gate])
+	sim._damage(bf.boss, 500.0, bf.crystals[0])
+	_check("at the gate she takes no damage at all", is_equal_approx(bf.boss.current_hp, gate))
+	sim.step()
+	var gev := _kind_events(sim, "boss_retreat")
+	_check("and goes off to recover, sealed",
+		bool(bf.marked.get("gate", false)) and bf.boss.sealed and bf.gate_reached
+		and not gev.is_empty() and bool(gev.back().get("gate", false)))
+	var hp_g := bf.boss.current_hp
+	sim._damage(bf.boss, 500.0, bf.crystals[0])
+	_check("nothing hurts her while she recovers", bf.boss.current_hp >= hp_g)
+	_check("and the recovery is a long one", data.gate_move.retreat_seconds >= 20.0)
+	var guard_g := 0
+	while bool(bf.marked.get("retreat", false)) and guard_g < 20000:
+		sim.step()
+		guard_g += 1
+	_check("she heals through it and can be hurt again after",
+		not bf.boss.sealed and bf.boss.current_hp > gate, "%.0f, gate %.0f" % [bf.boss.current_hp, gate])
+	var hp_after := bf.boss.current_hp
+	bf.marked = {}
+	bf.gap_left = 999.0
+	sim._damage(bf.boss, 1.0e7, bf.crystals[0])
+	_check("and the gate holds only once", bf.boss.current_hp < hp_after - 1.0 and not bf.gate_holds())
 	BoardModel.reset_map()
 
 

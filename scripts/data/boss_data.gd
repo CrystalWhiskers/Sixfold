@@ -154,6 +154,12 @@ extends Resource
 ## The cap grows by this much of itself per average upgrade level of the army (0.05
 ## = +5% a level), so upgrades still pay off against her, just slowly.
 @export var max_hit_growth: float = 0.0
+## The health gate: in phase `gate_phase` (0-based, -1 for none), once she is `gate_at`
+## of the way down that bar she takes no damage and runs `gate_move` — a recovery
+## (a RETREAT-shaped move) during which she cannot be hurt at all. Once a fight.
+@export var gate_phase: int = -1
+@export var gate_at: float = 0.5
+@export var gate_move: BossMove = null
 @export var ranged_resist: float = 0.0
 ## Long-range units get through even less: `long_range_resist` instead, for anything
 ## whose reach is `long_range_tiles` or more.

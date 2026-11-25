@@ -234,7 +234,8 @@ func _apply(e: Dictionary) -> void:
 				float(e.get("seconds", 8.0)) / maxf(speed, 0.01))
 			_view.effects().ring(_view.cell_to_pos(e.cell), _view.tile_size * 0.3,
 				_view.tile_size * 2.5, Color(0.95, 0.30, 0.40), _fx_life(0.6))
-			_view.spawn_label(_view.cell_to_pos(e.cell), "RETREATS TO HEAL — +%d%% DAMAGE TAKEN"
+			_view.spawn_label(_view.cell_to_pos(e.cell), "HEALTH GATE — RECOVERING, IMMUNE" if bool(e.get("gate", false))
+				else "RETREATS TO HEAL — +%d%% DAMAGE TAKEN"
 				% roundi(float(e.get("vulnerability", 0.0)) * 100.0), Color(0.55, 1.0, 0.65))
 			Audio.play_boss_teleport()
 		"boss_blaze":

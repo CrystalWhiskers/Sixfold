@@ -380,8 +380,11 @@ func _on_event(e: Dictionary) -> void:
 		"boss_summon":
 			_status.text = ("%s calls a swarm of thralls!" if bool(e.get("swarm", false)) else ("%s's Stalkers close in on your ranged units from the edge!" if bool(e.get("flank", false)) else "%s calls her shades — stay out of the circles!")) % boss_data.display_name
 		"boss_retreat":
-			_status.text = "%s retreats to heal and calls everything she has — she takes %d%% more damage now. Hit her!" % [
-				boss_data.display_name, roundi(float(e.vulnerability) * 100.0)]
+			if bool(e.get("gate", false)):
+				_status.text = "%s hits her health gate — she can't be hurt while she recovers. Clear her summons!" % boss_data.display_name
+			else:
+				_status.text = "%s retreats to heal and calls everything she has — she takes %d%% more damage now. Hit her!" % [
+					boss_data.display_name, roundi(float(e.vulnerability) * 100.0)]
 		"boss_retreat_end":
 			if bool(e.completed):
 				_status.text = "%s returns stronger: +%d%% attack, +%d%% speed." % [

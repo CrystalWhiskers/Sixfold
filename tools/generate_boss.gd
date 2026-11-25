@@ -425,6 +425,18 @@ func _initialize() -> void:
 	sanctum.retreat_seconds = 9.0
 	sanctum.retreat_heal = 0.007
 	sanctum.retreat_summons = [shade, shade, shade, hunter, hunter, berserker, berserker, thorn, thorn, thorn, chalice, chalice] as Array[BossMinion]
+	# The health gate: halfway down her last bar she stops taking damage and recovers
+	# for a long while — sealed, mending, calling everything she has.
+	var recovery := _move(&"crimson_recovery", "Crimson Recovery", S.RETREAT, 0, 0, 0.0, 0.5)
+	recovery.retreat_seconds = 30.0
+	recovery.retreat_heal = 0.003
+	recovery.retreat_vulnerability = 0.0
+	recovery.retreat_attack = 0.20
+	recovery.retreat_speed = 0.10
+	recovery.retreat_summons = sanctum.retreat_summons.duplicate()
+	b.gate_move = recovery
+	b.gate_phase = 3
+	b.gate_at = 0.5
 	b.phases = [
 		# Four phases, each its own health bar. The crystals and the merge are a
 		# separate track: they change WHERE it fights, these change HOW.

@@ -147,7 +147,45 @@ func shape_boss_damage(amount: float, source: UnitInstance) -> float:
 			var far := p.long_range_resist if p != null and p.long_range_resist > 0.0 else data.long_range_resist
 			resist = maxf(resist, far)
 		out *= 1.0 - clampf(resist, 0.0, 0.95)
-	return minf(out, max_hit())
+	out = minf(out, max_hit())
+	if gate_holds():
+		# The health gate: nothing takes her below it until her recovery is over.
+		out = minf(out, maxf(boss.current_hp - gate_hp(), 0.0))
+	return out
+
+
+# --- The health gate ------------------------------------------------------------
+
+## Set once her gate has been reached (it is reached only once a fight).
+var gate_reached := false
+
+
+func gate_holds() -> bool:
+	## True while the gate stands between her and the rest of her bar: in the gate's
+	## phase, until it has been reached and her recovery is under way.
+	return (data.gate_move != null and data.gate_phase >= 0 and phase == data.gate_phase
+		and not gate_reached and pause_left <= 0.0)
+
+
+func gate_hp() -> float:
+	## The health the gate holds her at: `gate_at` of the way down the gate phase's bar.
+	var full := boss.stat(StatModifier.Stat.MAX_HP)
+	var top := data.phases[phase].hp_threshold * full
+	var bottom := (data.phases[phase + 1].hp_threshold * full
+		if phase + 1 < data.phases.size() else 0.0)
+	return top - (top - bottom) * clampf(data.gate_at, 0.0, 1.0)
+
+
+func _check_gate() -> void:
+	## At the gate she takes no damage, and as soon as she is free of what she is in
+	## the middle of she goes off to recover — sealed, healing, everything summoned.
+	if not gate_holds() or not boss.is_alive() or boss.current_hp > gate_hp() + 0.5:
+		return
+	if in_stance() or not marked.is_empty():
+		return
+	gate_reached = true
+	_begin_retreat(data.gate_move, true)
+	boss.sealed = true
 
 
 ## Her lasting gain from the army's dead: one modifier, re-laid when the count grows.
@@ -719,7 +757,7 @@ func retreat_cell() -> Vector2i:
 	return best
 
 
-func _begin_retreat(mv: BossMove) -> void:
+func _begin_retreat(mv: BossMove, gate := false) -> void:
 	## She vanishes to the back of the field, calls her summons round her and heals —
 	## open to everything while she does.
 	var from := boss.cell
@@ -735,10 +773,10 @@ func _begin_retreat(mv: BossMove) -> void:
 	for m in _retreat_vuln:
 		boss.add_battle_modifier(m)
 	marked = {move = mv, retreat = true, left = maxf(mv.retreat_seconds, CombatSim.TICK),
-		cells = [] as Array[Vector2i]}
+		cells = [] as Array[Vector2i], gate = gate}
 	sim._emit("boss_retreat", {uid = boss.uid, from = from, cell = boss.cell,
 		name = mv.display_name, seconds = mv.retreat_seconds,
-		vulnerability = mv.retreat_vulnerability, phase = phase})
+		vulnerability = mv.retreat_vulnerability, phase = phase, gate = gate})
 	_summon_kinds(mv.retreat_summons)
 
 
@@ -774,6 +812,9 @@ func _tick_retreat() -> void:
 
 func _end_retreat(completed: bool) -> void:
 	var mv: BossMove = marked.move
+	if bool(marked.get("gate", false)):
+		# Her recovery is over: she can be hurt again.
+		boss.sealed = false
 	for m in _retreat_vuln:
 		boss.battle_modifiers.erase(m)
 	_retreat_vuln.clear()
@@ -794,7 +835,7 @@ func _end_retreat(completed: bool) -> void:
 			_retreat_mods.append(m)
 	sim._emit("boss_retreat_end", {uid = boss.uid, cell = boss.cell, completed = completed,
 		stacks = retreats_completed, attack = mv.retreat_attack * retreats_completed,
-		speed = mv.retreat_speed * retreats_completed})
+		speed = mv.retreat_speed * retreats_completed, gate = mv == data.gate_move})
 
 
 func _tick_boosts() -> void:
@@ -1225,6 +1266,7 @@ func tick() -> void:
 		var top := data.phases[phase].hp_threshold * boss.stat(StatModifier.Stat.MAX_HP)
 		if boss.current_hp > top:
 			boss.current_hp = top
+	_check_gate()
 	if in_stance():
 		_tick_stance()
 	elif bool(marked.get("windup", false)):

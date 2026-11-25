@@ -1,8 +1,8 @@
 [gd_resource type="Resource" script_class="BossData" format=3]
 
 [ext_resource type="Script" path="res://scripts/data/boss_minion.gd" id="1_s8kb7"]
-[ext_resource type="Script" path="res://scripts/data/boss_phase.gd" id="2_lqgl0"]
-[ext_resource type="Script" path="res://scripts/data/boss_move.gd" id="3_xxu2h"]
+[ext_resource type="Script" path="res://scripts/data/boss_move.gd" id="2_lqgl0"]
+[ext_resource type="Script" path="res://scripts/data/boss_phase.gd" id="3_xxu2h"]
 [ext_resource type="Script" path="res://scripts/data/boss_data.gd" id="4_78baq"]
 [ext_resource type="Resource" path="res://data/boss/upgrades.tres" id="5_3tb7n"]
 
@@ -18,283 +18,6 @@ targeting = 3
 accent = Color(0.45, 0.15, 0.55, 1)
 
 [sub_resource type="Resource" id="Resource_od8ds"]
-script = ExtResource("3_xxu2h")
-id = &"crescent_sweep"
-display_name = "Crescent Sweep"
-reach = 3
-
-[sub_resource type="Resource" id="Resource_b7mvm"]
-script = ExtResource("3_xxu2h")
-id = &"falling_edge"
-display_name = "Falling Edge"
-shape = 1
-reach = 6
-damage_mult = 2.5
-
-[sub_resource type="Resource" id="Resource_pntgj"]
-script = ExtResource("3_xxu2h")
-id = &"crimson_arc"
-display_name = "Crimson Arc"
-shape = 13
-reach = 4
-damage_mult = 2.5
-telegraph = 0.9
-legs = 1
-arc_degrees = 100.0
-
-[sub_resource type="Resource" id="Resource_vvtju"]
-script = ExtResource("3_xxu2h")
-id = &"longspear"
-display_name = "Longspear"
-shape = 2
-reach = 7
-damage_mult = 3.0
-telegraph = 1.2
-max_hp_percent = 0.06
-
-[sub_resource type="Resource" id="Resource_78j3i"]
-script = ExtResource("3_xxu2h")
-id = &"breach_dash"
-display_name = "Breach Dash"
-shape = 3
-reach = 8
-
-[sub_resource type="Resource" id="Resource_rvirp"]
-script = ExtResource("3_xxu2h")
-id = &"crimson_step"
-display_name = "Crimson Step"
-shape = 3
-reach = 3
-damage_mult = 1.0
-telegraph = 0.5
-
-[sub_resource type="Resource" id="Resource_twyko"]
-script = ExtResource("2_lqgl0")
-display_name = "First Blade"
-gap = 3.0
-surround_cooldown = 30.0
-big_chance = 0.0
-ranged_resist = 0.3
-long_range_resist = 0.45
-moves = Array[ExtResource("3_xxu2h")]([SubResource("Resource_od8ds"), SubResource("Resource_b7mvm"), SubResource("Resource_pntgj"), SubResource("Resource_vvtju"), SubResource("Resource_78j3i"), SubResource("Resource_rvirp")])
-summons_on_start = 2
-summon_every = 22.0
-summon_count = 2
-music_path = "res://audio/boss/gebura_battle.mp3"
-music_label = "Theme 1"
-music_to = 91.6364
-
-[sub_resource type="Resource" id="Resource_44d0m"]
-script = ExtResource("3_xxu2h")
-id = &"twin_fang_cross"
-display_name = "Twin Fang Cross"
-shape = 7
-reach = 0
-span = 3
-damage_mult = 3.5
-telegraph = 1.6
-windup = 2.0
-max_hp_percent = 0.08
-
-[sub_resource type="Resource" id="Resource_qagpy"]
-script = ExtResource("3_xxu2h")
-id = &"crossed_blades"
-display_name = "Crossed Blades"
-reach = 4
-span = 2
-damage_mult = 2.5
-telegraph = 0.9
-
-[sub_resource type="Resource" id="Resource_di884"]
-script = ExtResource("3_xxu2h")
-id = &"scything_sweep"
-display_name = "Scything Sweep"
-shape = 13
-reach = 6
-telegraph = 0.7
-legs = 3
-arc_degrees = 70.0
-
-[sub_resource type="Resource" id="Resource_ucgat"]
-script = ExtResource("3_xxu2h")
-id = &"silencing_edict"
-display_name = "Silencing Edict"
-shape = 15
-reach = 6
-damage_mult = 0.0
-telegraph = 0.6
-
-[sub_resource type="Resource" id="Resource_ybyqy"]
-script = ExtResource("3_xxu2h")
-id = &"crimson_cross"
-display_name = "Crimson Cross"
-shape = 7
-reach = 0
-span = 3
-damage_mult = 3.0
-telegraph = 1.5
-windup = 2.5
-executes_top_tier = true
-
-[sub_resource type="Resource" id="Resource_p0xy4"]
-script = ExtResource("3_xxu2h")
-id = &"gathering_storm"
-display_name = "Gathering Storm"
-shape = 5
-reach = 0
-span = 0
-damage_mult = 0.0
-telegraph = 5.0
-finisher = SubResource("Resource_ybyqy")
-
-[sub_resource type="Resource" id="Resource_c23a0"]
-script = ExtResource("3_xxu2h")
-id = &"hunting_sweep"
-display_name = "Hunting Sweep"
-shape = 11
-reach = 40
-span = 3
-damage_mult = 2.5
-telegraph = 1.4
-windup = 2.5
-
-[sub_resource type="Resource" id="Resource_1xfcm"]
-script = ExtResource("3_xxu2h")
-id = &"scarlet_tide"
-display_name = "Scarlet Tide"
-shape = 8
-reach = 1
-span = 9
-damage_mult = 0.8
-telegraph = 1.4
-windup = 2.0
-
-[sub_resource type="Resource" id="Resource_k1rwg"]
-script = ExtResource("2_lqgl0")
-display_name = "Twin Blades"
-hp_threshold = 0.75
-entry_pause = 3.0
-entry_move = SubResource("Resource_44d0m")
-gap = 2.3
-haste = 1.25
-lifesteal = 0.03
-attack_bonus = 0.4
-regen = 0.0005
-surround_cooldown = 20.0
-big_chance = 0.12
-ranged_resist = 0.4
-long_range_resist = 0.55
-moves = Array[ExtResource("3_xxu2h")]([SubResource("Resource_qagpy"), SubResource("Resource_pntgj"), SubResource("Resource_rvirp"), SubResource("Resource_od8ds"), SubResource("Resource_di884"), SubResource("Resource_vvtju"), SubResource("Resource_ucgat"), SubResource("Resource_p0xy4"), SubResource("Resource_b7mvm"), SubResource("Resource_78j3i"), SubResource("Resource_qagpy"), SubResource("Resource_pntgj"), SubResource("Resource_rvirp"), SubResource("Resource_od8ds"), SubResource("Resource_di884"), SubResource("Resource_c23a0"), SubResource("Resource_vvtju"), SubResource("Resource_ucgat"), SubResource("Resource_b7mvm"), SubResource("Resource_78j3i"), SubResource("Resource_qagpy"), SubResource("Resource_pntgj"), SubResource("Resource_rvirp"), SubResource("Resource_1xfcm")])
-summons_on_start = 4
-summon_every = 16.0
-summon_count = 3
-minion_power = 1.1
-music_path = "res://audio/boss/gebura_battle.mp3"
-music_label = "Theme 2"
-music_from = 91.6364
-music_to = 183.2727
-
-[sub_resource type="Resource" id="Resource_wk5wn"]
-script = ExtResource("3_xxu2h")
-id = &"rending_storm"
-display_name = "Rending Storm"
-shape = 13
-reach = 9
-damage_mult = 3.0
-telegraph = 0.8
-windup = 2.0
-legs = 4
-
-[sub_resource type="Resource" id="Resource_kgdra"]
-script = ExtResource("3_xxu2h")
-id = &"heaven_split"
-display_name = "Heaven Split"
-shape = 1
-reach = 8
-span = 3
-damage_mult = 4.5
-telegraph = 1.6
-hits_crystals = true
-max_hp_percent = 0.12
-
-[sub_resource type="Resource" id="Resource_xb0dc"]
-script = ExtResource("3_xxu2h")
-id = &"shockwave"
-display_name = "Shockwave"
-shape = 8
-reach = 3
-span = 2
-damage_mult = 2.5
-telegraph = 1.4
-windup = 2.5
-
-[sub_resource type="Resource" id="Resource_ycxfj"]
-script = ExtResource("3_xxu2h")
-id = &"crimson_pyre"
-display_name = "Crimson Pyre"
-shape = 14
-reach = 0
-span = 2
-damage_mult = 0.0
-blaze_seconds = 6.0
-
-[sub_resource type="Resource" id="Resource_7qkaw"]
-script = ExtResource("3_xxu2h")
-id = &"horizon_split"
-display_name = "Horizon Split"
-reach = 5
-span = 3
-damage_mult = 4.0
-telegraph = 1.6
-hits_crystals = true
-max_hp_percent = 0.1
-
-[sub_resource type="Resource" id="Resource_nys1i"]
-script = ExtResource("3_xxu2h")
-id = &"pouncing_ruin"
-display_name = "Pouncing Ruin"
-shape = 4
-reach = 6
-damage_mult = 3.0
-telegraph = 1.2
-max_hp_percent = 0.08
-
-[sub_resource type="Resource" id="Resource_4acee"]
-script = ExtResource("3_xxu2h")
-id = &"onrush"
-display_name = "Onrush"
-shape = 6
-reach = 0
-damage_mult = 4.0
-telegraph = 0.7
-windup = 2.5
-
-[sub_resource type="Resource" id="Resource_eim80"]
-script = ExtResource("3_xxu2h")
-id = &"red_tide"
-display_name = "Red Tide"
-shape = 5
-reach = 0
-span = 0
-damage_mult = 0.0
-telegraph = 5.0
-break_threshold = 4500.0
-finisher = SubResource("Resource_4acee")
-
-[sub_resource type="Resource" id="Resource_u30k6"]
-script = ExtResource("3_xxu2h")
-id = &"crimson_maelstrom"
-display_name = "Crimson Maelstrom"
-shape = 14
-reach = 0
-span = 4
-damage_mult = 0.0
-telegraph = 1.2
-windup = 2.5
-blaze_seconds = 6.0
-blaze_dps = 1.0
-
-[sub_resource type="Resource" id="Resource_w30pm"]
 script = ExtResource("1_s8kb7")
 id = &"crimson_shade"
 display_name = "Crimson Shade"
@@ -303,7 +26,7 @@ attack_damage = 35.0
 burst_mult = 2.5
 accent = Color(0.85, 0.34, 0.35500002, 1)
 
-[sub_resource type="Resource" id="Resource_3eth5"]
+[sub_resource type="Resource" id="Resource_b7mvm"]
 script = ExtResource("1_s8kb7")
 id = &"headhunter"
 display_name = "Headhunter"
@@ -314,7 +37,7 @@ targeting = 1
 soul_taker = true
 accent = Color(0.7, 0.1, 0.1, 1)
 
-[sub_resource type="Resource" id="Resource_ritdj"]
+[sub_resource type="Resource" id="Resource_pntgj"]
 script = ExtResource("1_s8kb7")
 id = &"berserker"
 display_name = "Berserker"
@@ -326,7 +49,7 @@ targeting = 2
 cleave_radius = 1
 accent = Color(0.75, 0.35, 0.12, 1)
 
-[sub_resource type="Resource" id="Resource_t8u5n"]
+[sub_resource type="Resource" id="Resource_vvtju"]
 script = ExtResource("1_s8kb7")
 id = &"scarlet_thorn"
 display_name = "Scarlet Thorn"
@@ -338,7 +61,7 @@ attack_range = 3
 ranged = true
 accent = Color(0.78, 0.22, 0.34, 1)
 
-[sub_resource type="Resource" id="Resource_pk28w"]
+[sub_resource type="Resource" id="Resource_78j3i"]
 script = ExtResource("1_s8kb7")
 id = &"blood_chalice"
 display_name = "Blood Chalice"
@@ -350,8 +73,300 @@ can_attack = false
 heal_boss = 0.003
 accent = Color(0.55, 0.14, 0.2, 1)
 
-[sub_resource type="Resource" id="Resource_m0rlo"]
+[sub_resource type="Resource" id="Resource_rvirp"]
+script = ExtResource("2_lqgl0")
+id = &"crimson_recovery"
+display_name = "Crimson Recovery"
+shape = 12
+reach = 0
+span = 0
+damage_mult = 0.0
+telegraph = 0.5
+retreat_seconds = 30.0
+retreat_heal = 0.003
+retreat_vulnerability = 0.0
+retreat_attack = 0.2
+retreat_summons = Array[ExtResource("1_s8kb7")]([SubResource("Resource_od8ds"), SubResource("Resource_od8ds"), SubResource("Resource_od8ds"), SubResource("Resource_b7mvm"), SubResource("Resource_b7mvm"), SubResource("Resource_pntgj"), SubResource("Resource_pntgj"), SubResource("Resource_vvtju"), SubResource("Resource_vvtju"), SubResource("Resource_vvtju"), SubResource("Resource_78j3i"), SubResource("Resource_78j3i")])
+
+[sub_resource type="Resource" id="Resource_twyko"]
+script = ExtResource("2_lqgl0")
+id = &"crescent_sweep"
+display_name = "Crescent Sweep"
+reach = 3
+
+[sub_resource type="Resource" id="Resource_44d0m"]
+script = ExtResource("2_lqgl0")
+id = &"falling_edge"
+display_name = "Falling Edge"
+shape = 1
+reach = 6
+damage_mult = 2.5
+
+[sub_resource type="Resource" id="Resource_qagpy"]
+script = ExtResource("2_lqgl0")
+id = &"crimson_arc"
+display_name = "Crimson Arc"
+shape = 13
+reach = 4
+damage_mult = 2.5
+telegraph = 0.9
+legs = 1
+arc_degrees = 100.0
+
+[sub_resource type="Resource" id="Resource_di884"]
+script = ExtResource("2_lqgl0")
+id = &"longspear"
+display_name = "Longspear"
+shape = 2
+reach = 7
+damage_mult = 3.0
+telegraph = 1.2
+max_hp_percent = 0.06
+
+[sub_resource type="Resource" id="Resource_ucgat"]
+script = ExtResource("2_lqgl0")
+id = &"breach_dash"
+display_name = "Breach Dash"
+shape = 3
+reach = 8
+
+[sub_resource type="Resource" id="Resource_ybyqy"]
+script = ExtResource("2_lqgl0")
+id = &"crimson_step"
+display_name = "Crimson Step"
+shape = 3
+reach = 3
+damage_mult = 1.0
+telegraph = 0.5
+
+[sub_resource type="Resource" id="Resource_p0xy4"]
 script = ExtResource("3_xxu2h")
+display_name = "First Blade"
+gap = 3.0
+surround_cooldown = 30.0
+big_chance = 0.0
+ranged_resist = 0.3
+long_range_resist = 0.45
+moves = Array[ExtResource("2_lqgl0")]([SubResource("Resource_twyko"), SubResource("Resource_44d0m"), SubResource("Resource_qagpy"), SubResource("Resource_di884"), SubResource("Resource_ucgat"), SubResource("Resource_ybyqy")])
+summons_on_start = 2
+summon_every = 22.0
+summon_count = 2
+music_path = "res://audio/boss/gebura_battle.mp3"
+music_label = "Theme 1"
+music_to = 91.6364
+
+[sub_resource type="Resource" id="Resource_c23a0"]
+script = ExtResource("2_lqgl0")
+id = &"twin_fang_cross"
+display_name = "Twin Fang Cross"
+shape = 7
+reach = 0
+span = 3
+damage_mult = 3.5
+telegraph = 1.6
+windup = 2.0
+max_hp_percent = 0.08
+
+[sub_resource type="Resource" id="Resource_1xfcm"]
+script = ExtResource("2_lqgl0")
+id = &"crossed_blades"
+display_name = "Crossed Blades"
+reach = 4
+span = 2
+damage_mult = 2.5
+telegraph = 0.9
+
+[sub_resource type="Resource" id="Resource_k1rwg"]
+script = ExtResource("2_lqgl0")
+id = &"scything_sweep"
+display_name = "Scything Sweep"
+shape = 13
+reach = 6
+telegraph = 0.7
+legs = 3
+arc_degrees = 70.0
+
+[sub_resource type="Resource" id="Resource_wk5wn"]
+script = ExtResource("2_lqgl0")
+id = &"silencing_edict"
+display_name = "Silencing Edict"
+shape = 15
+reach = 6
+damage_mult = 0.0
+telegraph = 0.6
+
+[sub_resource type="Resource" id="Resource_kgdra"]
+script = ExtResource("2_lqgl0")
+id = &"crimson_cross"
+display_name = "Crimson Cross"
+shape = 7
+reach = 0
+span = 3
+damage_mult = 3.0
+telegraph = 1.5
+windup = 2.5
+executes_top_tier = true
+
+[sub_resource type="Resource" id="Resource_xb0dc"]
+script = ExtResource("2_lqgl0")
+id = &"gathering_storm"
+display_name = "Gathering Storm"
+shape = 5
+reach = 0
+span = 0
+damage_mult = 0.0
+telegraph = 5.0
+finisher = SubResource("Resource_kgdra")
+
+[sub_resource type="Resource" id="Resource_ycxfj"]
+script = ExtResource("2_lqgl0")
+id = &"hunting_sweep"
+display_name = "Hunting Sweep"
+shape = 11
+reach = 40
+span = 3
+damage_mult = 2.5
+telegraph = 1.4
+windup = 2.5
+
+[sub_resource type="Resource" id="Resource_7qkaw"]
+script = ExtResource("2_lqgl0")
+id = &"scarlet_tide"
+display_name = "Scarlet Tide"
+shape = 8
+reach = 1
+span = 9
+damage_mult = 0.8
+telegraph = 1.4
+windup = 2.0
+
+[sub_resource type="Resource" id="Resource_nys1i"]
+script = ExtResource("3_xxu2h")
+display_name = "Twin Blades"
+hp_threshold = 0.75
+entry_pause = 3.0
+entry_move = SubResource("Resource_c23a0")
+gap = 2.3
+haste = 1.25
+lifesteal = 0.03
+attack_bonus = 0.4
+regen = 0.0005
+surround_cooldown = 20.0
+big_chance = 0.12
+ranged_resist = 0.4
+long_range_resist = 0.55
+moves = Array[ExtResource("2_lqgl0")]([SubResource("Resource_1xfcm"), SubResource("Resource_qagpy"), SubResource("Resource_ybyqy"), SubResource("Resource_twyko"), SubResource("Resource_k1rwg"), SubResource("Resource_di884"), SubResource("Resource_wk5wn"), SubResource("Resource_xb0dc"), SubResource("Resource_44d0m"), SubResource("Resource_ucgat"), SubResource("Resource_1xfcm"), SubResource("Resource_qagpy"), SubResource("Resource_ybyqy"), SubResource("Resource_twyko"), SubResource("Resource_k1rwg"), SubResource("Resource_ycxfj"), SubResource("Resource_di884"), SubResource("Resource_wk5wn"), SubResource("Resource_44d0m"), SubResource("Resource_ucgat"), SubResource("Resource_1xfcm"), SubResource("Resource_qagpy"), SubResource("Resource_ybyqy"), SubResource("Resource_7qkaw")])
+summons_on_start = 4
+summon_every = 16.0
+summon_count = 3
+minion_power = 1.1
+music_path = "res://audio/boss/gebura_battle.mp3"
+music_label = "Theme 2"
+music_from = 91.6364
+music_to = 183.2727
+
+[sub_resource type="Resource" id="Resource_4acee"]
+script = ExtResource("2_lqgl0")
+id = &"rending_storm"
+display_name = "Rending Storm"
+shape = 13
+reach = 9
+damage_mult = 3.0
+telegraph = 0.8
+windup = 2.0
+legs = 4
+
+[sub_resource type="Resource" id="Resource_eim80"]
+script = ExtResource("2_lqgl0")
+id = &"heaven_split"
+display_name = "Heaven Split"
+shape = 1
+reach = 8
+span = 3
+damage_mult = 4.5
+telegraph = 1.6
+hits_crystals = true
+max_hp_percent = 0.12
+
+[sub_resource type="Resource" id="Resource_u30k6"]
+script = ExtResource("2_lqgl0")
+id = &"shockwave"
+display_name = "Shockwave"
+shape = 8
+reach = 3
+span = 2
+damage_mult = 2.5
+telegraph = 1.4
+windup = 2.5
+
+[sub_resource type="Resource" id="Resource_w30pm"]
+script = ExtResource("2_lqgl0")
+id = &"crimson_pyre"
+display_name = "Crimson Pyre"
+shape = 14
+reach = 0
+span = 2
+damage_mult = 0.0
+blaze_seconds = 6.0
+
+[sub_resource type="Resource" id="Resource_3eth5"]
+script = ExtResource("2_lqgl0")
+id = &"horizon_split"
+display_name = "Horizon Split"
+reach = 5
+span = 3
+damage_mult = 4.0
+telegraph = 1.6
+hits_crystals = true
+max_hp_percent = 0.1
+
+[sub_resource type="Resource" id="Resource_ritdj"]
+script = ExtResource("2_lqgl0")
+id = &"pouncing_ruin"
+display_name = "Pouncing Ruin"
+shape = 4
+reach = 6
+damage_mult = 3.0
+telegraph = 1.2
+max_hp_percent = 0.08
+
+[sub_resource type="Resource" id="Resource_t8u5n"]
+script = ExtResource("2_lqgl0")
+id = &"onrush"
+display_name = "Onrush"
+shape = 6
+reach = 0
+damage_mult = 4.0
+telegraph = 0.7
+windup = 2.5
+
+[sub_resource type="Resource" id="Resource_pk28w"]
+script = ExtResource("2_lqgl0")
+id = &"red_tide"
+display_name = "Red Tide"
+shape = 5
+reach = 0
+span = 0
+damage_mult = 0.0
+telegraph = 5.0
+break_threshold = 4500.0
+finisher = SubResource("Resource_t8u5n")
+
+[sub_resource type="Resource" id="Resource_m0rlo"]
+script = ExtResource("2_lqgl0")
+id = &"crimson_maelstrom"
+display_name = "Crimson Maelstrom"
+shape = 14
+reach = 0
+span = 4
+damage_mult = 0.0
+telegraph = 1.2
+windup = 2.5
+blaze_seconds = 6.0
+blaze_dps = 1.0
+
+[sub_resource type="Resource" id="Resource_fc1ov"]
+script = ExtResource("2_lqgl0")
 id = &"crimson_retreat"
 display_name = "Crimson Retreat"
 shape = 12
@@ -360,10 +375,10 @@ span = 0
 damage_mult = 0.0
 telegraph = 0.5
 windup = 1.5
-retreat_summons = Array[ExtResource("1_s8kb7")]([SubResource("Resource_w30pm"), SubResource("Resource_w30pm"), SubResource("Resource_3eth5"), SubResource("Resource_ritdj"), SubResource("Resource_t8u5n"), SubResource("Resource_t8u5n"), SubResource("Resource_pk28w"), SubResource("Resource_pk28w")])
+retreat_summons = Array[ExtResource("1_s8kb7")]([SubResource("Resource_od8ds"), SubResource("Resource_od8ds"), SubResource("Resource_b7mvm"), SubResource("Resource_pntgj"), SubResource("Resource_vvtju"), SubResource("Resource_vvtju"), SubResource("Resource_78j3i"), SubResource("Resource_78j3i")])
 
-[sub_resource type="Resource" id="Resource_fc1ov"]
-script = ExtResource("3_xxu2h")
+[sub_resource type="Resource" id="Resource_pay7v"]
+script = ExtResource("2_lqgl0")
 id = &"blade_rain"
 display_name = "Blade Rain"
 shape = 10
@@ -372,12 +387,12 @@ damage_mult = 3.0
 telegraph = 1.4
 windup = 2.5
 
-[sub_resource type="Resource" id="Resource_pay7v"]
-script = ExtResource("2_lqgl0")
+[sub_resource type="Resource" id="Resource_sdnlc"]
+script = ExtResource("3_xxu2h")
 display_name = "Rending Arts"
 hp_threshold = 0.5
 entry_pause = 3.0
-entry_move = SubResource("Resource_wk5wn")
+entry_move = SubResource("Resource_4acee")
 gap = 2.0
 haste = 1.45
 lifesteal = 0.05
@@ -387,7 +402,7 @@ surround_cooldown = 14.0
 big_chance = 0.2
 ranged_resist = 0.5
 long_range_resist = 0.65
-moves = Array[ExtResource("3_xxu2h")]([SubResource("Resource_kgdra"), SubResource("Resource_di884"), SubResource("Resource_rvirp"), SubResource("Resource_qagpy"), SubResource("Resource_xb0dc"), SubResource("Resource_ycxfj"), SubResource("Resource_7qkaw"), SubResource("Resource_ucgat"), SubResource("Resource_nys1i"), SubResource("Resource_eim80"), SubResource("Resource_vvtju"), SubResource("Resource_kgdra"), SubResource("Resource_di884"), SubResource("Resource_rvirp"), SubResource("Resource_1xfcm"), SubResource("Resource_qagpy"), SubResource("Resource_ycxfj"), SubResource("Resource_7qkaw"), SubResource("Resource_ucgat"), SubResource("Resource_u30k6"), SubResource("Resource_nys1i"), SubResource("Resource_vvtju"), SubResource("Resource_kgdra"), SubResource("Resource_di884"), SubResource("Resource_m0rlo"), SubResource("Resource_rvirp"), SubResource("Resource_qagpy"), SubResource("Resource_ycxfj"), SubResource("Resource_7qkaw"), SubResource("Resource_fc1ov")])
+moves = Array[ExtResource("2_lqgl0")]([SubResource("Resource_eim80"), SubResource("Resource_k1rwg"), SubResource("Resource_ybyqy"), SubResource("Resource_1xfcm"), SubResource("Resource_u30k6"), SubResource("Resource_w30pm"), SubResource("Resource_3eth5"), SubResource("Resource_wk5wn"), SubResource("Resource_ritdj"), SubResource("Resource_pk28w"), SubResource("Resource_di884"), SubResource("Resource_eim80"), SubResource("Resource_k1rwg"), SubResource("Resource_ybyqy"), SubResource("Resource_7qkaw"), SubResource("Resource_1xfcm"), SubResource("Resource_w30pm"), SubResource("Resource_3eth5"), SubResource("Resource_wk5wn"), SubResource("Resource_m0rlo"), SubResource("Resource_ritdj"), SubResource("Resource_di884"), SubResource("Resource_eim80"), SubResource("Resource_k1rwg"), SubResource("Resource_fc1ov"), SubResource("Resource_ybyqy"), SubResource("Resource_1xfcm"), SubResource("Resource_w30pm"), SubResource("Resource_3eth5"), SubResource("Resource_pay7v")])
 summons_on_start = 5
 summon_every = 14.0
 summon_count = 3
@@ -396,8 +411,8 @@ music_path = "res://audio/boss/red_mist.mp3"
 music_label = "Theme 3"
 music_from = 0.0647
 
-[sub_resource type="Resource" id="Resource_sdnlc"]
-script = ExtResource("3_xxu2h")
+[sub_resource type="Resource" id="Resource_8le8t"]
+script = ExtResource("2_lqgl0")
 id = &"vermilion_judgement"
 display_name = "Vermilion Judgement"
 shape = 8
@@ -408,8 +423,8 @@ telegraph = 2.0
 windup = 3.0
 max_hp_percent = 0.12
 
-[sub_resource type="Resource" id="Resource_8le8t"]
-script = ExtResource("3_xxu2h")
+[sub_resource type="Resource" id="Resource_2esc1"]
+script = ExtResource("2_lqgl0")
 id = &"endless_onrush"
 display_name = "Endless Onrush"
 shape = 6
@@ -421,8 +436,8 @@ windup = 2.5
 legs = 9
 seeks_army = true
 
-[sub_resource type="Resource" id="Resource_2esc1"]
-script = ExtResource("3_xxu2h")
+[sub_resource type="Resource" id="Resource_mi80u"]
+script = ExtResource("2_lqgl0")
 id = &"thousand_cuts"
 display_name = "Thousand Cuts"
 shape = 9
@@ -432,8 +447,8 @@ telegraph = 1.2
 windup = 2.5
 executes_top_tier = true
 
-[sub_resource type="Resource" id="Resource_mi80u"]
-script = ExtResource("3_xxu2h")
+[sub_resource type="Resource" id="Resource_urqqn"]
+script = ExtResource("2_lqgl0")
 id = &"last_breath"
 display_name = "Last Breath"
 shape = 5
@@ -442,10 +457,10 @@ span = 0
 damage_mult = 0.0
 telegraph = 5.0
 break_threshold = 6000.0
-finisher = SubResource("Resource_2esc1")
+finisher = SubResource("Resource_mi80u")
 
-[sub_resource type="Resource" id="Resource_urqqn"]
-script = ExtResource("3_xxu2h")
+[sub_resource type="Resource" id="Resource_0yq46"]
+script = ExtResource("2_lqgl0")
 id = &"scarlet_sanctum"
 display_name = "Scarlet Sanctum"
 shape = 12
@@ -456,10 +471,10 @@ telegraph = 0.5
 windup = 1.5
 retreat_seconds = 9.0
 retreat_heal = 0.007
-retreat_summons = Array[ExtResource("1_s8kb7")]([SubResource("Resource_w30pm"), SubResource("Resource_w30pm"), SubResource("Resource_w30pm"), SubResource("Resource_3eth5"), SubResource("Resource_3eth5"), SubResource("Resource_ritdj"), SubResource("Resource_ritdj"), SubResource("Resource_t8u5n"), SubResource("Resource_t8u5n"), SubResource("Resource_t8u5n"), SubResource("Resource_pk28w"), SubResource("Resource_pk28w")])
+retreat_summons = Array[ExtResource("1_s8kb7")]([SubResource("Resource_od8ds"), SubResource("Resource_od8ds"), SubResource("Resource_od8ds"), SubResource("Resource_b7mvm"), SubResource("Resource_b7mvm"), SubResource("Resource_pntgj"), SubResource("Resource_pntgj"), SubResource("Resource_vvtju"), SubResource("Resource_vvtju"), SubResource("Resource_vvtju"), SubResource("Resource_78j3i"), SubResource("Resource_78j3i")])
 
-[sub_resource type="Resource" id="Resource_0yq46"]
-script = ExtResource("3_xxu2h")
+[sub_resource type="Resource" id="Resource_8w7cg"]
+script = ExtResource("2_lqgl0")
 id = &"great_shockwave"
 display_name = "Great Shockwave"
 shape = 8
@@ -470,8 +485,8 @@ telegraph = 1.5
 windup = 2.5
 max_hp_percent = 0.15
 
-[sub_resource type="Resource" id="Resource_8w7cg"]
-script = ExtResource("3_xxu2h")
+[sub_resource type="Resource" id="Resource_h2t2q"]
+script = ExtResource("2_lqgl0")
 id = &"blade_storm"
 display_name = "Blade Storm"
 shape = 10
@@ -482,12 +497,12 @@ windup = 2.5
 max_hp_percent = 0.1
 count = 40
 
-[sub_resource type="Resource" id="Resource_h2t2q"]
-script = ExtResource("2_lqgl0")
+[sub_resource type="Resource" id="Resource_o2ewg"]
+script = ExtResource("3_xxu2h")
 display_name = "Crimson Finale"
 hp_threshold = 0.25
 entry_pause = 3.0
-entry_move = SubResource("Resource_sdnlc")
+entry_move = SubResource("Resource_8le8t")
 gap = 1.8
 haste = 1.7
 lifesteal = 0.08
@@ -497,7 +512,7 @@ surround_cooldown = 10.0
 big_chance = 0.33
 ranged_resist = 0.6
 long_range_resist = 0.75
-moves = Array[ExtResource("3_xxu2h")]([SubResource("Resource_kgdra"), SubResource("Resource_di884"), SubResource("Resource_8le8t"), SubResource("Resource_rvirp"), SubResource("Resource_nys1i"), SubResource("Resource_mi80u"), SubResource("Resource_ycxfj"), SubResource("Resource_7qkaw"), SubResource("Resource_1xfcm"), SubResource("Resource_ucgat"), SubResource("Resource_vvtju"), SubResource("Resource_urqqn"), SubResource("Resource_qagpy"), SubResource("Resource_kgdra"), SubResource("Resource_0yq46"), SubResource("Resource_di884"), SubResource("Resource_rvirp"), SubResource("Resource_8w7cg")])
+moves = Array[ExtResource("2_lqgl0")]([SubResource("Resource_eim80"), SubResource("Resource_k1rwg"), SubResource("Resource_2esc1"), SubResource("Resource_ybyqy"), SubResource("Resource_ritdj"), SubResource("Resource_urqqn"), SubResource("Resource_w30pm"), SubResource("Resource_3eth5"), SubResource("Resource_7qkaw"), SubResource("Resource_wk5wn"), SubResource("Resource_di884"), SubResource("Resource_0yq46"), SubResource("Resource_1xfcm"), SubResource("Resource_eim80"), SubResource("Resource_8w7cg"), SubResource("Resource_k1rwg"), SubResource("Resource_ybyqy"), SubResource("Resource_h2t2q")])
 summons_on_start = 6
 summon_every = 12.0
 summon_count = 4
@@ -506,8 +521,8 @@ music_path = "res://audio/boss/gebura_battle.mp3"
 music_label = "Theme 4"
 music_from = 183.2727
 
-[sub_resource type="Resource" id="Resource_o2ewg"]
-script = ExtResource("3_xxu2h")
+[sub_resource type="Resource" id="Resource_kd7dq"]
+script = ExtResource("2_lqgl0")
 id = &"bladestorm_whirl"
 display_name = "Bladestorm Whirl"
 shape = 8
@@ -516,7 +531,7 @@ span = 3
 damage_mult = 3.5
 windup = 1.5
 
-[sub_resource type="Resource" id="Resource_kd7dq"]
+[sub_resource type="Resource" id="Resource_cmy1e"]
 script = ExtResource("1_s8kb7")
 id = &"thrall"
 display_name = "Crimson Thrall"
@@ -535,7 +550,7 @@ max_hp = 100000.0
 attack_damage = 100.0
 attack_speed = 0.9
 accent = Color(0.8, 0.12, 0.14, 1)
-phases = Array[ExtResource("2_lqgl0")]([SubResource("Resource_twyko"), SubResource("Resource_k1rwg"), SubResource("Resource_pay7v"), SubResource("Resource_h2t2q")])
+phases = Array[ExtResource("3_xxu2h")]([SubResource("Resource_p0xy4"), SubResource("Resource_nys1i"), SubResource("Resource_sdnlc"), SubResource("Resource_o2ewg")])
 crystal_order = PackedInt32Array(0, 1, 2)
 base_income = 4.0
 income_step = 2.0
@@ -552,8 +567,8 @@ upgrade_stat_growth = 1.2
 minion_hp = 420.0
 minion_attack = 35.0
 minion_cap = 16
-summon_pool = Array[ExtResource("1_s8kb7")]([SubResource("Resource_w30pm"), SubResource("Resource_3eth5"), SubResource("Resource_w30pm"), SubResource("Resource_ritdj"), SubResource("Resource_t8u5n")])
-swarm_kind = SubResource("Resource_kd7dq")
+summon_pool = Array[ExtResource("1_s8kb7")]([SubResource("Resource_od8ds"), SubResource("Resource_b7mvm"), SubResource("Resource_od8ds"), SubResource("Resource_pntgj"), SubResource("Resource_vvtju")])
+swarm_kind = SubResource("Resource_cmy1e")
 swarm_every = 40.0
 swarm_count = 14
 flank_kind = SubResource("Resource_hylck")
@@ -563,10 +578,12 @@ minion_ward_per_shade = 0.06
 enrage_attack = 0.4
 max_hit_percent = 0.01
 max_hit_growth = 0.05
+gate_phase = 3
+gate_move = SubResource("Resource_rvirp")
 ranged_resist = 0.45
 long_range_resist = 0.6
 death_power = 0.002
-surround_move = SubResource("Resource_o2ewg")
+surround_move = SubResource("Resource_kd7dq")
 crystal_share = 0.01
 crystal_big_cap = 10.0
 crystal_hit_damage = 150.0
