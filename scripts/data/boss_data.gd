@@ -166,6 +166,8 @@ extends Resource
 ## health per point of its damage multiplier (times the square root of her growth),
 ## at most `big_hp_cap`; an ordinary one deals `small_move_share` of her attack times
 ## its multiplier. 0 keeps the plain attack-times-multiplier for both.
+## Her big (wound-up) moves hit her own summons standing in them too.
+@export var friendly_fire: bool = false
 @export var big_hp_per_mult: float = 0.0
 @export var big_hp_cap: float = 0.0
 @export var small_move_share: float = 0.0

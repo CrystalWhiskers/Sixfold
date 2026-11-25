@@ -1206,9 +1206,14 @@ func _strike() -> void:
 	sim._emit("boss_strike", {uid = boss.uid, move = mv.id, name = mv.display_name,
 		cells = cells, cell = boss.cell})
 	var dmg := boss.stat(StatModifier.Stat.ATTACK_DAMAGE) * maxf(mv.damage_mult, 0.0)
+	var allies: Array[UnitInstance] = []
 	var victims: Array[UnitInstance] = []
 	for c in cells:
 		var v := sim.board.unit_at(c)
+		if v != null and v != boss and v.team == boss.team and v.is_alive() and is_big(mv) and not v.structure and data.friendly_fire:
+			# Her big moves do not spare her own: a summon standing in one is hit too.
+			allies.append(v)
+			continue
 		if v == null or v.team == boss.team or not v.is_alive() or v.sealed:
 			continue
 		if v.structure:
@@ -1255,6 +1260,9 @@ func _strike() -> void:
 		_soul_blow = mv.windup > 0.0
 		sim._damage(v, hit, boss, true)
 		_soul_blow = false
+	for a in allies:
+		if a.is_alive():
+			sim._damage(a, move_hit(mv, a), boss, true)
 	if not executed.is_empty():
 		sim._emit("boss_execute", {uid = boss.uid, name = mv.display_name, cells = executed,
 			tier = doomed, cell = boss.cell})

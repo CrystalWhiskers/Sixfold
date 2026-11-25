@@ -520,6 +520,8 @@ func _initialize() -> void:
 	# per point of the move's multiplier (Thousand Cuts, 3.5x, takes 35% — about 60% by
 	# phase 4), never more than 90%. Every other move is 75% of her attack times its
 	# multiplier.
+	# And her big moves do not spare her own summons.
+	b.friendly_fire = true
 	b.big_hp_per_mult = 0.10
 	b.big_hp_cap = 0.90
 	b.small_move_share = 0.75

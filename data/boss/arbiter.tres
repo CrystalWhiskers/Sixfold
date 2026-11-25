@@ -591,6 +591,7 @@ minion_burst_mult = 2.5
 minion_ward_per_shade = 0.06
 enrage_attack = 0.4
 max_hit_percent = 0.01
+friendly_fire = true
 big_hp_per_mult = 0.1
 big_hp_cap = 0.9
 small_move_share = 0.75

@@ -14429,6 +14429,28 @@ func _test_boss_executions(data: BossData) -> void:
 
 func _test_boss_units(_data: BossData) -> void:
 	_section("Boss defence: how the army's units behave here")
+	# Friendly fire: her big moves hit her own summons in them; ordinary ones do not.
+	var sff := _boss_board()
+	var bff2: BossFight = sff.bf
+	sff.sim._absorb_new_units()
+	var ff_cell := bff2._nearest_free(bff2.boss.cell + Vector2i(0, 3), bff2.boss.cell)
+	var own := bff2._spawn_minion(ff_cell, 1.0)
+	sff.sim._absorb_new_units()
+	var big_ff := _move_named(bff2.data, &"great_shockwave")
+	var small_ff := _move_named(bff2.data, &"crescent_sweep")
+	var cells_ff: Array[Vector2i] = [ff_cell]
+	var hp_own := own.current_hp
+	bff2.marked = {move = small_ff, cells = cells_ff, aim = ff_cell, step = 0, doom = 0, left = 0.0}
+	bff2._strike()
+	_check("her ordinary moves spare her own summons", is_equal_approx(own.current_hp, hp_own))
+	bff2.marked = {move = big_ff, cells = cells_ff, aim = ff_cell, step = 0, doom = 0, left = 0.0}
+	bff2._strike()
+	_check("but a big move hits her own summons standing in it",
+		BossFight.is_big(big_ff) and (own.current_hp < hp_own or not own.is_alive()),
+		"%.0f -> %.0f" % [hp_own, own.current_hp])
+	_check("and Onrush, both kinds, hits for a share of health",
+		_move_named(bff2.data, &"onrush").hp_scaled and _move_named(bff2.data, &"endless_onrush").hp_scaled)
+	BoardModel.reset_map()
 	# Her big moves hit for a share of the victim's own health; small ones off her attack.
 	var sm := _boss_board([["warden", "archer"], [], []])
 	var bfm: BossFight = sm.bf
