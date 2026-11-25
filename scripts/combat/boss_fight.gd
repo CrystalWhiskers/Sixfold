@@ -1538,7 +1538,8 @@ func _tick_summons() -> void:
 		flank_left -= CombatSim.TICK
 		if flank_left <= 0.0:
 			flank_left += data.flank_every
-			_flank()
+			if phase >= data.flank_from_phase:
+				_flank()
 	if data.swarm_kind != null and data.swarm_every > 0.0 and boss.is_alive():
 		swarm_left -= CombatSim.TICK
 		if swarm_left <= 0.0:
@@ -1706,10 +1707,13 @@ func summon_ceiling() -> int:
 func _swarm() -> void:
 	## A crowd of fodder at once, in circles spread round her.
 	var cells: Array[Vector2i] = []
-	for i in data.swarm_count:
+	var count := data.swarm_count
+	if phase == 0 and data.first_phase_swarm > 0:
+		count = mini(count, data.first_phase_swarm)
+	for i in count:
 		if minions_alive() + cells.size() >= summon_ceiling():
 			break
-		var ang := TAU * float(i) / float(maxi(data.swarm_count, 1))
+		var ang := TAU * float(i) / float(maxi(count, 1))
 		var r := 2.0 + float(i % 3)
 		var want := boss.cell + Vector2i(roundi(cos(ang) * r), roundi(sin(ang) * r) + 3)
 		var c := _free_tile_near(want, cells)

@@ -413,6 +413,9 @@ func _initialize() -> void:
 	b.swarm_kind = thrall
 	b.swarm_every = 40.0
 	b.swarm_count = 14
+	# Phase 1 is toned down: small swarms, no flankers, and (below) fewer, weaker waves.
+	b.first_phase_swarm = 6
+	b.flank_from_phase = 1
 	# Flankers: Stalkers at the edge of the arena behind your bows, two (plus one per
 	# phase) every 25 seconds, going straight for the ranged units.
 	var stalker := _minion(&"stalker", "Crimson Stalker", 260.0, 45.0, 1.3, 0.45, 1,
@@ -490,7 +493,7 @@ func _initialize() -> void:
 	b.long_range_resist = 0.6
 	b.death_power = 0.002
 	# A lot more of them: [on entering, every N seconds, how many, power].
-	var summons := [[2, 22.0, 2, 1.0], [4, 16.0, 3, 1.1], [5, 14.0, 3, 1.25], [6, 12.0, 4, 1.4]]
+	var summons := [[1, 30.0, 1, 0.7], [4, 16.0, 3, 1.1], [5, 14.0, 3, 1.25], [6, 12.0, 4, 1.4]]
 	for i in b.phases.size():
 		b.phases[i].summons_on_start = summons[i][0]
 		b.phases[i].summon_every = summons[i][1]

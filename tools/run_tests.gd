@@ -14498,6 +14498,7 @@ func _test_boss_attacks(data: BossData) -> void:
 	var sw := _boss_board()
 	var bfs: BossFight = sw.bf
 	var sims: CombatSim = sw.sim
+	bfs.phase = 1
 	bfs._swarm()
 	for i in int((data.summon_warning + 0.2) / CombatSim.TICK):
 		sims.step()
@@ -14525,6 +14526,12 @@ func _test_boss_attacks(data: BossData) -> void:
 	_check("now and then she calls a swarm of weak fodder, far past her ordinary cap",
 		data.swarm_kind != null and data.swarm_kind.max_hp < data.minion_hp and thralls >= 8
 		and thralls > 0, "%d thralls" % thralls)
+	_check("phase 1 is toned down: smaller swarms, no flankers, fewer and weaker waves",
+		data.first_phase_swarm > 0 and data.first_phase_swarm < data.swarm_count
+		and data.flank_from_phase >= 1
+		and data.phases[0].summon_count < data.phases[1].summon_count
+		and data.phases[0].summon_every > data.phases[1].summon_every
+		and data.phases[0].minion_power < 1.0)
 	BoardModel.reset_map()
 	_check("every phase has a quick short dash that just moves her",
 		stepping == data.phases.size(), "%d of %d phases" % [stepping, data.phases.size()])

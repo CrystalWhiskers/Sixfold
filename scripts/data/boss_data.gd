@@ -112,12 +112,16 @@ extends Resource
 @export var swarm_kind: BossMinion = null
 @export var swarm_every: float = 0.0
 @export var swarm_count: int = 12
+## Phase 1 is the warm-up: its swarms are only this many (0 to use `swarm_count`).
+@export var first_phase_swarm: int = 0
 ## Flankers: every `flank_every` seconds, `flank_count` (plus one per phase) of
 ## `flank_kind` step in at the edge of the arena nearest the army's ranged units,
 ## and go for them. 0 seconds for none.
 @export var flank_kind: BossMinion = null
 @export var flank_every: float = 0.0
 @export var flank_count: int = 2
+## The first phase (0-based) flankers come in; 1 keeps them out of phase 1.
+@export var flank_from_phase: int = 0
 ## A shade arrives with a blast: this many of its own hits to every one of the army
 ## standing within `minion_burst_radius` tiles of the circle. 0 for a quiet arrival.
 @export var minion_burst_mult: float = 0.0
