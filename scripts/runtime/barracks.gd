@@ -74,6 +74,7 @@ func setup(p_data: BossData, loadout: LoadoutData, seed_value: int) -> void:
 	types.clear()
 	level.clear()
 	_field_cache.clear()
+	_form_cache.clear()
 	revision = 0
 	for d in loadout.units:
 		if d != null and not level.has(d.id):
@@ -265,8 +266,49 @@ func field_data_at(d: UnitData, lv: int) -> UnitData:
 				target.set(field, float(target.get(field)) * float(value))
 			else:
 				target.set(field, value)
+	if data.upgrades != null and out.ability != null and out.ability.summon_unit != null:
+		var form := data.upgrades.form_at(d.id, lv)
+		if not form.is_empty():
+			out.ability.summon_unit = _form_chain(d.ability.summon_unit, form, d.id, lv)
 	_field_cache[key] = out
 	return out
+
+
+var _form_cache := {}
+
+
+func _form_chain(base: UnitData, form: Dictionary, owner: StringName, lv: int) -> UnitData:
+	## The summon's whole tier ladder in a form: every tier copied, the form applied,
+	## and the copies linked to each other so at_tier() walks the evolved ladder.
+	var key := "%s|%d" % [owner, lv]
+	if _form_cache.has(key):
+		return _form_cache[key]
+	var plain := BossStats.base_name(base.display_name)
+	var first: UnitData = null
+	var prev: UnitData = null
+	var cur := base
+	while cur != null:
+		var c: UnitData = cur.duplicate()
+		c.next_tier = null
+		c.display_name = String(form.get("name", plain)) + cur.display_name.substr(plain.length())
+		for raw in form:
+			var k := String(raw)
+			if not k.begins_with("u."):
+				continue
+			var field := k.substr(2)
+			if field.ends_with("*"):
+				field = field.trim_suffix("*")
+				c.set(field, float(c.get(field)) * float(form[raw]))
+			else:
+				c.set(field, form[raw])
+		if prev != null:
+			prev.next_tier = c
+		else:
+			first = c
+		prev = c
+		cur = cur.next_tier
+	_form_cache[key] = first
+	return first
 
 
 func statline(d: UnitData, lv: int) -> PackedStringArray:
@@ -288,6 +330,9 @@ func statline(d: UnitData, lv: int) -> PackedStringArray:
 			if obj == null or obj.get(field) == null:
 				continue
 			out.append("%s %s" % [field.replace("_", " ").capitalize(), _num(obj.get(field))])
+		var f_at := data.upgrades.form_at(d.id, lv)
+		if not f_at.is_empty():
+			out.append("Summons %s: %s" % [String(f_at.get("name", "")), String(f_at.get("desc", ""))])
 	return out
 
 
@@ -317,6 +362,9 @@ func level_changes(d: UnitData, lv: int) -> PackedStringArray:
 			continue
 		out.append(describe_change(field, a, b, k.begins_with("u.") and k.ends_with("*"),
 			d.get(field) if k.begins_with("u.") else null))
+	var f_now := data.upgrades.form_at(d.id, lv)
+	if not f_now.is_empty() and f_now != data.upgrades.form_at(d.id, lv - 1):
+		out.append("Summons become %s: %s" % [String(f_now.get("name", "")), String(f_now.get("desc", ""))])
 	return out
 
 

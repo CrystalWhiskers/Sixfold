@@ -1551,6 +1551,9 @@ func _worst_hurt_ally(u: UnitInstance, radius: int,
 
 
 func summon_cap(u: UnitInstance, ab: AbilityData) -> int:
+	if boss_fight != null and boss_fight.data != null and boss_fight.data.uncapped_summons.has(ab.id):
+		# Boss defence: no ceiling on this retinue, only its rate per tier.
+		return maxi(ceili(float(u.data.tier) * maxf(ab.summon_per_tier, 0.01)), 1)
 	if not ab.summon_cap_by_tier:
 		return maxi(ab.summon_max, 1)
 	# ceil() rather than round(), so a rate of 0.5 gives 1 at tier 1 rather than

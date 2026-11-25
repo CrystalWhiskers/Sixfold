@@ -17,10 +17,26 @@ extends Resource
 
 @export var levels: Dictionary = {}
 
+## Evolving summons: a unit id (the summoner) to a list of forms its summon takes,
+## form 1 at Lv1 and so on, the last held past the end. Each form is the WHOLE state
+## (so later ones keep what earlier ones gave): "name" and "desc", then "u.field"
+## set or "u.field*" multiplied on every tier of the summoned unit.
+@export var forms: Dictionary = {}
+
 const MAX_LEVEL := 5
 ## Ceilings for values carried on past Lv5, where an unbounded step would get silly:
 ## the Culverin's blast diamond and anyone's attack range.
 const LV10_CAPS := {"a.shell_arm": 5, "u.attack_range": 7}
+
+
+func form_at(id: StringName, level: int) -> Dictionary:
+	## The form a summoner's summon takes at `level`, or {} for its own.
+	if level <= 0 or not forms.has(id):
+		return {}
+	var list: Array = forms[id]
+	if list.is_empty():
+		return {}
+	return list[mini(level, list.size()) - 1]
 
 
 func has_unit(id: StringName) -> bool:

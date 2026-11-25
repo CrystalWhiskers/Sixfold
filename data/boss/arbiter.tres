@@ -575,6 +575,7 @@ swarm_kind = SubResource("Resource_cmy1e")
 swarm_every = 40.0
 swarm_count = 14
 first_phase_swarm = 6
+uncapped_summons = Array[StringName]([&"call_wisp"])
 flank_kind = SubResource("Resource_hylck")
 flank_every = 25.0
 flank_from_phase = 1

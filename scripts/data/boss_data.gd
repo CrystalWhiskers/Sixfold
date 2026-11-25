@@ -114,6 +114,9 @@ extends Resource
 @export var swarm_count: int = 12
 ## Phase 1 is the warm-up: its swarms are only this many (0 to use `swarm_count`).
 @export var first_phase_swarm: int = 0
+## Summon abilities (by id) that are not held to their `summon_max` here: the
+## retinue grows with tier and upgrades, without a ceiling.
+@export var uncapped_summons: Array[StringName] = []
 ## Flankers: every `flank_every` seconds, `flank_count` (plus one per phase) of
 ## `flank_kind` step in at the edge of the arena nearest the army's ranged units,
 ## and go for them. 0 seconds for none.

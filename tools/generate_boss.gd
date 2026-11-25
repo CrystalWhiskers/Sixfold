@@ -159,9 +159,9 @@ func _upgrades() -> BossUpgrades:
 		&"transcendence": _lv({"u.beam_splash": [0.1, 0.2, 0.3, 0.4, 0.6],
 			"u.attack_speed*": [1.05, 1.1, 1.15, 1.2, 1.3],
 			"u.move_time*": [0.95, 0.9, 0.85, 0.8, 0.7]}),
-		# Call Wisp: more wisps per tier, and a bigger retinue.
+		# Call Wisp: more wisps per tier, with no ceiling on the retinue here (see
+		# uncapped_summons) — and every level the wisps themselves evolve (forms below).
 		&"conjurer": _lv({"a.summon_per_tier": [1.25, 1.5, 1.75, 2.0, 3.0],
-			"a.summon_max": [6, 7, 8, 9, 12],
 			"u.mana_per_attack*": [1.1, 1.2, 1.3, 1.4, 1.6]}),
 		# Bombardment: a wider cross, and the ground burns longer.
 		&"culverin": _lv({"a.shell_arm": [1, 2, 2, 3, 4], "a.field_seconds": [6.0, 7.0, 8.0, 9.0, 12.0],
@@ -225,6 +225,26 @@ func _upgrades() -> BossUpgrades:
 		&"powderkeg": _lv({"a.blast_radius": [1, 2, 2, 2, 3],
 			"a.blast_attack_multiple": [5.5, 6.0, 6.5, 7.0, 9.0],
 			"u.move_time*": [0.95, 0.9, 0.85, 0.8, 0.7]}),
+	}
+	# The Conjurer's wisps evolve with its level, each form keeping everything the
+	# last one gave and adding something new.
+	u.forms = {
+		&"conjurer": [
+			{"name": "Greater Wisp", "desc": "tougher, and every hit wards it with a shield",
+				"u.max_hp*": 1.6, "u.attack_damage*": 1.6, "u.shield_on_hit": 0.04, "u.shield_cap": 0.5},
+			{"name": "Radiant Wisp", "desc": "+ its strikes pierce to the one behind",
+				"u.max_hp*": 2.2, "u.attack_damage*": 2.2, "u.shield_on_hit": 0.05, "u.shield_cap": 0.6,
+				"u.pierce_targets": 2},
+			{"name": "Elder Wisp", "desc": "+ attacks 30% faster and moves quicker",
+				"u.max_hp*": 3.0, "u.attack_damage*": 3.0, "u.shield_on_hit": 0.06, "u.shield_cap": 0.7,
+				"u.pierce_targets": 2, "u.attack_speed*": 1.3, "u.move_time*": 0.8},
+			{"name": "Ancient Wisp", "desc": "+ reaches two tiles and pierces three deep",
+				"u.max_hp*": 4.0, "u.attack_damage*": 4.0, "u.shield_on_hit": 0.07, "u.shield_cap": 0.8,
+				"u.pierce_targets": 3, "u.attack_speed*": 1.3, "u.move_time*": 0.8, "u.attack_range": 2},
+			{"name": "Sovereign Wisp", "desc": "+ everything at its strongest",
+				"u.max_hp*": 6.0, "u.attack_damage*": 6.0, "u.shield_on_hit": 0.10, "u.shield_cap": 1.0,
+				"u.pierce_targets": 4, "u.attack_speed*": 1.6, "u.move_time*": 0.7, "u.attack_range": 2},
+		],
 	}
 	return u
 
@@ -417,6 +437,8 @@ func _initialize() -> void:
 	b.swarm_count = 14
 	# Phase 1 is toned down: small swarms, no flankers, and (below) fewer, weaker waves.
 	b.first_phase_swarm = 6
+	# The Conjurer's retinue has no ceiling here: it grows with tier and its level.
+	b.uncapped_summons = [&"call_wisp"] as Array[StringName]
 	b.flank_from_phase = 1
 	# Flankers: Stalkers at the edge of the arena behind your bows, two (plus one per
 	# phase) every 25 seconds, going straight for the ranged units.
