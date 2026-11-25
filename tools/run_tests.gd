@@ -14031,7 +14031,8 @@ func _test_boss_defence() -> void:
 	var crossed_left := (bf.marked.cells as Array).has(left.cell)
 	var left_hp := left.current_hp
 	sim.step()
-	var chip := bf.boss.stat(StatModifier.Stat.ATTACK_DAMAGE) * wide.damage_mult * data.crystal_share
+	var chip := minf(bf.boss.stat(StatModifier.Stat.ATTACK_DAMAGE) * wide.damage_mult * data.crystal_share,
+		data.crystal_big_cap if data.crystal_big_cap > 0.0 else INF)
 	_check("a big move that sweeps over a crystal in its way chips it, by accident",
 		crossed_left and absf((left_hp - left.current_hp) - chip) < 1.0,
 		"%.0f taken, expected %.0f" % [left_hp - left.current_hp, chip])

@@ -1103,7 +1103,10 @@ func _strike() -> void:
 			# sweeps over one standing in the way hurts it, by `crystal_share` of the blow.
 			if mv.windup > 0.0 and data.crystal_share > 0.0:
 				_crystal_accident = true
-				sim._damage(v, dmg * data.crystal_share, boss, true)
+				var chip := dmg * data.crystal_share
+				if data.crystal_big_cap > 0.0:
+					chip = minf(chip, data.crystal_big_cap)
+				sim._damage(v, chip, boss, true)
 				_crystal_accident = false
 			continue
 		victims.append(v)

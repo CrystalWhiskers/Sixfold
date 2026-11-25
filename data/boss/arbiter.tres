@@ -565,4 +565,5 @@ ranged_resist = 0.45
 long_range_resist = 0.6
 death_power = 0.002
 surround_move = SubResource("Resource_o2ewg")
-crystal_share = 0.05
+crystal_share = 0.01
+crystal_big_cap = 10.0

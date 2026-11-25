@@ -367,8 +367,9 @@ func _initialize() -> void:
 	maelstrom.blaze_dps = 1.0
 	b.surround_count = 6
 	b.surround_cooldown = 10.0
-	# A big move chipping a crystal in its way does only 5% of its blow to it.
-	b.crystal_share = 0.05
+	# A big move chipping a crystal in its way: 99% resisted, and never more than 10.
+	b.crystal_share = 0.01
+	b.crystal_big_cap = 10.0
 	# The retreats: she vanishes to the back of the field, calls up all three kinds of
 	# summon, and heals while taking extra damage. Ride it out and she comes back
 	# stronger for good; beat her down a bar meanwhile and it is cut short.

@@ -165,6 +165,8 @@ extends Resource
 ## A big move (one with a wind-up) that sweeps over a crystal standing in the way
 ## hurts it by this share of the blow. Only by accident: she never aims at them.
 @export var crystal_share: float = 0.5
+## And never more than this from any one such blow. 0 for no cap.
+@export var crystal_big_cap: float = 0.0
 
 
 func phase_for(hp_fraction: float, central: bool) -> int:
