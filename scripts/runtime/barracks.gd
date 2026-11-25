@@ -30,6 +30,9 @@ var types: Array[UnitData] = []
 var level: Dictionary = {}
 ## Goes up on every upgrade, so whoever holds units of an upgraded type can notice.
 var revision := 0
+## Goes up on every change at all — a recruit, a move, a merge, a level — so the panel
+## can tell when it has anything new to draw.
+var changes := 0
 ## How far the ability table runs: Lv10 (carrying each unit's Lv4->Lv5 step on), or
 ## Lv5 and no further, past which only health and attack grow. Settings decides.
 var ability_cap := 10
@@ -186,6 +189,7 @@ func recruit(section: int) -> bool:
 func upgrade_income() -> bool:
 	if not _pay(income_price()):
 		return false
+	changes += 1
 	income += next_income_gain()
 	income_level += 1
 	return true
@@ -198,6 +202,7 @@ func upgrade_type(id: StringName) -> bool:
 	if not _pay(upgrade_price(id)):
 		return false
 	level[id] = level_of(id) + 1
+	changes += 1
 	revision += 1
 	return true
 
@@ -339,6 +344,7 @@ func free_slot(section: int) -> int:
 
 
 func _place(section: int, d: UnitData) -> int:
+	changes += 1
 	var i := free_slot(section)
 	if i >= 0 and d != null:
 		sections[section][i] = d
@@ -362,13 +368,16 @@ func drop(from_section: int, from_slot: int, to_section: int, to_slot: int) -> S
 	if b == null:
 		sections[to_section][to_slot] = a
 		sections[from_section][from_slot] = null
+		changes += 1
 		return "moved"
 	if can_merge(a, b):
 		sections[to_section][to_slot] = _merger.roll_merge_result(b)
 		sections[from_section][from_slot] = null
+		changes += 1
 		return "merged"
 	sections[to_section][to_slot] = a
 	sections[from_section][from_slot] = b
+	changes += 1
 	return "swapped"
 
 

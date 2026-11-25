@@ -295,7 +295,7 @@ func _process(delta: float) -> void:
 			_known_units = sim._units.size() + sim._pending_units.size()
 		if sim.is_finished():
 			_player.live = false
-	_panel.refresh()
+	_panel.refresh_if_changed()
 	if not _rebuild_at.is_empty():
 		_crystal_line.text = _crystal_text()
 	_enrage_line.text = enrage_text(_player.clock())

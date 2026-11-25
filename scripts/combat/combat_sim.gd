@@ -4144,6 +4144,17 @@ func _next_step(u: UnitInstance) -> Vector2i:
 	# wait behind anything that will move on its own. Falling straight through to
 	# a greedy step here is what made a corridor board time out — the units at
 	# the back scatter along the wall beside the jam instead of lining up for it.
+	if boss_fight != null:
+		# Boss defence: dozens of units queue at once, so the "as if my own side were not
+		# there" map is shared per tick too, like the main one. It counts the walker's
+		# own tile as open, which can only change tiles further away than the walker —
+		# never the step downhill it is choosing.
+		var team_cells := _team_cells(u.team)
+		if team_cells.size() > 1:
+			step = _downhill(u, _shared_friend_field(goal, team_cells), team_cells)
+			if step != u.cell:
+				return step
+		return _greedy_step(u, goal)
 	var friends := _friendly_cells(u)
 	if not friends.is_empty():
 		step = _downhill(u, _distance_field(goal, u.cell, friends), friends)
@@ -4162,6 +4173,35 @@ func wall_cost_for(u: UnitInstance) -> int:
 
 func is_impatient(u: UnitInstance) -> bool:
 	return u != null and u.dry_spell >= IMPATIENT_AFTER
+
+
+var _team_cells_cache: Dictionary = {}
+var _team_cells_at := -1.0
+var _team_cells_n := -1
+var _friend_field_cache: Dictionary = {}
+
+
+func _team_cells(team: int) -> Dictionary:
+	## Every living unit of `team`, by cell — once per tick.
+	if not is_equal_approx(_team_cells_at, elapsed) or _team_cells_n != _units.size():
+		_team_cells_n = _units.size()
+		_team_cells_cache.clear()
+		_friend_field_cache.clear()
+		_team_cells_at = elapsed
+	if not _team_cells_cache.has(team):
+		var out := {}
+		for other in _units:
+			if other.team == team and other.is_alive():
+				out[other.cell] = true
+		_team_cells_cache[team] = out
+	return _team_cells_cache[team]
+
+
+func _shared_friend_field(goal: Vector2i, team_cells: Dictionary) -> Dictionary:
+	var key := "%d,%d|%d|%d|%s" % [goal.x, goal.y, _field_team, _field_wall_cost, _field_gates]
+	if not _friend_field_cache.has(key):
+		_friend_field_cache[key] = _distance_field(goal, Vector2i(-99, -99), team_cells)
+	return _friend_field_cache[key]
 
 
 func _friendly_cells(u: UnitInstance) -> Dictionary:

@@ -26,6 +26,7 @@ var _header: Label = null
 var _income_btn: Button = null
 var _recruit_btns: Array[Button] = []
 var _merge_btns: Array[Button] = []
+var _last_key: Array = []
 var _type_btns: Array[Button] = []
 ## Where the upgrade bar starts, below the three sections.
 const BAR_Y := 230.0
@@ -96,6 +97,20 @@ func slot_at(p: Vector2) -> Vector2i:
 			if slot_rect(s, i).has_point(p):
 				return Vector2i(s, i)
 	return Vector2i(-1, -1)
+
+
+func refresh_if_changed() -> void:
+	## Called every frame by the boss screen: only rebuilds the labels and tooltips
+	## when something shown has actually changed — the whole Supply, anything in the
+	## Barracks, the passive-income countdown.
+	if barracks == null:
+		return
+	var grow := barracks.next_passive_in()
+	var key := [floori(barracks.supply), barracks.changes, ceili(grow) if not is_inf(grow) else -1]
+	if key == _last_key:
+		return
+	_last_key = key
+	refresh()
 
 
 func refresh() -> void:

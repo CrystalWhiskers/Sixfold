@@ -404,6 +404,24 @@ func outcome() -> int:
 	return UNDECIDED
 
 
+var _side_cache: Array[UnitInstance] = []
+var _side_cache_at := -1.0
+var _side_cache_n := -1
+
+
+func _her_side() -> Array[UnitInstance]:
+	## Her summons on the field, gathered once a tick: every unit of the army asks.
+	# Re-gathered each tick, and whenever anyone joins the field mid-tick.
+	if not is_equal_approx(_side_cache_at, sim.elapsed) or _side_cache_n != sim._units.size():
+		_side_cache_at = sim.elapsed
+		_side_cache_n = sim._units.size()
+		_side_cache.clear()
+		for m in sim._units:
+			if m.team == boss_team() and m != boss and m.is_alive():
+				_side_cache.append(m)
+	return _side_cache
+
+
 func player_target(u: UnitInstance) -> UnitInstance:
 	## What one of the player's units fights. The boss, whenever it can: if the boss
 	## is in reach it is the target whatever else is closer. A minion is fought only
@@ -416,8 +434,8 @@ func player_target(u: UnitInstance) -> UnitInstance:
 		return boss
 	var near: UnitInstance = null
 	var near_d := 1 << 30
-	for m in sim._units:
-		if not m.is_alive() or m.team != boss_team() or m == boss or m.is_hidden():
+	for m in _her_side():
+		if not m.is_alive() or m.team != boss_team() or m.is_hidden():
 			continue
 		if not BoardModel.in_reach(u.cell, m.cell, sim.reach_against(u, m)):
 			continue
