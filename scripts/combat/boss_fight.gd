@@ -1273,15 +1273,15 @@ func _strike() -> void:
 
 
 func move_hit(mv: BossMove, v: UnitInstance) -> float:
-	## What one of her moves does to one of the army. A BIG move (wound up first) hits
+	## What one of her moves does to one of the army. A MAP-WIDE move (hp_scaled) hits
 	## for a share of the victim's own full health — `big_hp_per_mult` per point of
 	## the move's multiplier, growing with the square root of how far she has grown —
-	## so it hurts a tank and a wisp alike. An ordinary move is a portion
+	## so it hurts a tank and a wisp alike. Everything else is a portion
 	## (`small_move_share`) of her attack times its multiplier. Either way, plus any
 	## share of full health the move carries of its own.
 	var full := v.stat(StatModifier.Stat.MAX_HP)
 	var extra := full * maxf(mv.max_hp_percent, 0.0)
-	if is_big(mv) and data.big_hp_per_mult > 0.0:
+	if mv.hp_scaled and data.big_hp_per_mult > 0.0:
 		var share := maxf(mv.damage_mult, 0.0) * data.big_hp_per_mult * sqrt(boss_scale())
 		if data.big_hp_cap > 0.0:
 			share = minf(share, data.big_hp_cap)

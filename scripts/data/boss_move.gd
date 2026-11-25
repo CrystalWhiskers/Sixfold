@@ -97,6 +97,9 @@ enum Shape {
 ## 10% of its max HP): the hit that stays dangerous to a tier 6 with ten thousand
 ## health. 0 for none.
 @export var max_hp_percent: float = 0.0
+## A map-wide move: hits for a share of each victim's full health (BossData
+## big_hp_per_mult) instead of off her attack.
+@export var hp_scaled: bool = false
 
 ## An execution: every unit it hits that is of the army's HIGHEST tier on the field
 ## right now dies outright — no shield, resistance or reflect saves it (only an

@@ -14346,6 +14346,17 @@ func sf4_barracks_of(bf: BossFight) -> Barracks:
 	return bf.barracks
 
 
+func _move_named(data: BossData, id: StringName) -> BossMove:
+	## A move of hers by id, wherever it sits: in a phase's cycle or as a finisher.
+	for p in data.phases:
+		for m in p.moves:
+			if m.id == id:
+				return m
+			if m.finisher != null and m.finisher.id == id:
+				return m.finisher
+	return BossMove.new()
+
+
 func _break(sim: CombatSim, crystal: UnitInstance, src: UnitInstance) -> void:
 	## Her blows on a crystal are a fixed amount now, so a test that wants one broken
 	## brings it to the edge first and lets one blow finish it.
@@ -14433,13 +14444,15 @@ func _test_boss_units(_data: BossData) -> void:
 	var small_mv: BossMove = null
 	for p in bfm.data.phases:
 		for m in p.moves:
-			if BossFight.is_big(m) and m.damage_mult > 0.0 and m.max_hp_percent <= 0.0 and big_mv == null:
+			if m.hp_scaled and m.damage_mult > 0.0 and m.max_hp_percent <= 0.0 and big_mv == null:
 				big_mv = m
-			if not BossFight.is_big(m) and m.damage_mult > 0.0 and m.max_hp_percent <= 0.0 and small_mv == null:
+			if not m.hp_scaled and m.damage_mult > 0.0 and m.max_hp_percent <= 0.0 and small_mv == null:
 				small_mv = m
 	if tank != null and frail != null and big_mv != null and small_mv != null:
 		var f_t := bfm.move_hit(big_mv, tank) / tank.stat(StatModifier.Stat.MAX_HP)
 		var f_f := bfm.move_hit(big_mv, frail) / frail.stat(StatModifier.Stat.MAX_HP)
+		_check("the map-wide moves (but not the Crimson Cross) hit by share of health",
+			_move_named(bfm.data, &"thousand_cuts").hp_scaled and not _move_named(bfm.data, &"crimson_cross").hp_scaled)
 		_check("a big move takes the same share of everyone's health",
 			is_equal_approx(f_t, f_f) and f_t > 0.0 and f_t <= bfm.data.big_hp_cap,
 			"%.2f vs %.2f" % [f_t, f_f])

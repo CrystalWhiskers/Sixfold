@@ -283,6 +283,10 @@ func _initialize() -> void:
 	# the stance, or her answer kills your best units outright.
 	for pair in [[heaven, 0.12], [horizon, 0.10], [pounce, 0.08], [spear, 0.06], [ring_big, 0.15], [rain_big, 0.10]]:
 		pair[0].max_hp_percent = pair[1]
+	# The map-wide moves hit for a share of each victim's own health — all but the
+	# Crimson Cross, which keeps hitting off her attack.
+	for m in [hunt, ring, ring_big, rain, rain_big, onrush, onrush_long, stripes]:
+		m.hp_scaled = true
 	cross.executes_top_tier = true
 	stripes.executes_top_tier = true
 	# The charge-up stances, and what each lets loose if it is not broken.
@@ -512,9 +516,10 @@ func _initialize() -> void:
 	b.max_hit_percent = 0.01
 	# ...growing very slowly with the army: +5% of that per average upgrade level.
 	b.max_hit_growth = 0.05
-	# Her big moves hit for a share of the victim's own health: 10% per point of the
-	# move's multiplier (Heaven Split, 4.5x, takes 45% — 78% by phase 4), never more
-	# than 90%. Her ordinary moves are 75% of her attack times their multiplier.
+	# Her map-wide moves (hp_scaled) hit for a share of the victim's own health: 10%
+	# per point of the move's multiplier (Thousand Cuts, 3.5x, takes 35% — about 60% by
+	# phase 4), never more than 90%. Every other move is 75% of her attack times its
+	# multiplier.
 	b.big_hp_per_mult = 0.10
 	b.big_hp_cap = 0.90
 	b.small_move_share = 0.75

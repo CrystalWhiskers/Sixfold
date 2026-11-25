@@ -229,6 +229,7 @@ span = 3
 damage_mult = 2.5
 telegraph = 1.4
 windup = 2.5
+hp_scaled = true
 
 [sub_resource type="Resource" id="Resource_7qkaw"]
 script = ExtResource("2_lqgl0")
@@ -299,6 +300,7 @@ span = 2
 damage_mult = 2.5
 telegraph = 1.4
 windup = 2.5
+hp_scaled = true
 
 [sub_resource type="Resource" id="Resource_w30pm"]
 script = ExtResource("2_lqgl0")
@@ -340,6 +342,7 @@ reach = 0
 damage_mult = 4.0
 telegraph = 0.7
 windup = 2.5
+hp_scaled = true
 
 [sub_resource type="Resource" id="Resource_pk28w"]
 script = ExtResource("2_lqgl0")
@@ -387,6 +390,7 @@ reach = 0
 damage_mult = 3.0
 telegraph = 1.4
 windup = 2.5
+hp_scaled = true
 
 [sub_resource type="Resource" id="Resource_sdnlc"]
 script = ExtResource("3_xxu2h")
@@ -435,6 +439,7 @@ damage_mult = 4.0
 telegraph = 0.6
 windup = 2.5
 legs = 9
+hp_scaled = true
 seeks_army = true
 
 [sub_resource type="Resource" id="Resource_mi80u"]
@@ -446,6 +451,7 @@ reach = 0
 damage_mult = 3.5
 telegraph = 1.2
 windup = 2.5
+hp_scaled = true
 executes_top_tier = true
 
 [sub_resource type="Resource" id="Resource_urqqn"]
@@ -485,6 +491,7 @@ damage_mult = 3.0
 telegraph = 1.5
 windup = 2.5
 max_hp_percent = 0.15
+hp_scaled = true
 
 [sub_resource type="Resource" id="Resource_h2t2q"]
 script = ExtResource("2_lqgl0")
@@ -496,6 +503,7 @@ damage_mult = 3.0
 telegraph = 1.4
 windup = 2.5
 max_hp_percent = 0.1
+hp_scaled = true
 count = 40
 
 [sub_resource type="Resource" id="Resource_o2ewg"]
