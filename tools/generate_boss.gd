@@ -512,6 +512,12 @@ func _initialize() -> void:
 	b.max_hit_percent = 0.01
 	# ...growing very slowly with the army: +5% of that per average upgrade level.
 	b.max_hit_growth = 0.05
+	# Her big moves hit for a share of the victim's own health: 10% per point of the
+	# move's multiplier (Heaven Split, 4.5x, takes 45% — 78% by phase 4), never more
+	# than 90%. Her ordinary moves are 75% of her attack times their multiplier.
+	b.big_hp_per_mult = 0.10
+	b.big_hp_cap = 0.90
+	b.small_move_share = 0.75
 	b.ranged_resist = 0.45
 	# Long range (4 tiles and more) gets through even less: 60% less.
 	b.long_range_resist = 0.6

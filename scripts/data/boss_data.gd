@@ -162,6 +162,13 @@ extends Resource
 ## (0 for no cap); ranged hits are cut by `ranged_resist` (0.3 = 30% less); and every
 ## one of the army that dies makes her `death_power` stronger (attack, for good).
 @export var max_hit_percent: float = 0.0
+## Her moves on the army. A big one deals `big_hp_per_mult` of the victim's full
+## health per point of its damage multiplier (times the square root of her growth),
+## at most `big_hp_cap`; an ordinary one deals `small_move_share` of her attack times
+## its multiplier. 0 keeps the plain attack-times-multiplier for both.
+@export var big_hp_per_mult: float = 0.0
+@export var big_hp_cap: float = 0.0
+@export var small_move_share: float = 0.0
 ## The cap grows by this much of itself per average upgrade level of the army (0.05
 ## = +5% a level), so upgrades still pay off against her, just slowly.
 @export var max_hit_growth: float = 0.0

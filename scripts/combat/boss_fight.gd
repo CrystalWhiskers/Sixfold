@@ -1251,7 +1251,7 @@ func _strike() -> void:
 			_soul_blow = false
 			continue
 		# And a share of the victim's own full health on top, for the moves that have it.
-		var hit := dmg + v.stat(StatModifier.Stat.MAX_HP) * maxf(mv.max_hp_percent, 0.0)
+		var hit := move_hit(mv, v)
 		_soul_blow = mv.windup > 0.0
 		sim._damage(v, hit, boss, true)
 		_soul_blow = false
@@ -1270,6 +1270,24 @@ func _strike() -> void:
 		_mark(mv, step + 1)
 	elif mv.shape == BossMove.Shape.STRIPES and step == 0:
 		_mark(mv, 1)
+
+
+func move_hit(mv: BossMove, v: UnitInstance) -> float:
+	## What one of her moves does to one of the army. A BIG move (wound up first) hits
+	## for a share of the victim's own full health — `big_hp_per_mult` per point of
+	## the move's multiplier, growing with the square root of how far she has grown —
+	## so it hurts a tank and a wisp alike. An ordinary move is a portion
+	## (`small_move_share`) of her attack times its multiplier. Either way, plus any
+	## share of full health the move carries of its own.
+	var full := v.stat(StatModifier.Stat.MAX_HP)
+	var extra := full * maxf(mv.max_hp_percent, 0.0)
+	if is_big(mv) and data.big_hp_per_mult > 0.0:
+		var share := maxf(mv.damage_mult, 0.0) * data.big_hp_per_mult * sqrt(boss_scale())
+		if data.big_hp_cap > 0.0:
+			share = minf(share, data.big_hp_cap)
+		return full * share + extra
+	var portion := data.small_move_share if data.small_move_share > 0.0 else 1.0
+	return boss.stat(StatModifier.Stat.ATTACK_DAMAGE) * maxf(mv.damage_mult, 0.0) * portion + extra
 
 
 func _land(mv: BossMove, cells: Array[Vector2i], aim: Vector2i) -> void:

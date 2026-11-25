@@ -13469,6 +13469,7 @@ func _test_boss_defence() -> void:
 		marks.size() == 1 and not String(marks[0].name).is_empty()
 		and (marks[0].cells as Array).has(near.cell))
 	var hurt_before := near.current_hp
+	var ehp_before := near.current_hp + near.shield
 	var secs: float = float(marks[0].seconds) if not marks.is_empty() else 1.0
 	for i in int(secs / CombatSim.TICK) - 1:
 		sim.step()
@@ -13479,8 +13480,8 @@ func _test_boss_defence() -> void:
 		sim.step()
 	var strikes := _kind_events(sim, "boss_strike")
 	_check("then it strikes the marked tiles",
-		strikes.size() == 1 and near.current_hp < hurt_before,
-		"%.0f -> %.0f" % [hurt_before, near.current_hp])
+		strikes.size() == 1 and near.current_hp + near.shield < ehp_before,
+		"%.0f -> %.0f" % [ehp_before, near.current_hp + near.shield])
 	_check("and nothing outside them",
 		is_equal_approx(away.current_hp, away.stat(StatModifier.Stat.MAX_HP)))
 	if not marks.is_empty() and not strikes.is_empty():
@@ -14417,6 +14418,38 @@ func _test_boss_executions(data: BossData) -> void:
 
 func _test_boss_units(_data: BossData) -> void:
 	_section("Boss defence: how the army's units behave here")
+	# Her big moves hit for a share of the victim's own health; small ones off her attack.
+	var sm := _boss_board([["warden", "archer"], [], []])
+	var bfm: BossFight = sm.bf
+	sm.sim._absorb_new_units()
+	var tank: UnitInstance = null
+	var frail: UnitInstance = null
+	for u in sm.sim._units:
+		if u.is_alive() and u.data.id == &"warden":
+			tank = u
+		if u.is_alive() and u.data.id == &"archer":
+			frail = u
+	var big_mv: BossMove = null
+	var small_mv: BossMove = null
+	for p in bfm.data.phases:
+		for m in p.moves:
+			if BossFight.is_big(m) and m.damage_mult > 0.0 and m.max_hp_percent <= 0.0 and big_mv == null:
+				big_mv = m
+			if not BossFight.is_big(m) and m.damage_mult > 0.0 and m.max_hp_percent <= 0.0 and small_mv == null:
+				small_mv = m
+	if tank != null and frail != null and big_mv != null and small_mv != null:
+		var f_t := bfm.move_hit(big_mv, tank) / tank.stat(StatModifier.Stat.MAX_HP)
+		var f_f := bfm.move_hit(big_mv, frail) / frail.stat(StatModifier.Stat.MAX_HP)
+		_check("a big move takes the same share of everyone's health",
+			is_equal_approx(f_t, f_f) and f_t > 0.0 and f_t <= bfm.data.big_hp_cap,
+			"%.2f vs %.2f" % [f_t, f_f])
+		_check("an ordinary move is a portion of her attack",
+			is_equal_approx(bfm.move_hit(small_mv, tank), bfm.move_hit(small_mv, frail))
+			and is_equal_approx(bfm.move_hit(small_mv, tank),
+				bfm.boss.stat(StatModifier.Stat.ATTACK_DAMAGE) * small_mv.damage_mult * bfm.data.small_move_share))
+	else:
+		_check("the move damage test could set up", false)
+	BoardModel.reset_map()
 	# The Conjurer: no ceiling on its wisps here, and the wisps evolve with its level.
 	var sc := _boss_board([["conjurer"], [], []])
 	var bkc: Barracks = sc.barracks
