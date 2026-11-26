@@ -892,6 +892,25 @@ func _run() -> void:
 	_check("cycling all the way round comes back to where it started",
 		GameSetup.units_for(BoardModel.TEAM_B) == wrapped)
 
+	# Click a slot: a picker with every unit in the roster, one click to choose.
+	editor.open_picker(BoardModel.TEAM_B, 1)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check("clicking a slot opens a picker with every unit in it",
+		editor.picker_open() and editor._picker_grid.get_child_count() == GameSetup.catalogue.size(),
+		"%d of %d" % [editor._picker_grid.get_child_count(), GameSetup.catalogue.size()])
+	var fits := true
+	var view_rect := editor.get_viewport_rect()
+	for c in editor._picker_grid.get_children():
+		var r := (c as Control).get_global_rect()
+		if r.position.x < view_rect.position.x - 1.0 or r.end.x > view_rect.end.x + 1.0:
+			fits = false
+	_check("and every choice fits across the screen", fits)
+	var pick := GameSetup.catalogue.size() - 1
+	editor._on_pick(pick)
+	_check("one click on a unit puts it in that slot and closes the picker",
+		not editor.picker_open() and GameSetup.units_for(BoardModel.TEAM_B)[1] == GameSetup.catalogue[pick])
+
 	for i in GameSetup.SLOTS:
 		GameSetup.set_slot(BoardModel.TEAM_B, i, 1)
 	_check("a player can stack the same unit in every slot",

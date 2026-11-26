@@ -72,7 +72,7 @@ func _ready() -> void:
 	page.add_child(column)
 
 	var blurb := Label.new()
-	blurb.text = "Pick the board, then fill five slots each. Repeat a unit to weight your draw toward it — and to weight the merge lottery, which rolls from this same list. Hover a slot to read what that unit does."
+	blurb.text = "Pick the board, then fill five slots each. Repeat a unit to weight your draw toward it — and to weight the merge lottery, which rolls from this same list. Click a slot to pick from every unit, or use the arrows; hover a slot to read what that unit does."
 	blurb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	blurb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	blurb.custom_minimum_size = Vector2(PANEL_WIDTH, 0.0)
@@ -274,6 +274,9 @@ func _build_team_block(team: int) -> Control:
 		name_label.add_theme_font_size_override("font_size", 16)
 		name_label.mouse_filter = Control.MOUSE_FILTER_STOP
 		name_label.mouse_entered.connect(_on_slot_hovered.bind(team, i))
+		# Click the slot to pick straight from the whole roster.
+		name_label.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		name_label.gui_input.connect(_on_slot_input.bind(team, i))
 		row.add_child(name_label)
 		rows.append(name_label)
 
@@ -423,6 +426,148 @@ func _refresh_detail() -> void:
 	show_unit(null if first.is_empty() else first[0])
 
 
+# --- The unit picker: click a slot, choose from every unit at once ------------
+
+var _picker: Control = null
+var _picker_title: Label = null
+var _picker_grid: GridContainer = null
+var _pick_team := -1
+var _pick_index := -1
+const PICKER_COLUMNS := 3
+
+
+func _on_slot_input(event: InputEvent, team: int, index: int) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		Audio.play_select()
+		open_picker(team, index)
+		accept_event()
+
+
+func open_picker(team: int, index: int) -> void:
+	## A grid of every unit in the roster over the editor; one click puts the unit
+	## in this slot.
+	_pick_team = team
+	_pick_index = index
+	if _picker == null:
+		_build_picker()
+	_picker_title.text = "%s  ·  slot %d  —  pick a unit" % [_heading(team), index + 1]
+	for c in _picker_grid.get_children():
+		c.queue_free()
+	var current := GameSetup.units_for(team)
+	var here: UnitData = current[index] if index < current.size() else null
+	for i in GameSetup.catalogue.size():
+		var d: UnitData = GameSetup.catalogue[i]
+		var b := Button.new()
+		b.custom_minimum_size = Vector2(196.0, 50.0)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.tooltip_text = UnitCodex.card(d)
+		b.toggle_mode = true
+		b.button_pressed = d == here
+		# Icon then name, laid out inside the button; the button itself has no text.
+		var inside := HBoxContainer.new()
+		inside.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		inside.offset_left = 8.0
+		inside.add_theme_constant_override("separation", 8)
+		inside.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(inside)
+		var icon := UnitIcon.new()
+		icon.custom_minimum_size = ICON_SIZE
+		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		inside.add_child(icon)
+		icon.set_unit(d)
+		var title_l := Label.new()
+		title_l.text = "%s\n%s" % [d.display_name, d.range_name()]
+		title_l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		title_l.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		title_l.add_theme_font_size_override("font_size", 13)
+		title_l.add_theme_color_override("font_color", Color(0.98, 0.86, 0.46) if d == here
+			else Color(0.88, 0.90, 0.95))
+		title_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		inside.add_child(title_l)
+		b.mouse_entered.connect(show_unit.bind(d))
+		b.pressed.connect(_on_pick.bind(i))
+		_picker_grid.add_child(b)
+	_picker.visible = true
+
+
+func close_picker() -> void:
+	if _picker != null:
+		_picker.visible = false
+
+
+func picker_open() -> bool:
+	return _picker != null and _picker.visible
+
+
+func _on_pick(unit_index: int) -> void:
+	Audio.play_confirm()
+	GameSetup.set_slot(_pick_team, _pick_index, unit_index)
+	show_unit(GameSetup.catalogue[unit_index])
+	close_picker()
+	refresh()
+
+
+func _build_picker() -> void:
+	_picker = Control.new()
+	_picker.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_picker.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(_picker)
+	var dim := ColorRect.new()
+	dim.color = Color(0.0, 0.0, 0.0, 0.70)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	dim.gui_input.connect(func(e: InputEvent) -> void:
+		if e is InputEventMouseButton and e.pressed:
+			close_picker())
+	_picker.add_child(dim)
+	var card := PanelContainer.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.09, 0.10, 0.14, 0.99)
+	style.border_color = Color(0.45, 0.50, 0.60)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(8)
+	style.set_content_margin_all(12)
+	card.add_theme_stylebox_override("panel", style)
+	card.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	card.offset_left = 30.0
+	card.offset_right = -30.0
+	card.offset_top = 70.0
+	card.offset_bottom = -70.0
+	_picker.add_child(card)
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 10)
+	card.add_child(column)
+	_picker_title = Label.new()
+	_picker_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_picker_title.add_theme_font_size_override("font_size", 18)
+	column.add_child(_picker_title)
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	column.add_child(scroll)
+	_picker_grid = GridContainer.new()
+	_picker_grid.columns = PICKER_COLUMNS
+	_picker_grid.add_theme_constant_override("h_separation", 8)
+	_picker_grid.add_theme_constant_override("v_separation", 8)
+	_picker_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(_picker_grid)
+	var cancel := Button.new()
+	cancel.text = "Cancel"
+	cancel.custom_minimum_size = Vector2(150, 44)
+	cancel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	cancel.pressed.connect(Audio.play_select)
+	cancel.pressed.connect(close_picker)
+	column.add_child(cancel)
+	_picker.visible = false
+
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	if picker_open() and event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+		close_picker()
+		get_viewport().set_input_as_handled()
+
+
 func _on_cycle(team: int, index: int, step: int) -> void:
 	GameSetup.cycle_slot(team, index, step)
 	refresh()
@@ -434,5 +579,6 @@ func _on_reset() -> void:
 
 
 func _on_done() -> void:
+	close_picker()
 	visible = false
 	closed.emit()
