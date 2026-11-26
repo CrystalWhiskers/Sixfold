@@ -306,7 +306,8 @@ func _initialize() -> void:
 	# The economy. See BossData for what each number does.
 	b.start_supply = 20.0
 	b.base_income = 4.0
-	b.income_step = 2.0
+	# Each income upgrade gives twice what it used to: +4, +6, +12, +22, +36...
+	b.income_step = 4.0
 	b.income_cost = 30.0
 	# Income upgrades: the price climbs exponentially, x2.2 each (30, 66, 145, 319, 702,
 	# 1546...), the gain only quadratically (+2, +3, +6, +11, +18, +27...), so each takes
