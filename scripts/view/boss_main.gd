@@ -397,6 +397,8 @@ func _on_event(e: Dictionary) -> void:
 			_stance_need = 0.0
 			_status.text = "%s is empowered — and lets loose!" % boss_data.display_name
 		"boss_summon":
+			if bool(e.get("edge", false)):
+				return  # her steady trickle at the edge is not news every time
 			_status.text = ("%s calls a swarm of thralls!" if bool(e.get("swarm", false)) else ("%s's Stalkers close in on your ranged units from the edge!" if bool(e.get("flank", false)) else "%s calls her shades — stay out of the circles!")) % boss_data.display_name
 		"boss_retreat":
 			if bool(e.get("gate", false)):

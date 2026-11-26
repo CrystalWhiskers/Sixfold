@@ -472,6 +472,13 @@ func _initialize() -> void:
 	b.flank_kind = stalker
 	b.flank_every = 25.0
 	b.flank_count = 2
+	# And she never stops calling: every 8 s a few of her summons step in at the edge
+	# of the arena — one at first, one more every minute, up to six at a time — so a
+	# long fight fills up with them.
+	b.edge_every = 8.0
+	b.edge_count = 1
+	b.edge_ramp_seconds = 60.0
+	b.edge_count_max = 6
 	var retreat := _move(&"crimson_retreat", "Crimson Retreat", S.RETREAT, 0, 0, 0.0, 0.5)
 	retreat.windup = 1.5
 	retreat.retreat_summons = [shade, shade, hunter, berserker, thorn, thorn, chalice, chalice] as Array[BossMinion]

@@ -1726,6 +1726,11 @@ func _tick_summons() -> void:
 			flank_left += data.flank_every
 			if phase >= data.flank_from_phase:
 				_flank()
+	if data.edge_every > 0.0 and boss.is_alive():
+		edge_left -= CombatSim.TICK
+		if edge_left <= 0.0:
+			edge_left += data.edge_every
+			_edge_summon()
 	if data.swarm_kind != null and data.swarm_every > 0.0 and boss.is_alive():
 		swarm_left -= CombatSim.TICK
 		if swarm_left <= 0.0:
@@ -1827,6 +1832,46 @@ var _pool_n := 0
 var swarm_left := 30.0
 ## Seconds until her next flankers.
 var flank_left := 20.0
+## Her constant reinforcements at the edge of the arena: a few at a time, more as the
+## fight goes on.
+var edge_left := 10.0
+var _edge_n := 0
+
+
+func edge_count() -> int:
+	## How many step in at the edge each time: `edge_count` at first, one more every
+	## `edge_ramp_seconds`, up to `edge_count_max`.
+	var extra := int(sim.elapsed / maxf(data.edge_ramp_seconds, 1.0))
+	return clampi(data.edge_count + extra, 0, maxi(data.edge_count_max, data.edge_count))
+
+
+func _edge_summon() -> void:
+	## A few of her summons step in at random spots along the edge of the arena.
+	if data.summon_pool.is_empty():
+		return
+	var cells: Array[Vector2i] = []
+	for i in edge_count():
+		if minions_alive() + cells.size() >= summon_ceiling():
+			break
+		var side := sim.rng.randi_range(0, 2)
+		var want: Vector2i
+		if side == 0:
+			want = Vector2i(0, sim.rng.randi_range(HUB_ROWS, HEIGHT - 1))
+		elif side == 1:
+			want = Vector2i(WIDTH - 1, sim.rng.randi_range(HUB_ROWS, HEIGHT - 1))
+		else:
+			want = Vector2i(sim.rng.randi_range(0, WIDTH - 1), HEIGHT - 1)
+		var c := _free_tile_near(want, cells)
+		if c == NO_AIM:
+			continue
+		cells.append(c)
+		var kind: BossMinion = data.summon_pool[_edge_n % data.summon_pool.size()]
+		_edge_n += 1
+		_summon_marks.append({cell = c, left = data.summon_warning,
+			power = _phase().minion_power if _phase() != null else 1.0, kind = kind})
+	if not cells.is_empty():
+		sim._emit("boss_summon", {uid = boss.uid, cells = cells, seconds = data.summon_warning,
+			cell = boss.cell, edge = true})
 
 
 func _flank() -> void:

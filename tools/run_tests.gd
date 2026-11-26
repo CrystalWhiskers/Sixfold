@@ -14444,6 +14444,25 @@ func _test_boss_executions(data: BossData) -> void:
 
 func _test_boss_units(_data: BossData) -> void:
 	_section("Boss defence: how the army's units behave here")
+	# She never stops calling: a trickle at the arena's edge that grows into an army.
+	var sr3 := _boss_board()
+	var bfr3: BossFight = sr3.bf
+	var simr3: CombatSim = sr3.sim
+	var early := bfr3.edge_count()
+	simr3.elapsed = 300.0
+	var late := bfr3.edge_count()
+	_check("she calls a few at the edge at first and more as the fight goes on",
+		early == bfr3.data.edge_count and late > early and late <= bfr3.data.edge_count_max,
+		"%d then %d" % [early, late])
+	var marks0 := bfr3._summon_marks.size()
+	bfr3._edge_summon()
+	var edge_ok := bfr3._summon_marks.size() > marks0
+	for k in range(marks0, bfr3._summon_marks.size()):
+		var c: Vector2i = bfr3._summon_marks[k].cell
+		if not (c.x <= 5 or c.x >= BossFight.WIDTH - 6 or c.y >= BossFight.HEIGHT - 6):
+			edge_ok = false
+	_check("and they step in at the edge of the arena", edge_ok)
+	BoardModel.reset_map()
 	# The Ember Caster: its bolts splash a little onto what stands round the target.
 	var se := _boss_board([["warden", "warden"], [], []])
 	var bfe: BossFight = se.bf

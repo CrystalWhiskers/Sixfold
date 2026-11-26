@@ -600,6 +600,7 @@ first_phase_swarm = 6
 uncapped_summons = Array[StringName]([&"call_wisp"])
 flank_kind = SubResource("Resource_hylck")
 flank_every = 25.0
+edge_every = 8.0
 flank_from_phase = 1
 minion_burst_mult = 2.5
 minion_ward_per_shade = 0.06

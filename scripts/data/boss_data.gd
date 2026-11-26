@@ -128,6 +128,13 @@ extends Resource
 @export var flank_kind: BossMinion = null
 @export var flank_every: float = 0.0
 @export var flank_count: int = 2
+## Reinforcements: every `edge_every` seconds `edge_count` of her summons (in pool
+## order) step in at random spots on the arena's edge — one more every
+## `edge_ramp_seconds`, up to `edge_count_max`. 0 seconds for none.
+@export var edge_every: float = 0.0
+@export var edge_count: int = 1
+@export var edge_ramp_seconds: float = 60.0
+@export var edge_count_max: int = 6
 ## The first phase (0-based) flankers come in; 1 keeps them out of phase 1.
 @export var flank_from_phase: int = 0
 ## A shade arrives with a blast: this many of its own hits to every one of the army
