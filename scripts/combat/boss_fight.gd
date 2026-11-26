@@ -2090,10 +2090,11 @@ func _tick_rebuilds() -> void:
 		if c.is_alive():
 			continue
 		if not rebuilding.has(i):
-			# A fixed time, every break. (Her enrage keeps quickening her swing without
-			# end, so she still out-paces the rebuilds in the end.)
-			times_broken[i] = int(times_broken.get(i, 0)) + 1
-			var secs := data.crystal_rebuild_seconds
+			# Each break of the same crystal takes `crystal_rebuild_step` seconds longer
+			# to come back: 90, 120, 150...
+			var before := int(times_broken.get(i, 0))
+			times_broken[i] = before + 1
+			var secs := data.crystal_rebuild_seconds + data.crystal_rebuild_step * float(before)
 			rebuilding[i] = secs
 			sim._emit("crystal_rebuilding", {uid = c.uid, cell = c.cell, lane = i,
 				seconds = secs})

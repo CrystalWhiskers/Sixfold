@@ -559,6 +559,7 @@ attack_speed = 0.9
 accent = Color(0.8, 0.12, 0.14, 1)
 phases = Array[ExtResource("3_xxu2h")]([SubResource("Resource_p0xy4"), SubResource("Resource_nys1i"), SubResource("Resource_sdnlc"), SubResource("Resource_o2ewg")])
 crystal_order = PackedInt32Array(0, 1, 2)
+crystal_rebuild_step = 30.0
 crystal_rebuild_decay = 0.5
 base_income = 4.0
 income_step = 4.0

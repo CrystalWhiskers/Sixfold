@@ -14127,9 +14127,11 @@ func _test_boss_defence() -> void:
 	_check("and once it falls again the centre is open to her again",
 		bf.current_target() == bf.crystals[3])
 	sim.step()
-	_check("every rebuild takes the same fixed time, however often it has broken",
+	_check("each time a crystal breaks it takes 30 s longer to come back",
 		bf.times_broken.get(0, 0) >= 2
-		and absf(float(bf.rebuilding.get(0, 0.0)) - bf.data.crystal_rebuild_seconds) <= CombatSim.TICK * 1.5,
+		and absf(float(bf.rebuilding.get(0, 0.0)) - (bf.data.crystal_rebuild_seconds
+			+ bf.data.crystal_rebuild_step * float(bf.times_broken.get(0, 0) - 1))) <= CombatSim.TICK * 1.5
+		and bf.data.crystal_rebuild_step == 30.0,
 		"%.1f s" % float(bf.rebuilding.get(0, 0.0)))
 	_check("and no matter how she calls them, her summons stop at a ceiling",
 		bf.summon_ceiling() == bf.data.minion_cap * 2)

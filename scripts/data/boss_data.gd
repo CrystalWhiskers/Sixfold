@@ -38,6 +38,8 @@ extends Resource
 ## While it is down, its section's waves go to the Central Crystal instead.
 @export var crystal_rebuild_seconds: float = 90.0
 @export var crystal_rebuild_fraction: float = 0.5
+## Each later rebuild of the same crystal takes this many seconds longer than the last.
+@export var crystal_rebuild_step: float = 0.0
 ## Each rebuild of the same crystal comes back at this share of the last one's health
 ## (0.5: 50%, 25%, 12.5%...). 0 for the same every time.
 @export var crystal_rebuild_decay: float = 0.0
