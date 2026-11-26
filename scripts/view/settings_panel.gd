@@ -97,6 +97,7 @@ func _ready() -> void:
 	column.add_child(_build_scroll())
 	column.add_child(_build_playlist())
 	column.add_child(_build_boss_toggle())
+	column.add_child(_build_difficulty())
 	column.add_child(_build_army_limit_toggle())
 
 	var done := Button.new()
@@ -578,6 +579,7 @@ func open() -> void:
 	_refresh_volume()
 	_refresh_portraits()
 	_refresh_tiers()
+	_refresh_difficulty()
 	_refresh_army_limit()
 	_refresh_tracks()
 	_refresh_boss()
@@ -592,6 +594,56 @@ func _on_done() -> void:
 		_scroll_demo._on_done()
 	visible = false
 	closed.emit()
+
+
+var _difficulty_buttons: Array[Button] = []
+var _difficulty_note: Label = null
+
+
+func _build_difficulty() -> Control:
+	## Boss defence difficulty: five steps, Normal in the middle-left.
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 6)
+	box.add_child(_heading("Boss defence: difficulty"))
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 6)
+	box.add_child(row)
+	var group := ButtonGroup.new()
+	_difficulty_buttons.clear()
+	for i in BossDifficulty.NAMES.size():
+		var b := Button.new()
+		b.text = BossDifficulty.name_of(i)
+		b.custom_minimum_size = Vector2(PANEL_WIDTH * 0.18, 32.0)
+		b.add_theme_font_size_override("font_size", 13)
+		b.toggle_mode = true
+		b.button_group = group
+		b.pressed.connect(Audio.play_confirm)
+		b.pressed.connect(func():
+			GameSetup.boss_difficulty = i
+			_refresh_difficulty())
+		row.add_child(b)
+		_difficulty_buttons.append(b)
+	_difficulty_note = Label.new()
+	_difficulty_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_difficulty_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_difficulty_note.custom_minimum_size = Vector2(PANEL_WIDTH * 0.9, 0.0)
+	_difficulty_note.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_difficulty_note.add_theme_font_size_override("font_size", 12)
+	_difficulty_note.add_theme_color_override("font_color", Color(0.62, 0.67, 0.76))
+	box.add_child(_difficulty_note)
+	_refresh_difficulty()
+	return box
+
+
+func _refresh_difficulty() -> void:
+	if _difficulty_note == null:
+		return
+	var level := BossDifficulty.clamp_level(GameSetup.boss_difficulty)
+	for i in _difficulty_buttons.size():
+		_difficulty_buttons[i].set_pressed_no_signal(i == level)
+	_difficulty_note.text = BossDifficulty.describe(level)
 
 
 func _build_army_limit_toggle() -> Control:

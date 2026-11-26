@@ -83,6 +83,7 @@ var _results: Control = null
 
 func _ready() -> void:
 	boss_data = load(BOSS_PATH) as BossData
+	boss_data = BossDifficulty.apply(boss_data, GameSetup.boss_difficulty)
 	# The boss's own music from the moment the mode opens: phase one's track on the
 	# setup screen, carrying straight on into the fight. Only when that file is not
 	# on this machine — always the case in the web build — does an ordinary track
@@ -511,6 +512,7 @@ func result_rows(won: bool, clock: String) -> Array:
 		["Retreats she finished", "%d" % stats.retreats],
 		["Enrage surges", "%d" % _enrage_shown],
 		["Waves", "%d" % _waves],
+		["Difficulty", BossDifficulty.name_of(GameSetup.boss_difficulty)],
 		["Supply from damage", "%d" % roundi(barracks.damage_earned)],
 		["Supply spent", "%d" % roundi(barracks.spent)],
 		["Recruits / upgrade levels", "%d / %d" % [barracks.recruits, levels]],

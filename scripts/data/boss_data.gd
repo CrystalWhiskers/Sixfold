@@ -202,6 +202,10 @@ extends Resource
 @export var big_hp_per_mult: float = 0.0
 @export var big_hp_cap: float = 0.0
 @export var small_move_share: float = 0.0
+## Difficulty: her map-wide (hp_scaled) moves hit off her attack instead of a share of
+## max health, and the power of everything she summons is multiplied by this.
+@export var attack_mode: bool = false
+@export var summon_power_mult: float = 1.0
 ## The cap grows by this much of itself per average upgrade level of the army (0.05
 ## = +5% a level), so upgrades still pay off against her, just slowly.
 @export var max_hit_growth: float = 0.0

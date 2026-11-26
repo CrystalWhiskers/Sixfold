@@ -1371,7 +1371,7 @@ func move_hit(mv: BossMove, v: UnitInstance) -> float:
 	## share of full health the move carries of its own.
 	var full := v.stat(StatModifier.Stat.MAX_HP)
 	var extra := full * maxf(mv.max_hp_percent, 0.0)
-	if mv.hp_scaled and data.big_hp_per_mult > 0.0:
+	if mv.hp_scaled and data.big_hp_per_mult > 0.0 and not data.attack_mode:
 		var share := maxf(mv.damage_mult, 0.0) * data.big_hp_per_mult * sqrt(boss_scale())
 		if data.big_hp_cap > 0.0:
 			share = minf(share, data.big_hp_cap)
@@ -2045,6 +2045,7 @@ var _heal_rate: Dictionary = {}
 func _spawn_minion(cell: Vector2i, power: float, kind: BossMinion = null) -> UnitInstance:
 	## One summon stepping out of its circle: an ordinary shade, or `kind`.
 	power *= 1.0 + data.enrage_minions * float(enrage_stacks)
+	power *= maxf(data.summon_power_mult, 0.01)
 	# And they grow with the fight on both sides: with everything she has gained
 	# (phase, enrage, fallen units, retreats) and with how far the army has been
 	# upgraded — so a max-level army does not walk through them.

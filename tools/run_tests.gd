@@ -14444,6 +14444,36 @@ func _test_boss_executions(data: BossData) -> void:
 
 func _test_boss_units(_data: BossData) -> void:
 	_section("Boss defence: how the army's units behave here")
+	# Difficulty: a copy of her data, harder or easier; Normal is her as designed.
+	var base_d := load("res://data/boss/arbiter.tres") as BossData
+	var easy := BossDifficulty.apply(base_d, 0)
+	var hard := BossDifficulty.apply(base_d, 2)
+	var night := BossDifficulty.apply(base_d, 4)
+	_check("Normal difficulty is the boss exactly as designed",
+		BossDifficulty.apply(base_d, BossDifficulty.NORMAL) == base_d)
+	_check("harder steps raise her health, attack and summons and cut income; Easy the reverse",
+		hard.max_hp > base_d.max_hp and hard.attack_damage > base_d.attack_damage
+		and hard.summon_power_mult > 1.0 and hard.base_income < base_d.base_income
+		and easy.max_hp < base_d.max_hp and easy.base_income > base_d.base_income
+		and night.max_hp > hard.max_hp and night.damage_income < hard.damage_income)
+	_check("her single-hit cap stays the same number of points at every step",
+		absf(night.max_hp * night.max_hit_percent - base_d.max_hp * base_d.max_hit_percent) < 0.5)
+	_check("and the file on disk is left alone",
+		is_equal_approx((load("res://data/boss/arbiter.tres") as BossData).max_hp, base_d.max_hp)
+		and not base_d.attack_mode)
+	var sn := _boss_board([["warden"], [], []], night)
+	var bfn: BossFight = sn.bf
+	sn.sim._absorb_new_units()
+	var wn: UnitInstance = null
+	for u in sn.sim._units:
+		if u.is_alive() and u.data.id == &"warden":
+			wn = u
+	var cuts := _move_named(night, &"thousand_cuts")
+	if wn != null:
+		_check("on Brutal and Nightmare her map-wide attacks hit off her attack, not max health",
+			night.attack_mode and is_equal_approx(bfn.move_hit(cuts, wn),
+				bfn.boss.stat(StatModifier.Stat.ATTACK_DAMAGE) * cuts.damage_mult))
+	BoardModel.reset_map()
 	# A crowd on the field brings more of hers: weighted by tier and upgrades.
 	var sc2 := _boss_board([["warden"], [], []])
 	var bfc2: BossFight = sc2.bf
