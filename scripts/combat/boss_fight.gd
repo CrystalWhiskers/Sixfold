@@ -2327,11 +2327,56 @@ func _tick_solitude() -> void:
 		if _solitude_cd.has(u.uid):
 			_solitude_cd[u.uid] = maxf(float(_solitude_cd[u.uid]) - CombatSim.TICK, 0.0)
 		var alone := solitude_crowding(u, u.cell) == 0
+		if u.data.alone_hp_damage > 0.0 and _tick_pariah_charge(u, alone):
+			continue
 		if u.data.alone_hp_damage > 0.0 and alone != u.isolated:
 			u.isolated = alone
 			sim._emit("isolated" if alone else "crowded", {uid = u.uid, cell = u.cell})
 		if u.data.solo_empower and alone != u.empowered:
 			_set_empowered(u, alone)
+
+
+## The Pariah's charge: alone for PARIAH_CHARGE_AFTER seconds, it stops looking for
+## room and charges into the fight for PARIAH_CHARGE_SECONDS — faster on its feet and
+## keeping its isolated strength however crowded it gets — then looks for room again.
+const PARIAH_CHARGE_AFTER := 2.0
+const PARIAH_CHARGE_SECONDS := 10.0
+const PARIAH_CHARGE_SPEED := 0.4
+var _alone_for: Dictionary = {}
+var _charge_left: Dictionary = {}
+var _charge_mods: Dictionary = {}
+
+
+func is_pariah_charging(u: UnitInstance) -> bool:
+	return u != null and float(_charge_left.get(u.uid, 0.0)) > 0.0
+
+
+func _tick_pariah_charge(u: UnitInstance, alone: bool) -> bool:
+	## True while it is charging (its isolation is held on for it).
+	if is_pariah_charging(u):
+		_charge_left[u.uid] = float(_charge_left[u.uid]) - CombatSim.TICK
+		if float(_charge_left[u.uid]) > 0.0:
+			return true
+		# The charge is spent: back to looking for room.
+		_charge_left.erase(u.uid)
+		_alone_for[u.uid] = 0.0
+		for m in _charge_mods.get(u.uid, []):
+			u.battle_modifiers.erase(m)
+		_charge_mods.erase(u.uid)
+		return false
+	_alone_for[u.uid] = float(_alone_for.get(u.uid, 0.0)) + CombatSim.TICK if alone else 0.0
+	if float(_alone_for[u.uid]) < PARIAH_CHARGE_AFTER:
+		return false
+	_charge_left[u.uid] = PARIAH_CHARGE_SECONDS
+	var quick := StatModifier.make(StatModifier.Stat.MOVE_TIME, StatModifier.Mode.PERCENT,
+		-PARIAH_CHARGE_SPEED)
+	u.add_battle_modifier(quick)
+	_charge_mods[u.uid] = [quick]
+	if not u.isolated:
+		u.isolated = true
+		sim._emit("isolated", {uid = u.uid, cell = u.cell})
+	sim._emit("pariah_charge", {uid = u.uid, cell = u.cell, seconds = PARIAH_CHARGE_SECONDS})
+	return true
 
 
 func _set_empowered(u: UnitInstance, on: bool) -> void:
@@ -2365,6 +2410,9 @@ func seek_solitude(u: UnitInstance) -> bool:
 	## goes looking for the room its power needs. One step at a time, at most once a
 	## second, and only to a tile that is less crowded; ties go towards its target.
 	if not wants_solitude(u) or not u.can_move_now():
+		return false
+	if is_pariah_charging(u):
+		# Charging: it is going for the fight, not for room.
 		return false
 	if float(_solitude_cd.get(u.uid, 0.0)) > 0.0:
 		return false

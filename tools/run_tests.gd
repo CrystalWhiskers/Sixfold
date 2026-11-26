@@ -14444,6 +14444,39 @@ func _test_boss_executions(data: BossData) -> void:
 
 func _test_boss_units(_data: BossData) -> void:
 	_section("Boss defence: how the army's units behave here")
+	# The Pariah: alone for a moment, it charges into the fight, keeping its strength.
+	var sp2 := _boss_board([["pariah", "warden"], [], []])
+	var bfp2: BossFight = sp2.bf
+	var simp2: CombatSim = sp2.sim
+	simp2._absorb_new_units()
+	var par: UnitInstance = null
+	var pal2: UnitInstance = null
+	for u in simp2._units:
+		if u.is_alive() and u.data.id == &"pariah":
+			par = u
+		elif u.is_alive() and u.data.id == &"warden":
+			pal2 = u
+	if par != null and pal2 != null:
+		simp2.board.move_unit(pal2, bfp2._nearest_free(Vector2i(16, 25), Vector2i(-1, -1)))
+		simp2.board.move_unit(par, bfp2._nearest_free(Vector2i(1, 12), Vector2i(-1, -1)))
+		var step_p := par.stat(StatModifier.Stat.MOVE_TIME)
+		for k in int((BossFight.PARIAH_CHARGE_AFTER + 0.2) / CombatSim.TICK):
+			bfp2._tick_solitude()
+		_check("alone for a moment, the Pariah charges into battle, quicker on its feet",
+			bfp2.is_pariah_charging(par) and par.isolated
+			and par.stat(StatModifier.Stat.MOVE_TIME) < step_p
+			and not _kind_events(simp2, "pariah_charge").is_empty())
+		simp2.board.move_unit(pal2, bfp2._nearest_free(par.cell + Vector2i(1, 0), par.cell))
+		bfp2._tick_solitude()
+		_check("and keeps its isolated strength even with allies around it",
+			par.isolated and not bfp2.seek_solitude(par))
+		for k in int((BossFight.PARIAH_CHARGE_SECONDS + 0.2) / CombatSim.TICK):
+			bfp2._tick_solitude()
+		_check("then the charge ends and it looks for room again",
+			not bfp2.is_pariah_charging(par) and is_equal_approx(par.stat(StatModifier.Stat.MOVE_TIME), step_p))
+	else:
+		_check("the Pariah charge test could set up", false)
+	BoardModel.reset_map()
 	# She never stops calling: a trickle at the arena's edge that grows into an army.
 	var sr3 := _boss_board()
 	var bfr3: BossFight = sr3.bf
