@@ -14430,6 +14430,27 @@ func _test_boss_executions(data: BossData) -> void:
 
 func _test_boss_units(_data: BossData) -> void:
 	_section("Boss defence: how the army's units behave here")
+	# Late and enraged, against a maxed army, her summons stay in the thousands.
+	var sl := _boss_board([["warden"], [], []])
+	var bfl: BossFight = sl.bf
+	sl.sim._absorb_new_units()
+	var bkl: Barracks = sl.barracks
+	for t in bkl.types:
+		bkl.level[t.id] = 10
+	bfl.phase = 3
+	bfl._apply_phase_mods()
+	for k in 11:
+		sl.sim.elapsed = bfl.next_enrage_at()
+		bfl._tick_enrage()
+	var biggest := 0.0
+	for kind in bfl.data.summon_pool:
+		var cell := bfl._nearest_free(bfl.boss.cell + Vector2i(0, 4), bfl.boss.cell)
+		var m := bfl._spawn_minion(cell, bfl.data.phases[3].minion_power, kind)
+		if m != null:
+			biggest = maxf(biggest, m.stat(StatModifier.Stat.MAX_HP))
+	_check("at phase 4, 11 enrage surges and a Lv10 army, no summon passes 6000 health",
+		bfl.enrage_stacks == 11 and biggest > 0.0 and biggest < 6000.0, "%.0f" % biggest)
+	BoardModel.reset_map()
 	# With all three lane crystals down the rebuild clocks hold still, and each
 	# rebuild of one crystal comes back weaker than the last.
 	var sr2 := _boss_board()

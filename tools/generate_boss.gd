@@ -527,8 +527,11 @@ func _initialize() -> void:
 	# multiplier.
 	# And her big moves do not spare her own summons.
 	b.friendly_fire = true
-	# Her summons grow with the fight only slightly: 15% of her and the army's growth.
-	b.summon_scale_share = 0.15
+	# Her summons grow with the fight only slightly: 5% of her and the army's growth,
+	# and +5% a surge of enrage (down from 10%) — a phase-4 summon at 11 surges against
+	# a Lv10 army is a few thousand health, not tens of thousands.
+	b.summon_scale_share = 0.05
+	b.enrage_minions = 0.05
 	# Wave units fresh on the field resist 90% of damage for their first 3 seconds.
 	b.spawn_protect_seconds = 3.0
 	b.spawn_protect_resist = 0.90
