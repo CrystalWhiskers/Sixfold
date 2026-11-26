@@ -26,6 +26,7 @@ var _header: Label = null
 var _income_btn: Button = null
 var _recruit_btns: Array[Button] = []
 var _merge_btns: Array[Button] = []
+var _pull_btns: Array[Button] = []
 var _last_key: Array = []
 var _type_btns: Array[Button] = []
 ## Where the upgrade bar starts, below the three sections.
@@ -65,6 +66,18 @@ pairs"
 		m.pressed.connect(_on_merge_all.bind(s))
 		add_child(m)
 		_merge_btns.append(m)
+		# Pull partners in from the other lanes and merge them here.
+		var pl := Button.new()
+		pl.position = Vector2(x, 146)
+		pl.size = Vector2(SECTION_W - _grid_w() - 12.0, 50)
+		pl.add_theme_font_size_override("font_size", 11)
+		pl.text = "Merge
+from
+lanes"
+		pl.tooltip_text = "Merge every unit in the other lanes that pairs with one here, into this lane."
+		pl.pressed.connect(_on_merge_into.bind(s))
+		add_child(pl)
+		_pull_btns.append(pl)
 	# The upgrade bar: one button per unit type in the loadout. A level reaches every
 	# copy of that unit — the ones fighting now and every wave after.
 	var n := maxi(barracks.types.size(), 1)
@@ -131,6 +144,8 @@ func refresh() -> void:
 			if barracks.has_twin(s, i) >= 0:
 				pairs = true
 		_merge_btns[s].disabled = not pairs
+	for s in _pull_btns.size():
+		_pull_btns[s].disabled = not barracks.can_merge_into(s)
 	for s in Barracks.SECTIONS:
 		_recruit_btns[s].text = "Recruit\n%d" % ceili(barracks.recruit_price())
 		_recruit_btns[s].disabled = (barracks.supply < barracks.recruit_price()
@@ -311,6 +326,15 @@ func _on_upgrade(index: int) -> void:
 static func _amount(v: float) -> String:
 	## 2, 4.5, 15 — whole numbers when they are whole, one decimal when they are not.
 	return str(roundi(v)) if is_equal_approx(v, roundf(v)) else "%.1f" % v
+
+
+func _on_merge_into(section: int) -> void:
+	var n := barracks.merge_into(section)
+	if n > 0:
+		Audio.play_merge()
+		changed.emit("%d merge%s into %s from the other lanes — from the next wave." % [n,
+			"" if n == 1 else "s", BossFight.ZONE_NAMES[section]])
+	refresh()
 
 
 func _on_merge_all(section: int) -> void:

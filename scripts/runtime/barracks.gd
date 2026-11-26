@@ -470,6 +470,78 @@ func merge_all(section: int) -> int:
 	return n
 
 
+func merge_into(section: int) -> int:
+	## A lane pulls in its partners from the other lanes: every unit elsewhere with a
+	## merge partner in this section moves onto it and merges, and so on until none are
+	## left — this section's own pairs included. Returns how many merges.
+	var n := merge_all(section)
+	while true:
+		var found := false
+		for i in slot_count():
+			var d: UnitData = sections[section][i]
+			if d == null:
+				continue
+			for b in SECTIONS:
+				if b == section or found:
+					continue
+				for j in slot_count():
+					if can_merge(sections[b][j], d):
+						drop(b, j, section, i)
+						found = true
+						break
+			if found:
+				break
+		if not found:
+			# Then pairs that sit entirely in the other lanes: one comes to a free slot
+			# here and its partner merges onto it.
+			var pair := _pair_elsewhere(section)
+			var free := free_slot(section)
+			if pair.is_empty() or free < 0:
+				break
+			drop(pair[0], pair[1], section, free)
+			drop(pair[2], pair[3], section, free)
+		n += 1
+		n += merge_all(section)
+	return n
+
+
+func _pair_elsewhere(section: int) -> Array:
+	## [section, slot, section, slot] of a mergeable pair with neither half in `section`.
+	for b in SECTIONS:
+		if b == section:
+			continue
+		for j in slot_count():
+			var d: UnitData = sections[b][j]
+			if d == null:
+				continue
+			for c in SECTIONS:
+				if c == section or c < b:
+					continue
+				for k in slot_count():
+					if (c != b or k > j) and can_merge(d, sections[c][k]):
+						return [b, j, c, k]
+	return []
+
+
+func can_merge_into(section: int) -> bool:
+	## Whether merge_into(section) has anything to do.
+	if free_slot(section) >= 0 and not _pair_elsewhere(section).is_empty():
+		return true
+	for i in slot_count():
+		var d: UnitData = sections[section][i]
+		if d == null:
+			continue
+		if has_twin(section, i) >= 0:
+			return true
+		for b in SECTIONS:
+			if b == section:
+				continue
+			for j in slot_count():
+				if can_merge(sections[b][j], d):
+					return true
+	return false
+
+
 func has_twin(section: int, slot: int) -> int:
 	## The slot of this unit's merge partner in the same section, or -1.
 	var d: UnitData = sections[section][slot]

@@ -14970,6 +14970,23 @@ func _test_boss_enrage(data: BossData) -> void:
 	bf3.phase = 0
 	_check("the results screen counts every tier of a unit as one",
 		BossStats.base_name("Vexer IV") == "Vexer" and BossStats.base_name("Warden") == "Warden")
+	# Merge from the other lanes: partners elsewhere come to this lane and merge here.
+	var ml := Barracks.new()
+	ml.setup(data, load("res://data/loadouts/starter.tres") as LoadoutData, 6)
+	for ls in Barracks.SECTIONS:
+		for i in ml.slot_count():
+			ml.sections[ls][i] = null
+	var wd2 := load("res://data/units/warden_t1.tres") as UnitData
+	ml.sections[0][0] = wd2
+	ml.sections[1][0] = wd2
+	ml.sections[2][3] = wd2
+	ml.sections[2][4] = wd2
+	_check("a lane with a partner elsewhere can pull it in", ml.can_merge_into(0) and ml.can_merge_into(1))
+	var made := ml.merge_into(0)
+	_check("merging from the other lanes brings them here and merges them",
+		made >= 2 and ml.unit_count(0) >= 1 and ml.unit_count(1) == 0 and ml.unit_count(2) == 0,
+		"%d merges, lanes %d/%d/%d" % [made, ml.unit_count(0), ml.unit_count(1), ml.unit_count(2)])
+	_check("and with nothing left to pair, there is nothing to pull", not ml.can_merge_into(0))
 	# Top Damage: a Sentry's damage is its Engineer's.
 	var st := BossStats.new()
 	var sen := UnitInstance.create(load("res://data/units/sentry_t1.tres") as UnitData, BoardModel.TEAM_B)
