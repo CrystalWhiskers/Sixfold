@@ -384,7 +384,7 @@ func _initialize() -> void:
 	# Each phase opens with a signature of its own, the moment its announcement ends.
 	var fang := _move(&"twin_fang_cross", "Twin Fang Cross", S.CROSS, 0, 3, 3.5, 1.6)
 	fang.windup = 2.0
-	fang.max_hp_percent = 0.08
+	# Off her attack, not a share of max health.
 	var storm := _move(&"rending_storm", "Rending Storm", S.ARC, 9, 1, 3.0, 0.8)
 	storm.windup = 2.0
 	storm.arc_degrees = 90.0

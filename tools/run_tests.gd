@@ -14390,7 +14390,15 @@ func _test_boss_executions(data: BossData) -> void:
 	_check("the heavy blows carry a share of max HP, and Thousand Cuts executes",
 		heaven != null and heaven.max_hp_percent > 0.0 and cross != null and cross.executes_top_tier)
 	_check("the Crimson Cross does not execute: it hits off her attack",
-		crimson != null and not crimson.executes_top_tier and not crimson.hp_scaled)
+		crimson != null and not crimson.executes_top_tier and not crimson.hp_scaled
+		and crimson.max_hp_percent <= 0.0)
+	var fang_mv: BossMove = by_id.get(&"twin_fang_cross", null)
+	if fang_mv == null:
+		for p in data.phases:
+			if p.entry_move != null and p.entry_move.id == &"twin_fang_cross":
+				fang_mv = p.entry_move
+	_check("and neither cross takes a share of max health",
+		fang_mv != null and (fang_mv.max_hp_percent <= 0.0 and not fang_mv.hp_scaled))
 	var s := _boss_board([["warden", "archer"], [], []])
 	var bf: BossFight = s.bf
 	var sim: CombatSim = s.sim
