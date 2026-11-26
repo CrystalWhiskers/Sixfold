@@ -304,6 +304,15 @@ func _apply(e: Dictionary) -> void:
 			_view.spawn_label(_at(int(e.uid), e.cell), "%s..." % String(e.name).to_upper(),
 				Color(1.0, 0.55, 0.35))
 			Audio.play_boss_charge()
+		"banner_raised":
+			_view.spawn_label(_at(int(e.uid), e.cell), "BANNER RAISED", Color(0.95, 0.80, 0.35))
+		"banner_planted":
+			# The planted flag's ground glows gold for as long as it stands.
+			var flag: Array[Vector2i] = []
+			for c in e.cells:
+				flag.append(Vector2i(c))
+			_view.flash_cells(flag, Color(0.95, 0.80, 0.35, 0.22), float(e.seconds) / maxf(speed, 0.01))
+			_view.spawn_label(_at(int(e.uid), e.cell), "PLANTED", Color(0.95, 0.80, 0.35))
 		"boss_staggered":
 			_view.spawn_label(_at(int(e.uid), e.cell), "STAGGERED", Color(0.70, 0.95, 0.70))
 		"boss_stance_broken":

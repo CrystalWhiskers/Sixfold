@@ -754,23 +754,23 @@ func _check_a_death_actually_speaks() -> void:
 	var empty: Array[Dictionary] = []
 	player.play(view, empty, {})
 
-	for v in Audio._voices:
+	for v in Audio._voices + Audio._death_voices:
 		v.stream = null
 	player._kill({uid = 4242, cell = Vector2i(2, 2),
 		overkill = true, killer_uid = 1})
 	var heard_overkill := false
-	for v in Audio._voices:
+	for v in Audio._voices + Audio._death_voices:
 		if v.stream != null and Audio._overkill_voice.has(v.stream):
 			heard_overkill = true
 	_check("a death played through the view speaks an overkill line",
 		heard_overkill)
 
-	for v in Audio._voices:
+	for v in Audio._voices + Audio._death_voices:
 		v.stream = null
 	player._kill({uid = 4243, cell = Vector2i(3, 3),
 		overkill = false, killer_uid = 1})
 	var heard_ordinary := false
-	for v in Audio._voices:
+	for v in Audio._voices + Audio._death_voices:
 		if v.stream != null and Audio._death_voice.has(v.stream):
 			heard_ordinary = true
 	_check("and an ordinary one speaks an ordinary line", heard_ordinary)
@@ -788,11 +788,11 @@ func _voices_drawn_from(overkill: bool, allowed: Array, draws: int) -> bool:
 	# "what did the player hear" as a headless test can get, and it is the only
 	# way to catch a pool being picked from the wrong list.
 	for i in draws:
-		for v in Audio._voices:
+		for v in Audio._voices + Audio._death_voices:
 			v.stream = null
 		Audio.play_death_voice(overkill)
 		var found := false
-		for v in Audio._voices:
+		for v in Audio._voices + Audio._death_voices:
 			if v.stream == null:
 				continue
 			if not allowed.has(v.stream):

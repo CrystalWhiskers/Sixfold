@@ -885,6 +885,13 @@ const UNIT_TABLE := [
 		mana = 0.0, rooted = true, mechanical = true, hidden = true,
 		note = "Built, not drawn, and the ten seconds it costs to raise are paid for here. It cannot move and it cannot be moved, it sees the whole board, and it fires rarely and enormously. Its range has no limit of any kind — it shoots over walls, over stone, over anything, from wherever it was bolted down.",
 	},
+	{
+		id = &"bannerman", name = "Bannerman", hp = 300.0, dmg = 8.0, spd = 0.7,
+		move = 0.70, range = "MELEE", sight = 4, type = "MELEE",
+		accent = Color(0.78, 0.62, 0.26),
+		ability = &"rally_banner", mana = 25.0,
+		note = "Thick and nearly harmless with its own hands. When its bar fills it raises a banner, and everyone of yours near it shrugs off part of every blow and walks faster — then the first enemy it strikes, it plants the flag right there and the ground keeps the blessing for a while.",
+	},
 ]
 
 const ABILITY_TABLE := [
@@ -1083,6 +1090,12 @@ const ABILITY_TABLE := [
 		desc = "Floods the three-by-three around it. Allies standing inside gain extra mana every second, for the rest of the battle.",
 		mana_aura_radius = 1,
 	},
+	{
+		id = &"rally_banner", name = "Rally Banner", kind = "BANNER", cast_time = 0.4,
+		desc = "Raises a banner. While it carries it, allies within 2 tiles (itself included) resist 15% of all damage, +2% a tier, and move 20% faster. The first enemy it strikes, it plants the flag on the spot: the ground round it keeps the same blessing for 10 seconds, and its next full bar raises a new banner.",
+		banner_radius = 2, banner_resist = 0.15, banner_resist_per_tier = 0.02,
+		banner_move = 0.20, banner_seconds = 10.0,
+	},
 ]
 
 const BUFF_TABLE = [
@@ -1177,6 +1190,10 @@ const BUFF_TABLE = [
 		unit = &"engineer", also = [&"sentry"],
 		stat_a = "MAX_HP", stat_b = "ATTACK_DAMAGE", two = true,
 		b = Vector2(0.50, 0.40), s = Vector2(1.00, 0.80), g = Vector2(1.5, 1.2)},
+	{id = &"colours", name = "Colours", kind = "STAT", weight = 1.0,
+		unit = &"bannerman", stat_a = "MAX_HP", stat_b = "RESIST", two = true,
+		flat_b = true,
+		b = Vector2(0.50, 0.05), s = Vector2(1.00, 0.10), g = Vector2(2.00, 0.20)},
 	{id = &"retaliation", name = "Retaliation", kind = "STAT", weight = 1.0,
 		unit = &"aegis", stat_a = "MAX_HP", stat_b = "RESIST", two = true,
 		flat_b = true,
@@ -1285,6 +1302,35 @@ func build() -> String:
 	return "Done. %d units (%d types x %d tiers), %d abilities, %d buffs, %d maps." % [
 		UNIT_TABLE.size() * TIERS, UNIT_TABLE.size(), TIERS,
 		ABILITY_TABLE.size(), BUFF_TABLE.size(), MAP_TABLE.size()]
+
+
+func build_only(ids: Array) -> String:
+	## Builds just the rows with these ids — a new unit, its ability, its buff — and
+	## adds the unit to the roster and the buff to the index, leaving every other
+	## generated file exactly as it is on disk.
+	var only := {}
+	for id in ids:
+		only[StringName(id)] = true
+	var abilities := _make_abilities(only)
+	for row in UNIT_TABLE:
+		if only.has(row.id) and row.has("ability") and not abilities.has(row.ability):
+			abilities[row.ability] = load("%s/%s.tres" % [ABILITY_DIR, row.ability])
+	_make_units(abilities, only)
+	_make_buffs(only)
+	var roster := load("%s/roster.tres" % LOADOUT_DIR) as LoadoutData
+	var added := 0
+	for row in UNIT_TABLE:
+		if not only.has(row.id) or row.get("hidden", false):
+			continue
+		var have := false
+		for d in roster.units:
+			if d.id == row.id:
+				have = true
+		if not have:
+			roster.units.append(_tier_ones[row.id])
+			added += 1
+	_save(roster, "%s/roster.tres" % LOADOUT_DIR)
+	return "Done. Built %s; %d added to the roster." % [", ".join(PackedStringArray(ids)), added]
 
 
 func _duplicate_ids() -> String:
@@ -1452,9 +1498,11 @@ func _make_maps() -> void:
 		_save(m, "%s/%s.tres" % [MAP_DIR, row.id])
 
 
-func _make_abilities() -> Dictionary:
+func _make_abilities(only := {}) -> Dictionary:
 	var out := {}
 	for row in ABILITY_TABLE:
+		if not only.is_empty() and not only.has(row.id):
+			continue
 		var a := AbilityData.new()
 		a.id = row.id
 		a.display_name = row.name
@@ -1499,7 +1547,9 @@ func _make_abilities() -> Dictionary:
 				"frenzy_seconds", "frenzy_damage", "frenzy_attack_speed",
 				"frenzy_move", "frenzy_pierce",
 				"mend_percent", "mend_interval", "mend_melee_mult",
-				"blast_attack_multiple", "blast_radius", "flee_radius"]:
+				"blast_attack_multiple", "blast_radius", "flee_radius",
+				"banner_radius", "banner_resist", "banner_resist_per_tier", "banner_move",
+				"banner_seconds"]:
 			if row.has(key):
 				a.set(key, row[key])
 		if row.has("fuse_seconds_by_tier"):
@@ -1537,7 +1587,7 @@ func _link_summons(abilities: Dictionary) -> void:
 			push_error("%s saved without its summon link. Run the generator again." % path)
 
 
-func _make_units(abilities: Dictionary) -> LoadoutData:
+func _make_units(abilities: Dictionary, only := {}) -> LoadoutData:
 	var loadout := LoadoutData.new()
 	loadout.id = &"starter"
 	loadout.display_name = "Starter Five"
@@ -1549,6 +1599,8 @@ func _make_units(abilities: Dictionary) -> LoadoutData:
 	_tier_ones.clear()
 
 	for row in UNIT_TABLE:
+		if not only.is_empty() and not only.has(row.id):
+			continue
 		var built: Array[UnitData] = []
 		for t in range(TIERS, 0, -1):
 			var u := UnitData.new()
@@ -1642,6 +1694,8 @@ func _make_units(abilities: Dictionary) -> LoadoutData:
 			push_error("Merge chain for %s is %d long, expected %d" % [
 				row.id, built[0].chain_length(), TIERS])
 
+	if not only.is_empty():
+		return loadout
 	loadout.units = tier_ones
 	_save(loadout, "%s/starter.tres" % LOADOUT_DIR)
 	roster.units = all_playable
@@ -1649,8 +1703,10 @@ func _make_units(abilities: Dictionary) -> LoadoutData:
 	return loadout
 
 
-func _make_buffs() -> void:
+func _make_buffs(only := {}) -> void:
 	for row in BUFF_TABLE:
+		if not only.is_empty() and not only.has(row.id):
+			continue
 		var b := BuffData.new()
 		b.id = row.id
 		b.display_name = row.name

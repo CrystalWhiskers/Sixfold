@@ -215,6 +215,7 @@ func _initialize() -> void:
 	_test_boss_music()
 	_test_boss_polish()
 	_test_every_ability_has_an_icon()
+	_test_bannerman()
 	_test_fast_pathfinder_matches()
 	_test_mirror_matchup_is_fair()
 
@@ -15258,6 +15259,55 @@ func _mix(s: AudioStream, at: float, n: int) -> PackedVector2Array:
 
 func _audio_script() -> GDScript:
 	return load("res://autoload/audio.gd") as GDScript
+
+
+func _test_bannerman() -> void:
+	_section("The Bannerman raises a banner, then plants it")
+	var bm := _find("bannerman")
+	_check("the Bannerman is in the roster, thick and feeble",
+		bm != null and bm.ability != null and bm.ability.kind == AbilityData.Kind.BANNER
+		and bm.max_hp >= _find("warden").max_hp and bm.attack_damage < _find("warden").attack_damage)
+	if bm == null:
+		return
+	var board := BoardModel.new()
+	var me := UnitInstance.create(bm, BoardModel.TEAM_A)
+	var pal := UnitInstance.create(_find("archer"), BoardModel.TEAM_A)
+	var far := UnitInstance.create(_find("archer"), BoardModel.TEAM_A)
+	var foe := UnitInstance.create(_find("warden"), BoardModel.TEAM_B)
+	board.place(me, Vector2i(2, 3))
+	board.place(pal, Vector2i(3, 3))
+	board.place(far, Vector2i(5, 0))
+	board.place(foe, Vector2i(2, 4))
+	var sim := CombatSim.new()
+	sim.setup(board, 3)
+	var step0 := pal.stat(StatModifier.Stat.MOVE_TIME)
+	_check("before the banner nobody is blessed", pal.resist() <= 0.0001)
+	sim._resolve_banner(me, bm.ability)
+	var want := CombatSim.banner_resist_of(me, bm.ability)
+	_check("raised, it blesses allies near the bearer: resist and quicker feet",
+		sim.is_carrying_banner(me) and is_equal_approx(pal.resist(), want)
+		and pal.stat(StatModifier.Stat.MOVE_TIME) < step0 and is_equal_approx(me.resist(), want),
+		"resist %.2f, step %.2f -> %.2f" % [pal.resist(), step0, pal.stat(StatModifier.Stat.MOVE_TIME)])
+	_check("but not allies out of its reach", far.resist() <= 0.0001)
+	me.mana = 1.0e6
+	_check("with a banner up, a full bar waits", not sim.can_cast(me))
+	me.target = foe
+	sim._begin_attack(me)
+	sim._tick_banners()
+	_check("its first blow on an enemy plants the flag where it stands",
+		not sim.is_carrying_banner(me) and sim._banners_planted.size() == 1
+		and sim._banners_planted[0].cell == me.cell and not _kind_events(sim, "banner_planted").is_empty())
+	_check("the planted flag keeps the blessing on that ground", is_equal_approx(pal.resist(), want))
+	_check("and the bar can raise a new one", sim.can_cast(me))
+	for i in int((bm.ability.banner_seconds + 0.2) / CombatSim.TICK):
+		sim._tick_banners()
+	_check("after a while the planted flag comes down", sim._banners_planted.is_empty()
+		and pal.resist() <= 0.0001 and is_equal_approx(pal.stat(StatModifier.Stat.MOVE_TIME), step0))
+	var colours := load("res://data/buffs/colours.tres") as BuffData
+	_check("Colours is the Bannerman's own: +5/10/20% resist and +50/100/200% health",
+		colours != null and colours.unit_id == &"bannerman"
+		and is_equal_approx(colours.bronze.x, 0.5) and is_equal_approx(colours.gold.x, 2.0)
+		and is_equal_approx(colours.bronze.y, 0.05) and is_equal_approx(colours.gold.y, 0.20))
 
 
 func _test_every_ability_has_an_icon() -> void:

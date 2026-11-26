@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="BuffData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/buff_data.gd" id="1_plb33"]
+
+[resource]
+script = ExtResource("1_plb33")
+id = &"colours"
+display_name = "Colours"
+unit_id = &"bannerman"
+bronze = Vector2(0.5, 0.05)
+silver = Vector2(1, 0.1)
+gold = Vector2(2, 0.2)
+stat_a = 0
+stat_b = 11
+uses_second_stat = true
+flat_b = true

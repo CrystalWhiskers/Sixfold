@@ -29,6 +29,7 @@ enum Kind {
 	## Appended, never inserted: the .tres files store this as a number.
 	MEND,
 	FUSE,
+	BANNER,
 }
 
 @export var id: StringName = &""
@@ -424,6 +425,18 @@ enum Kind {
 ## Everything within this many tiles (Chebyshev) of the keg at the moment it lights
 ## runs from it, friend and foe alike, until it goes off.
 @export var flee_radius: int = 2
+
+@export_group("Banner")
+## The bearer raises a banner: while it carries it, allies (itself included) within
+## `banner_radius` tiles resist `banner_resist` (+`banner_resist_per_tier` a tier past
+## the first) of all damage and walk `banner_move` faster. Its next blow on an enemy
+## plants the banner where it stands, and the planted one keeps the same aura round
+## that tile for `banner_seconds`; the next full bar raises a new one.
+@export var banner_radius: int = 2
+@export var banner_resist: float = 0.15
+@export var banner_resist_per_tier: float = 0.02
+@export var banner_move: float = 0.20
+@export var banner_seconds: float = 10.0
 
 @export_group("Mana aura")
 @export var mana_aura_radius: int = 1

@@ -53,6 +53,7 @@ const GLYPHS := {
 	&"slow_match": ["bomb", Color(1.00, 0.62, 0.22)],
 	&"triage": ["plus", Color(0.96, 0.86, 0.62)],
 	&"overflow": ["mana", Color(0.46, 0.72, 1.00)],
+	&"rally_banner": ["banner", Color(0.95, 0.80, 0.35)],
 }
 
 ## The fallback for an ability nobody gave an icon: by kind, so a new ability still
@@ -84,6 +85,7 @@ const KIND_GLYPHS := {
 	AbilityData.Kind.DISORIENT: "spiral",
 	AbilityData.Kind.MEND: "plus",
 	AbilityData.Kind.FUSE: "bomb",
+	AbilityData.Kind.BANNER: "banner",
 }
 
 ## Every shape _draw_shape knows how to draw. The tests hold the tables above to it.

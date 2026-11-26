@@ -89,6 +89,27 @@ levels = {
 "a.stealth_time": 7.0,
 "u.move_time*": 0.7
 }],
+&"bannerman": [{
+"a.banner_radius": 2,
+"a.banner_resist": 0.18,
+"a.banner_seconds": 12.0
+}, {
+"a.banner_radius": 2,
+"a.banner_resist": 0.21,
+"a.banner_seconds": 14.0
+}, {
+"a.banner_radius": 3,
+"a.banner_resist": 0.24,
+"a.banner_seconds": 16.0
+}, {
+"a.banner_radius": 3,
+"a.banner_resist": 0.27,
+"a.banner_seconds": 18.0
+}, {
+"a.banner_radius": 4,
+"a.banner_resist": 0.35,
+"a.banner_seconds": 25.0
+}],
 &"breaker": [{
 "a.charge_damage_per_tier": 2.0,
 "a.stun_seconds_per_tier": 0.5,

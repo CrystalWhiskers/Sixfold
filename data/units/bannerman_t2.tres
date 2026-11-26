@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="UnitData" format=3]
+
+[ext_resource type="Resource" path="res://data/abilities/rally_banner.tres" id="1_0iy1w"]
+[ext_resource type="Resource" path="res://data/units/bannerman_t3.tres" id="2_1jqnh"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="3_0tvyd"]
+[ext_resource type="Texture2D" path="res://assets/portraits/placeholder.png" id="4_dm2ga"]
+
+[resource]
+script = ExtResource("3_0tvyd")
+id = &"bannerman"
+display_name = "Bannerman II"
+tier = 2
+max_hp = 600.0
+attack_damage = 16.0
+attack_speed = 0.7
+move_time = 1.12
+ability = ExtResource("1_0iy1w")
+next_tier = ExtResource("2_1jqnh")
+note = "Thick and nearly harmless with its own hands. When its bar fills it raises a banner, and everyone of yours near it shrugs off part of every blow and walks faster — then the first enemy it strikes, it plants the flag right there and the ground keeps the blessing for a while."
+sprite = ExtResource("4_dm2ga")
+accent = Color(0.78, 0.62, 0.26, 1)

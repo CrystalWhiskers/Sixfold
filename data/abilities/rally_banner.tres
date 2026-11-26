@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AbilityData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ability_data.gd" id="1_yksye"]
+
+[resource]
+script = ExtResource("1_yksye")
+id = &"rally_banner"
+display_name = "Rally Banner"
+description = "Raises a banner. While it carries it, allies within 2 tiles (itself included) resist 15% of all damage, +2% a tier, and move 20% faster. The first enemy it strikes, it plants the flag on the spot: the ground round it keeps the same blessing for 10 seconds, and its next full bar raises a new banner."
+kind = 26
+cast_time = 0.4

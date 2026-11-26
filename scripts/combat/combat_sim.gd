@@ -392,6 +392,7 @@ func step() -> void:
 	_tick_fuses()
 	if boss_fight != null:
 		boss_fight.tick()
+	_tick_banners()
 	_tick_mends()
 	_tick_regen()
 	_tick_pressure()
@@ -1206,6 +1207,8 @@ func _begin_attack(u: UnitInstance) -> void:
 	})
 
 	_damage(victim, dmg, u)
+	if _banners_carried.has(u.uid) and victim.team != u.team:
+		_plant_banner(u)
 
 	var struck := {victim.uid: true}
 	# pierce_now() rather than the data field, because a Martyr inside its window cuts
@@ -1372,6 +1375,8 @@ func _resolve_ability(u: UnitInstance) -> void:
 			_resolve_blink(u, ab, target)
 		AbilityData.Kind.SPEED_AURA:
 			_resolve_aura(u, ab)
+		AbilityData.Kind.BANNER:
+			_resolve_banner(u, ab)
 		AbilityData.Kind.REVIVE, AbilityData.Kind.MEND:
 			_emit("ability", {uid = u.uid, ability = ab.id, kind = ab.kind,
 				cell = u.cell, wasted = true})
@@ -1491,6 +1496,112 @@ func _resolve_aura(u: UnitInstance, ab: AbilityData) -> void:
 		cells.append(ally.cell)
 	_emit("ability", {uid = u.uid, ability = ab.id, kind = ab.kind,
 		cell = u.cell, cells = cells, percent = pct, wasted = cells.is_empty()})
+
+
+# ------------------------------------------------------------------- banners --
+#
+# The Bannerman's Rally Banner. A banner is carried by its bearer (it moves with it)
+# or planted on a tile (it stays, for a while). Either way every ally within its
+# radius resists part of all damage and walks faster. Applied as battle modifiers
+# that are refreshed every tick, so walking into or out of the radius is felt at once.
+
+## uid of a bearer -> true, while it carries a banner.
+var _banners_carried: Dictionary = {}
+## Planted banners: {team, cell, radius, resist, move, left, owner_uid}.
+var _banners_planted: Array[Dictionary] = []
+## uid -> [resist modifier, move modifier] a banner is giving that unit right now.
+var _banner_mods: Dictionary = {}
+
+
+static func banner_resist_of(u: UnitInstance, ab: AbilityData) -> float:
+	return ab.banner_resist + ab.banner_resist_per_tier * float(maxi(u.data.tier, 1) - 1)
+
+
+func is_carrying_banner(u: UnitInstance) -> bool:
+	return u != null and _banners_carried.has(u.uid)
+
+
+func _resolve_banner(u: UnitInstance, ab: AbilityData) -> void:
+	_banners_carried[u.uid] = true
+	_emit("ability", {uid = u.uid, ability = ab.id, kind = ab.kind, cell = u.cell})
+	_emit("banner_raised", {uid = u.uid, cell = u.cell, radius = ab.banner_radius,
+		resist = banner_resist_of(u, ab), move = ab.banner_move})
+	_tick_banners()
+
+
+func _plant_banner(u: UnitInstance) -> void:
+	var ab := u.data.ability
+	_banners_carried.erase(u.uid)
+	if ab == null:
+		return
+	var b := {team = u.team, cell = u.cell, radius = ab.banner_radius,
+		resist = banner_resist_of(u, ab), move = ab.banner_move,
+		left = ab.banner_seconds, owner_uid = u.uid}
+	_banners_planted.append(b)
+	var cells: Array[Vector2i] = []
+	for dy in range(-ab.banner_radius, ab.banner_radius + 1):
+		for dx in range(-ab.banner_radius, ab.banner_radius + 1):
+			var c := u.cell + Vector2i(dx, dy)
+			if board.in_bounds(c):
+				cells.append(c)
+	_emit("banner_planted", {uid = u.uid, cell = u.cell, cells = cells,
+		seconds = ab.banner_seconds, team = u.team})
+
+
+func _tick_banners() -> void:
+	if _banners_carried.is_empty() and _banners_planted.is_empty() and _banner_mods.is_empty():
+		return
+	# What every ally should be getting right now: the strongest banner over it.
+	var want := {}
+	for uid in _banners_carried.keys():
+		var bearer := _unit_by_uid(int(uid))
+		if bearer == null or not bearer.is_alive() or bearer.data.ability == null:
+			_banners_carried.erase(uid)
+			continue
+		var ab := bearer.data.ability
+		_banner_cover(want, bearer.cell, ab.banner_radius, bearer.team,
+			banner_resist_of(bearer, ab), ab.banner_move)
+	var kept: Array[Dictionary] = []
+	for b in _banners_planted:
+		b.left = float(b.left) - TICK
+		if float(b.left) <= 0.0:
+			_emit("banner_down", {cell = b.cell, team = b.team})
+			continue
+		kept.append(b)
+		_banner_cover(want, b.cell, int(b.radius), int(b.team), float(b.resist), float(b.move))
+	_banners_planted = kept
+	# Take away what no longer applies, give what newly does.
+	for uid in _banner_mods.keys():
+		var got: Array = _banner_mods[uid]
+		var now: Vector2 = want.get(uid, Vector2.ZERO)
+		if is_equal_approx((got[0] as StatModifier).value, now.x) \
+				and is_equal_approx((got[1] as StatModifier).value, -now.y):
+			want.erase(uid)
+			continue
+		var u := _unit_by_uid(int(uid))
+		if u != null:
+			u.battle_modifiers.erase(got[0])
+			u.battle_modifiers.erase(got[1])
+		_banner_mods.erase(uid)
+	for uid in want:
+		var u := _unit_by_uid(int(uid))
+		if u == null:
+			continue
+		var v: Vector2 = want[uid]
+		var r := StatModifier.make(StatModifier.Stat.RESIST, StatModifier.Mode.FLAT, v.x)
+		var m := StatModifier.make(StatModifier.Stat.MOVE_TIME, StatModifier.Mode.PERCENT, -v.y)
+		u.add_battle_modifier(r)
+		u.add_battle_modifier(m)
+		_banner_mods[uid] = [r, m]
+
+
+func _banner_cover(want: Dictionary, centre: Vector2i, radius: int, team: int,
+		resist: float, move: float) -> void:
+	for ally in board.units_in_box(centre, radius, team):
+		if not ally.is_alive() or ally.structure:
+			continue
+		var had: Vector2 = want.get(ally.uid, Vector2.ZERO)
+		want[ally.uid] = Vector2(maxf(had.x, resist), maxf(had.y, move))
 
 
 func _resolve_burst_heal(u: UnitInstance, ab: AbilityData) -> void:
@@ -2562,6 +2673,9 @@ func can_cast(u: UnitInstance) -> bool:
 	if u.mana_suppressed > 0.0:
 		return false
 	if ab.requires_empowered and not u.empowered:
+		return false
+	if ab.kind == AbilityData.Kind.BANNER and _banners_carried.has(u.uid):
+		# One banner at a time: the bar waits until this one is planted.
 		return false
 	if ab.kind == AbilityData.Kind.MEND:
 		# A passive with no bar. A Wellspring's pool can still push mana into it,

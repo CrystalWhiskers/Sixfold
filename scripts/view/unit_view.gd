@@ -50,7 +50,7 @@ static func portrait_for(d: UnitData) -> Texture2D:
 ## clash (PARiah / PARagon) or read badly.
 const SHORT_OVERRIDES := {
 	&"assassin": "ASN", &"paragon": "PGN", &"powderkeg": "KEG",
-	&"transcendence": "TRN", &"crystal": "", &"crimson_shade": "SHD",
+	&"transcendence": "TRN", &"bannerman": "BNR", &"crystal": "", &"crimson_shade": "SHD",
 }
 
 

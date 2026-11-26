@@ -26,7 +26,8 @@ extends Resource
 const MAX_LEVEL := 5
 ## Ceilings for values carried on past Lv5, where an unbounded step would get silly:
 ## the Culverin's blast diamond and anyone's attack range.
-const LV10_CAPS := {"a.shell_arm": 5, "u.attack_range": 7}
+const LV10_CAPS := {"a.shell_arm": 5, "u.attack_range": 7, "a.banner_radius": 5,
+	"a.banner_resist": 0.6}
 
 
 func form_at(id: StringName, level: int) -> Dictionary:

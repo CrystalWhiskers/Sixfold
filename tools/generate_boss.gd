@@ -222,6 +222,10 @@ func _upgrades() -> BossUpgrades:
 		&"hospitaller": _lv({"a.heal_radius": [3, 4, 4, 5, 6], "a.mend_percent": [0.06, 0.07, 0.08, 0.09, 0.12],
 			"a.mend_interval": [1.0, 0.9, 0.8, 0.7, 0.5]}),
 		# Slow Match: a heavier blast, over a bigger square.
+		# Rally Banner: a stronger, wider banner that stands longer once planted.
+		&"bannerman": _lv({"a.banner_resist": [0.18, 0.21, 0.24, 0.27, 0.35],
+			"a.banner_radius": [2, 2, 3, 3, 4],
+			"a.banner_seconds": [12.0, 14.0, 16.0, 18.0, 25.0]}),
 		&"powderkeg": _lv({"a.blast_radius": [1, 2, 2, 2, 3],
 			"a.blast_attack_multiple": [5.5, 6.0, 6.5, 7.0, 9.0],
 			"u.move_time*": [0.95, 0.9, 0.85, 0.8, 0.7]}),
