@@ -1740,7 +1740,7 @@ func _tick_summons() -> void:
 		summon_left -= CombatSim.TICK
 		if summon_left <= 0.0:
 			summon_left += p.summon_every
-			_summon_wave(p.summon_count, p.minion_power)
+			_summon_wave(p.summon_count + crowd_extra(), p.minion_power)
 	var i := _summon_marks.size() - 1
 	while i >= 0:
 		var m: Dictionary = _summon_marks[i]
@@ -1842,7 +1842,8 @@ func edge_count() -> int:
 	## How many step in at the edge each time: `edge_count` at first, one more every
 	## `edge_ramp_seconds`, up to `edge_count_max`.
 	var extra := int(sim.elapsed / maxf(data.edge_ramp_seconds, 1.0))
-	return clampi(data.edge_count + extra, 0, maxi(data.edge_count_max, data.edge_count))
+	return clampi(data.edge_count + extra + crowd_extra() / 2, 0,
+		maxi(data.edge_count_max, data.edge_count) + crowd_extra() / 2)
 
 
 func _edge_summon() -> void:
@@ -1932,7 +1933,31 @@ func summon_ceiling() -> int:
 	## However she calls them — waves, swarms, flankers, retreats — no more than this
 	## many of her summons stand at once: twice her ordinary cap. Unkilled, they would
 	## otherwise pile up until they boxed her in.
-	return maxi(data.minion_cap, 1) * 2
+	return mini(maxi(data.minion_cap, 1) * 2 + crowd_extra() * 3, CROWD_CEILING_MAX)
+
+
+## However big the army, never more of hers than this at once — the frame rate's limit.
+const CROWD_CEILING_MAX := 64
+
+
+func army_weight() -> float:
+	## How much army is on the field: every unit counts its tier, times (1 + 10% per
+	## upgrade level of its type), so stacked waves of big upgraded units weigh most.
+	var w := 0.0
+	for u in sim._units:
+		if u.team != player_team() or not u.is_alive() or u.structure:
+			continue
+		var lv := float(barracks.level_of(u.data.id)) if barracks != null else 0.0
+		w += float(maxi(u.data.tier, 1)) * (1.0 + 0.1 * lv)
+	return w
+
+
+func crowd_extra() -> int:
+	## Extra summons she calls to answer a crowd: one per `crowd_weight_per_summon` of
+	## army weight, up to `crowd_extra_max`.
+	if data.crowd_weight_per_summon <= 0.0:
+		return 0
+	return clampi(int(army_weight() / data.crowd_weight_per_summon), 0, maxi(data.crowd_extra_max, 0))
 
 
 func _swarm() -> void:
@@ -1999,7 +2024,7 @@ func _summon_wave(count: int, power: float) -> void:
 	## minion `summon_warning` seconds later — the circle is the telegraph.
 	var cells: Array[Vector2i] = []
 	for i in count:
-		if minions_alive() + cells.size() >= data.minion_cap:
+		if minions_alive() + cells.size() >= data.minion_cap + crowd_extra() * 2:
 			break
 		var c := _nearest_free(boss.cell + Vector2i([-2, 2, 0, -1, 1][i % 5], 2), boss.cell)
 		if c == boss.cell or cells.has(c):

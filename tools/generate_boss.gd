@@ -479,6 +479,10 @@ func _initialize() -> void:
 	b.edge_count = 1
 	b.edge_ramp_seconds = 60.0
 	b.edge_count_max = 6
+	# A bigger army on the field brings more of hers: +1 summon a wave per 12 army
+	# weight (tier x upgrade bonus, summed), up to +8; the edge gets half that.
+	b.crowd_weight_per_summon = 12.0
+	b.crowd_extra_max = 8
 	var retreat := _move(&"crimson_retreat", "Crimson Retreat", S.RETREAT, 0, 0, 0.0, 0.5)
 	retreat.windup = 1.5
 	retreat.retreat_summons = [shade, shade, hunter, berserker, thorn, thorn, chalice, chalice] as Array[BossMinion]

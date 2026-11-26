@@ -135,6 +135,11 @@ extends Resource
 @export var edge_count: int = 1
 @export var edge_ramp_seconds: float = 60.0
 @export var edge_count_max: int = 6
+## Answering a crowd: one extra summon per wave (and half that at the edge) for every
+## `crowd_weight_per_summon` of army weight on the field (tier x (1 + 10% per upgrade
+## level), summed), up to `crowd_extra_max`; her caps rise with it.
+@export var crowd_weight_per_summon: float = 0.0
+@export var crowd_extra_max: int = 0
 ## The first phase (0-based) flankers come in; 1 keeps them out of phase 1.
 @export var flank_from_phase: int = 0
 ## A shade arrives with a blast: this many of its own hits to every one of the army

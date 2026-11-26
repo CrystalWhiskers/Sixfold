@@ -14444,6 +14444,30 @@ func _test_boss_executions(data: BossData) -> void:
 
 func _test_boss_units(_data: BossData) -> void:
 	_section("Boss defence: how the army's units behave here")
+	# A crowd on the field brings more of hers: weighted by tier and upgrades.
+	var sc2 := _boss_board([["warden"], [], []])
+	var bfc2: BossFight = sc2.bf
+	var simc2: CombatSim = sc2.sim
+	simc2._absorb_new_units()
+	var light := bfc2.army_weight()
+	var few := bfc2.crowd_extra()
+	for k in 30:
+		var extra_u := UnitInstance.create(BoardModel.at_tier(_find("warden"), 3), bfc2.player_team())
+		var cell := bfc2._nearest_free(Vector2i(8, 16), Vector2i(-1, -1))
+		if simc2.board.force_place(extra_u, cell):
+			simc2._pending_units.append(extra_u)
+	simc2._absorb_new_units()
+	var heavy := bfc2.army_weight()
+	var many := bfc2.crowd_extra()
+	for t in bfc2.barracks.types:
+		bfc2.barracks.level[t.id] = 10
+	_check("a bigger army on the field makes her call more", heavy > light and many > few,
+		"weight %.0f -> %.0f, extra %d -> %d" % [light, heavy, few, many])
+	_check("and upgrades weigh in too, up to a limit",
+		bfc2.army_weight() > heavy and bfc2.crowd_extra() <= bfc2.data.crowd_extra_max
+		and bfc2.summon_ceiling() > bfc2.data.minion_cap * 2
+		and bfc2.summon_ceiling() <= BossFight.CROWD_CEILING_MAX)
+	BoardModel.reset_map()
 	# The Pariah: alone for a moment, it charges into the fight, keeping its strength.
 	var sp2 := _boss_board([["pariah", "warden"], [], []])
 	var bfp2: BossFight = sp2.bf
