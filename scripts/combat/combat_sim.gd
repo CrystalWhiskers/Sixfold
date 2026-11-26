@@ -2169,6 +2169,10 @@ func _take_host(u: UnitInstance, ab: AbilityData, host: UnitInstance) -> void:
 	## are recorded BEFORE anything is changed, because they are the only record of
 	## what has to be handed back at the round boundary, and a possession that
 	## cannot be undone is a unit permanently stolen out of a roster.
+	if host.boss or host.structure:
+		# Never a boss or a crystal, whoever asks: taking one over would hand her
+		# health bar to the thief's weakness rules and skip whole phases.
+		return
 	host.home_team = host.team
 	host.home_data = host.data
 	host.puppeteer_uid = u.uid
@@ -2409,6 +2413,9 @@ func _reinfect(u: UnitInstance, victim: UnitInstance) -> void:
 	if not u.is_husk() or u.is_riding() or victim == null:
 		return
 	if not victim.is_alive() or victim.team == u.team or victim.is_possessed():
+		return
+	if victim.boss or victim.structure:
+		# Nothing gets inside a boss or a crystal: a husk that hits one just hits it.
 		return
 	var ab := u.data.ability
 	if ab == null or ab.kind != AbilityData.Kind.POSSESS:

@@ -14442,6 +14442,27 @@ func _test_boss_executions(data: BossData) -> void:
 
 func _test_boss_units(_data: BossData) -> void:
 	_section("Boss defence: how the army's units behave here")
+	# Nothing possesses her: a Usurper (or its husk) that reaches her just hits her.
+	var su := _boss_board([["usurper"], [], []])
+	var bfu: BossFight = su.bf
+	var simu: CombatSim = su.sim
+	simu._absorb_new_units()
+	var thief: UnitInstance = null
+	for u in simu._units:
+		if u.is_alive() and u.data.id == &"usurper":
+			thief = u
+	if thief != null:
+		var hp_b := bfu.boss.current_hp
+		var team_b := bfu.boss.team
+		simu._take_host(thief, thief.data.ability, bfu.boss)
+		simu._reinfect(thief, bfu.boss)
+		_check("a Usurper can never take over the boss",
+			bfu.boss.team == team_b and not bfu.boss.is_possessed()
+			and is_equal_approx(bfu.boss.current_hp, hp_b) and bfu.phase == 0)
+		_check("and never picks her as a host", not simu.possess_candidates(thief).has(bfu.boss))
+	else:
+		_check("the Usurper test could set up", false)
+	BoardModel.reset_map()
 	# Her posture: enough damage and she reels, stunned and taking more.
 	var sg := _boss_board([["warden"], [], []])
 	var bfg: BossFight = sg.bf
