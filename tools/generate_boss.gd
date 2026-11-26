@@ -396,6 +396,8 @@ func _initialize() -> void:
 	b.surround_count = 6
 	b.surround_cooldown = 10.0
 	# A big move chipping a crystal in its way: 99% resisted, and never more than 10.
+	# Rebuilds take a fixed time but come back weaker each time: 50%, 25%, 12.5%...
+	b.crystal_rebuild_decay = 0.5
 	b.crystal_share = 0.01
 	b.crystal_big_cap = 10.0
 	# Her blows on crystals are a flat 150 however strong she gets, so her damage to the
@@ -404,6 +406,8 @@ func _initialize() -> void:
 	# Her blows on a crystal: a fixed 100 on a lane crystal, 50 on the Central.
 	b.crystal_hit_damage = 100.0
 	b.central_hit_damage = 50.0
+	# ...at a fixed 1.5 swings a second, whatever her haste or enrage.
+	b.crystal_attack_speed = 1.5
 	# Her summons climb a tier per phase, but only one more per five enrage surges.
 	b.minion_tier_surges = 5
 	b.enrage_attack = 0.40
@@ -522,6 +526,11 @@ func _initialize() -> void:
 	# multiplier.
 	# And her big moves do not spare her own summons.
 	b.friendly_fire = true
+	# Her summons grow with the fight only slightly: 15% of her and the army's growth.
+	b.summon_scale_share = 0.15
+	# Wave units fresh on the field resist 90% of damage for their first 3 seconds.
+	b.spawn_protect_seconds = 3.0
+	b.spawn_protect_resist = 0.90
 	b.big_hp_per_mult = 0.10
 	b.big_hp_cap = 0.90
 	b.small_move_share = 0.75

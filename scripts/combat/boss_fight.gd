@@ -1517,6 +1517,30 @@ func spawn_cell(zone: int, e: Dictionary) -> Vector2i:
 	return Vector2i(-1, -1)
 
 
+## uid -> when a wave unit stepped onto the field, for its spawn protection.
+var _spawned_at: Dictionary = {}
+
+
+func is_spawn_protected(v: UnitInstance) -> bool:
+	## Fresh off a wave: for `spawn_protect_seconds` it shrugs off most of what hits it.
+	if v == null or data.spawn_protect_seconds <= 0.0 or not _spawned_at.has(v.uid):
+		return false
+	return sim.elapsed - float(_spawned_at[v.uid]) < data.spawn_protect_seconds
+
+
+func shape_army_damage(amount: float, victim: UnitInstance) -> float:
+	## A wave unit just spawned resists `spawn_protect_resist` of all damage.
+	if is_spawn_protected(victim):
+		return amount * (1.0 - clampf(data.spawn_protect_resist, 0.0, 1.0))
+	return amount
+
+
+func crystal_attack_interval() -> float:
+	## Her swing on a crystal runs at a fixed `crystal_attack_speed`, whatever her
+	## phase haste or enrage. 0 when it is not fixed.
+	return 1.0 / data.crystal_attack_speed if data.crystal_attack_speed > 0.0 else 0.0
+
+
 func _spawn(e: Dictionary, cell: Vector2i, zone: int) -> void:
 	var base: UnitData = e.data
 	var u := UnitInstance.create(barracks.field_data(base) if barracks != null else base,
@@ -1530,6 +1554,7 @@ func _spawn(e: Dictionary, cell: Vector2i, zone: int) -> void:
 	u.move_from = cell
 	zone_of_uid[u.uid] = zone
 	base_of_uid[u.uid] = base
+	_spawned_at[u.uid] = sim.elapsed
 	sim._pending_units.append(u)
 	sim._emit("summon", {
 		uid = u.uid, owner_uid = -1, team = u.team, cell = cell,
@@ -1830,7 +1855,10 @@ func summon_scale() -> float:
 		for t in barracks.types:
 			total += barracks.stat_bump(barracks.level_of(t.id))
 		army = total / float(barracks.types.size())
-	return maxf(hers, 1.0) * maxf(army, 1.0)
+	var raw := maxf(hers, 1.0) * maxf(army, 1.0)
+	# Only a share of that growth reaches them, so the climb is slight, not a wall.
+	var share := data.summon_scale_share if data.summon_scale_share > 0.0 else 1.0
+	return 1.0 + (raw - 1.0) * share
 
 
 func minion_tier() -> int:
@@ -2018,16 +2046,17 @@ func _tick_rebuilds() -> void:
 		if c.is_alive():
 			continue
 		if not rebuilding.has(i):
-			# Each time a crystal is broken it takes twice as long to come back: 90 s,
-			# 180, 360... A rebuilt crystal makes the centre immune again, and without
-			# this the three could keep rebuilding faster than she can cross the field
-			# between them, and the fight would never end.
-			var n := int(times_broken.get(i, 0))
-			times_broken[i] = n + 1
-			var secs := data.crystal_rebuild_seconds * pow(2.0, n)
+			# A fixed time, every break. (Her enrage keeps quickening her swing without
+			# end, so she still out-paces the rebuilds in the end.)
+			times_broken[i] = int(times_broken.get(i, 0)) + 1
+			var secs := data.crystal_rebuild_seconds
 			rebuilding[i] = secs
 			sim._emit("crystal_rebuilding", {uid = c.uid, cell = c.cell, lane = i,
 				seconds = secs})
+		if lane_crystals_left() == 0 and crystals[3].is_alive():
+			# All three are down and the centre is open: the rebuilds hold still while
+			# she is at it, so a fixed rebuild time cannot keep the fight going for ever.
+			continue
 		rebuilding[i] = float(rebuilding[i]) - CombatSim.TICK
 		if float(rebuilding[i]) <= 0.0 and _restore_crystal(i):
 			rebuilding.erase(i)
@@ -2046,7 +2075,14 @@ func _restore_crystal(i: int) -> bool:
 	rebuilding.erase(i)
 	c.target = null
 	c.shield = 0.0
-	c.current_hp = c.stat(StatModifier.Stat.MAX_HP) * clampf(data.crystal_rebuild_fraction, 0.05, 1.0)
+	# The rebuild time is fixed, so it comes back weaker every time instead: each
+	# rebuild at `crystal_rebuild_decay` of the last one's health. Without that the
+	# three could be rebuilt faster than she can break them and the fight never ends.
+	var again := maxi(int(times_broken.get(i, 1)) - 1, 0)
+	var frac := data.crystal_rebuild_fraction
+	if data.crystal_rebuild_decay > 0.0:
+		frac *= pow(data.crystal_rebuild_decay, again)
+	c.current_hp = c.stat(StatModifier.Stat.MAX_HP) * clampf(frac, 0.05, 1.0)
 	# The view put its body away when it broke; a "summon" brings one back.
 	sim._emit("summon", {uid = c.uid, owner_uid = -1, team = c.team, cell = cell,
 		unit_id = c.data.id, tier = 1, hp = c.current_hp,

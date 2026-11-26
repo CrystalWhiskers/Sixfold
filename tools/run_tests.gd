@@ -14126,9 +14126,9 @@ func _test_boss_defence() -> void:
 	_check("and once it falls again the centre is open to her again",
 		bf.current_target() == bf.crystals[3])
 	sim.step()
-	_check("each time a crystal breaks it takes twice as long to come back",
-		is_equal_approx(float(bf.rebuilding.get(0, 0.0)), bf.data.crystal_rebuild_seconds * 2.0 - CombatSim.TICK)
-		or float(bf.rebuilding.get(0, 0.0)) > bf.data.crystal_rebuild_seconds * 1.9,
+	_check("every rebuild takes the same fixed time, however often it has broken",
+		bf.times_broken.get(0, 0) >= 2
+		and absf(float(bf.rebuilding.get(0, 0.0)) - bf.data.crystal_rebuild_seconds) <= CombatSim.TICK * 1.5,
 		"%.1f s" % float(bf.rebuilding.get(0, 0.0)))
 	_check("and no matter how she calls them, her summons stop at a ceiling",
 		bf.summon_ceiling() == bf.data.minion_cap * 2)
@@ -14399,6 +14399,7 @@ func _test_boss_executions(data: BossData) -> void:
 		v.shield = 0.0
 		v.current_hp = v.stat(StatModifier.Stat.MAX_HP)
 		var hp0 := v.current_hp
+		bf._spawned_at.clear()  # past its spawn protection
 		bf.marked = {move = heaven, cells = [v.cell] as Array[Vector2i], left = 0.01, aim = v.cell, step = 0}
 		bf._strike()
 		var plain := bf.boss.stat(StatModifier.Stat.ATTACK_DAMAGE) * heaven.damage_mult
@@ -14429,6 +14430,60 @@ func _test_boss_executions(data: BossData) -> void:
 
 func _test_boss_units(_data: BossData) -> void:
 	_section("Boss defence: how the army's units behave here")
+	# With all three lane crystals down the rebuild clocks hold still, and each
+	# rebuild of one crystal comes back weaker than the last.
+	var sr2 := _boss_board()
+	var bfr2: BossFight = sr2.bf
+	var simr2: CombatSim = sr2.sim
+	for i in 3:
+		_break(simr2, bfr2.crystals[i], bfr2.boss)
+	bfr2._tick_rebuilds()
+	var clocks := str(bfr2.rebuilding)
+	for k in 20:
+		bfr2._tick_rebuilds()
+	_check("with the centre open, the rebuild clocks hold still",
+		bfr2.rebuilding.size() == 3 and str(bfr2.rebuilding) == clocks, "%s -> %s" % [clocks, str(bfr2.rebuilding)])
+	bfr2._restore_crystal(0)
+	var first_hp := bfr2.crystals[0].current_hp
+	_break(simr2, bfr2.crystals[0], bfr2.boss)
+	bfr2._tick_rebuilds()
+	bfr2._restore_crystal(0)
+	_check("and a crystal rebuilt again comes back weaker",
+		bfr2.crystals[0].current_hp < first_hp - 1.0, "%.0f then %.0f" % [first_hp, bfr2.crystals[0].current_hp])
+	BoardModel.reset_map()
+	# On a crystal she swings at a fixed pace; fresh wave units are protected.
+	var sp := _boss_board([["warden"], [], []])
+	var bfp: BossFight = sp.bf
+	var simp: CombatSim = sp.sim
+	simp._absorb_new_units()
+	bfp.boss.target = bfp.crystals[0]
+	var pace0 := simp.attack_interval(bfp.boss)
+	bfp.phase = 3
+	bfp._apply_phase_mods()
+	bfp.enrage_stacks = 5
+	var pace3 := simp.attack_interval(bfp.boss)
+	_check("on a crystal she swings at one fixed pace, whatever her phase",
+		is_equal_approx(pace0, 1.0 / bfp.data.crystal_attack_speed) and is_equal_approx(pace3, pace0),
+		"%.2fs then %.2fs" % [pace0, pace3])
+	bfp.boss.target = null
+	var fresh: UnitInstance = null
+	for u in simp._units:
+		if u.is_alive() and u.data.id == &"warden":
+			fresh = u
+	if fresh != null:
+		fresh.shield = 0.0
+		var h0 := fresh.current_hp
+		simp._damage(fresh, 100.0, bfp.boss)
+		_check("a unit fresh off a wave resists 90% of what hits it",
+			bfp.is_spawn_protected(fresh) and absf((h0 - fresh.current_hp) - 100.0 * (1.0 - bfp.data.spawn_protect_resist)) < 0.5,
+			"%.1f taken" % (h0 - fresh.current_hp))
+		simp.elapsed += bfp.data.spawn_protect_seconds + 0.1
+		fresh.shield = 0.0
+		var h1 := fresh.current_hp
+		simp._damage(fresh, 10.0, bfp.boss)
+		_check("and after a few seconds it is fair game", not bfp.is_spawn_protected(fresh)
+			and fresh.current_hp < h1 - 5.0, "%.1f taken" % (h1 - fresh.current_hp))
+	BoardModel.reset_map()
 	# Friendly fire: her big moves hit her own summons in them; ordinary ones do not.
 	var sff := _boss_board()
 	var bff2: BossFight = sff.bf
@@ -14793,8 +14848,8 @@ func _test_boss_attacks(data: BossData) -> void:
 		var bk4: Barracks = sf4_barracks_of(bf4)
 		for t in bk4.types:
 			bk4.level[t.id] = 10
-		_check("her summons grow with how far the army has been upgraded",
-			bf4.summon_scale() > weak * 5.0, "%.2f -> %.2f" % [weak, bf4.summon_scale()])
+		_check("her summons grow with how far the army has been upgraded, but only slightly",
+			bf4.summon_scale() > weak and bf4.summon_scale() < weak * 3.0, "%.2f -> %.2f" % [weak, bf4.summon_scale()])
 		_check("and summons come out at a higher tier each phase",
 			bf4.minion_tier() == data.minion_base_tier + 2 and h.data.tier == data.minion_base_tier)
 		bf4.enrage_stacks = data.minion_tier_surges - 1

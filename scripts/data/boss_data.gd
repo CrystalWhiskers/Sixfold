@@ -38,6 +38,9 @@ extends Resource
 ## While it is down, its section's waves go to the Central Crystal instead.
 @export var crystal_rebuild_seconds: float = 90.0
 @export var crystal_rebuild_fraction: float = 0.5
+## Each rebuild of the same crystal comes back at this share of the last one's health
+## (0.5: 50%, 25%, 12.5%...). 0 for the same every time.
+@export var crystal_rebuild_decay: float = 0.0
 
 @export_group("Economy")
 ## Supply: the Barracks' currency. It ticks up every second of the fight, and the
@@ -168,6 +171,13 @@ extends Resource
 ## its multiplier. 0 keeps the plain attack-times-multiplier for both.
 ## Her big (wound-up) moves hit her own summons standing in them too.
 @export var friendly_fire: bool = false
+## How much of her and the army's growth her summons take on (0.15 = 15% of it); 0
+## for all of it.
+@export var summon_scale_share: float = 0.0
+## Spawn protection: a wave unit resists `spawn_protect_resist` of all damage for
+## its first `spawn_protect_seconds` on the field.
+@export var spawn_protect_seconds: float = 0.0
+@export var spawn_protect_resist: float = 0.0
 @export var big_hp_per_mult: float = 0.0
 @export var big_hp_cap: float = 0.0
 @export var small_move_share: float = 0.0
@@ -201,6 +211,8 @@ extends Resource
 ## grown — her damage to the army can climb as high as it likes without the crystals
 ## melting. 0 to let it scale with her attack.
 @export var crystal_hit_damage: float = 0.0
+## How fast she swings at a crystal, fixed (hits a second; 0 to use her own speed).
+@export var crystal_attack_speed: float = 0.0
 ## The same for the Central Crystal (0 to use `crystal_hit_damage`).
 @export var central_hit_damage: float = 0.0
 

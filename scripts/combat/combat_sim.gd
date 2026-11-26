@@ -481,6 +481,11 @@ func attack_interval(u: UnitInstance) -> float:
 	## The unit's own swing timer, divided by the pressure. This lives here rather
 	## than on UnitInstance because pressure belongs to the battle, not to the
 	## unit — a unit has no idea what time it is.
+	if boss_fight != null and u.boss and u.target != null and u.target.structure:
+		var fixed := boss_fight.crystal_attack_interval()
+		if fixed > 0.0:
+			# Boss defence: on a crystal she swings at one fixed pace.
+			return fixed
 	return maxf(u.attack_interval() / pressure(), MIN_ATTACK_TIME)
 
 
@@ -3872,6 +3877,9 @@ func _damage(victim: UnitInstance, amount: float, source: UnitInstance,
 	if boss_fight != null and victim.structure:
 		# Boss defence: her blows on a crystal are a fixed amount, not her attack.
 		total = boss_fight.shape_crystal_damage(total, source, victim)
+	if boss_fight != null and victim.team == boss_fight.player_team() and not victim.structure:
+		# Boss defence: a wave unit fresh on the field resists most of what hits it.
+		total = boss_fight.shape_army_damage(total, victim)
 	if boss_fight != null and victim.boss:
 		# Boss defence: her ranged resistance and the cap on any single blow, last,
 		# on the final figure — so nothing can delete a health bar in one hit.
