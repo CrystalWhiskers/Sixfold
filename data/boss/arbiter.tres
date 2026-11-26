@@ -206,7 +206,6 @@ span = 3
 damage_mult = 3.0
 telegraph = 1.5
 windup = 2.5
-executes_top_tier = true
 
 [sub_resource type="Resource" id="Resource_xb0dc"]
 script = ExtResource("2_lqgl0")

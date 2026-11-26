@@ -291,7 +291,7 @@ func _initialize() -> void:
 	# Crimson Cross, which keeps hitting off her attack.
 	for m in [hunt, ring, ring_big, rain, rain_big, onrush, onrush_long, stripes]:
 		m.hp_scaled = true
-	cross.executes_top_tier = true
+	# The Crimson Cross is a blow off her attack, not an execution.
 	stripes.executes_top_tier = true
 	# The charge-up stances, and what each lets loose if it is not broken.
 	var gather := _stance(&"gathering_storm", "Gathering Storm", 5.0, 3000.0, cross)

@@ -14385,9 +14385,12 @@ func _test_boss_executions(data: BossData) -> void:
 			if m.finisher != null:
 				by_id[m.finisher.id] = m.finisher
 	var heaven: BossMove = by_id.get(&"heaven_split", null)
-	var cross: BossMove = by_id.get(&"crimson_cross", null)
-	_check("the heavy blows carry a share of max HP, and the stance finishers execute",
+	var cross: BossMove = by_id.get(&"thousand_cuts", null)
+	var crimson: BossMove = by_id.get(&"crimson_cross", null)
+	_check("the heavy blows carry a share of max HP, and Thousand Cuts executes",
 		heaven != null and heaven.max_hp_percent > 0.0 and cross != null and cross.executes_top_tier)
+	_check("the Crimson Cross does not execute: it hits off her attack",
+		crimson != null and not crimson.executes_top_tier and not crimson.hp_scaled)
 	var s := _boss_board([["warden", "archer"], [], []])
 	var bf: BossFight = s.bf
 	var sim: CombatSim = s.sim
