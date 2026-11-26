@@ -4083,6 +4083,9 @@ func _bury(victim: UnitInstance, killer_uid: int, frozen: bool,
 	if victim.structure:
 		# A crystal is not a body: nothing raises it and nobody grieves for it.
 		return
+	if boss_fight != null:
+		# Boss defence: what she kills herself makes her a little stronger.
+		boss_fight.on_army_fell(victim, killer_uid)
 	if boss_fight != null and boss_fight.soul_kills(killer_uid, victim):
 		# Boss defence: what SHE kills, she takes whole. No second wind, and nothing
 		# raises it — the soul is gone with the body.

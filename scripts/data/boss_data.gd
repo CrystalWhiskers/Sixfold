@@ -205,6 +205,14 @@ extends Resource
 @export var long_range_resist: float = 0.0
 @export var long_range_tiles: int = 4
 @export var death_power: float = 0.0
+## What she kills herself makes her stronger, for good: `kill_power` of her attack a
+## kill, +`kill_power_per_tier` of that per tier past the first and
+## +`kill_power_per_level` per upgrade level of the type; an execution gives only
+## `kill_execute_share` of it.
+@export var kill_power: float = 0.0
+@export var kill_power_per_tier: float = 0.0
+@export var kill_power_per_level: float = 0.0
+@export var kill_execute_share: float = 1.0
 ## What she does when the army crowds her: with `surround_count` or more of it within
 ## two tiles, her next move is `surround_move` (a big one, with a wind-up), at most
 ## once every `surround_cooldown` seconds.

@@ -14444,6 +14444,37 @@ func _test_boss_executions(data: BossData) -> void:
 
 func _test_boss_units(_data: BossData) -> void:
 	_section("Boss defence: how the army's units behave here")
+	# What she kills herself makes her slightly stronger: more for big, upgraded units,
+	# much less for an execution, and nothing for deaths that are not hers.
+	var sk := _boss_board([["warden", "warden", "warden"], [], []])
+	var bfk: BossFight = sk.bf
+	var simk: CombatSim = sk.sim
+	simk._absorb_new_units()
+	var wards: Array[UnitInstance] = []
+	for u in simk._units:
+		if u.is_alive() and u.data.id == &"warden":
+			wards.append(u)
+	if wards.size() >= 3:
+		var atk0 := bfk.boss.stat(StatModifier.Stat.ATTACK_DAMAGE)
+		simk._damage(wards[0], 1.0e7, wards[1])
+		_check("a unit she did not kill gives her nothing",
+			is_equal_approx(bfk.boss.stat(StatModifier.Stat.ATTACK_DAMAGE), atk0))
+		bfk._spawned_at.clear()
+		simk._damage(wards[1], 1.0e7, bfk.boss)
+		var atk1 := bfk.boss.stat(StatModifier.Stat.ATTACK_DAMAGE)
+		_check("one she kills makes her a little stronger",
+			atk1 > atk0 and atk1 < atk0 * 1.02, "%.1f -> %.1f" % [atk0, atk1])
+		var t1 := bfk.kill_gain(wards[2])
+		wards[2].data = BoardModel.at_tier(wards[2].data, 6)
+		var t6 := bfk.kill_gain(wards[2])
+		bfk.barracks.level[&"warden"] = 10
+		var t6l := bfk.kill_gain(wards[2])
+		_check("a bigger, more upgraded kill is worth more", t6 > t1 and t6l > t6,
+			"%.4f / %.4f / %.4f" % [t1, t6, t6l])
+		_check("an execution is worth a quarter", is_equal_approx(bfk.kill_gain(wards[2], true), t6l * 0.25))
+	else:
+		_check("the kill power test could set up", false)
+	BoardModel.reset_map()
 	# Nothing possesses her: a Usurper (or its husk) that reaches her just hits her.
 	var su := _boss_board([["usurper"], [], []])
 	var bfu: BossFight = su.bf

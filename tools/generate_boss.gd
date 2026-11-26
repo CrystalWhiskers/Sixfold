@@ -555,7 +555,14 @@ func _initialize() -> void:
 	b.ranged_resist = 0.45
 	# Long range (4 tiles and more) gets through even less: 60% less.
 	b.long_range_resist = 0.6
-	b.death_power = 0.002
+	# Not every fallen unit any more: only what she kills herself feeds her, and only a
+	# little. +0.1% attack a kill, x(1 + 1 per tier past the first) x(1 + 10% per upgrade
+	# level) — a tier 6 Lv10 kill is +1.2% — and an execution a quarter of that.
+	b.death_power = 0.0
+	b.kill_power = 0.001
+	b.kill_power_per_tier = 1.0
+	b.kill_power_per_level = 0.10
+	b.kill_execute_share = 0.25
 	# A lot more of them: [on entering, every N seconds, how many, power].
 	var summons := [[1, 30.0, 1, 0.7], [4, 16.0, 3, 1.1], [5, 14.0, 3, 1.25], [6, 12.0, 4, 1.4]]
 	for i in b.phases.size():

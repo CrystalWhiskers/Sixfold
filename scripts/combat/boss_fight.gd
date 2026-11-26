@@ -218,6 +218,43 @@ func _tick_death_power() -> void:
 	boss.add_battle_modifier(_death_mod)
 
 
+## Her gain from what she kills herself: a small, lasting share of attack per kill,
+## bigger for a higher tier and a more upgraded type, much smaller for an execution.
+var kill_power := 0.0
+var _kill_mod: StatModifier = null
+var _executing := false
+
+
+func kill_gain(victim: UnitInstance, executed := false) -> float:
+	if data.kill_power <= 0.0 or victim == null:
+		return 0.0
+	var tier := float(maxi(victim.data.tier, 1) - 1)
+	var lv := 0.0
+	if barracks != null:
+		lv = float(barracks.level_of(victim.data.id))
+	var gain := data.kill_power * (1.0 + data.kill_power_per_tier * tier) * (1.0 + data.kill_power_per_level * lv)
+	if executed:
+		gain *= clampf(data.kill_execute_share, 0.0, 1.0)
+	return gain
+
+
+func on_army_fell(victim: UnitInstance, killer_uid: int) -> void:
+	## Called for every death in the fight; only the army units SHE kills count.
+	if victim == null or victim.structure or victim.team != player_team():
+		return
+	if boss == null or killer_uid != boss.uid or not boss.is_alive():
+		return
+	var gain := kill_gain(victim, _executing)
+	if gain <= 0.0:
+		return
+	kill_power += gain
+	if _kill_mod != null:
+		boss.battle_modifiers.erase(_kill_mod)
+	_kill_mod = StatModifier.make(StatModifier.Stat.ATTACK_DAMAGE, StatModifier.Mode.PERCENT,
+		kill_power)
+	boss.add_battle_modifier(_kill_mod)
+
+
 func _tick_regen() -> void:
 	var p := _phase()
 	if p != null and p.regen > 0.0 and boss.is_alive():
@@ -1295,7 +1332,9 @@ func _strike() -> void:
 			# Her execution: the army's best die outright where they stand.
 			executed.append(v.cell)
 			_soul_blow = true
+			_executing = true
 			sim._execute(boss, v)
+			_executing = false
 			_soul_blow = false
 			continue
 		# And a share of the victim's own full health on top, for the moves that have it.
