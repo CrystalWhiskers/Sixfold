@@ -2352,6 +2352,33 @@ func is_pariah_charging(u: UnitInstance) -> bool:
 
 
 func _tick_pariah_charge(u: UnitInstance, alone: bool) -> bool:
+	var out := _pariah_charge_step(u, alone)
+	_show_isolation(u)
+	return out
+
+
+## uid -> [fill, charging] last sent to the view, so the meter is only re-sent on a change.
+var _iso_shown: Dictionary = {}
+
+
+func isolation_meter(u: UnitInstance) -> float:
+	## The Pariah's meter: building towards a charge (0..1), or the charge left (1..0).
+	if is_pariah_charging(u):
+		return clampf(float(_charge_left[u.uid]) / PARIAH_CHARGE_SECONDS, 0.0, 1.0)
+	return clampf(float(_alone_for.get(u.uid, 0.0)) / PARIAH_CHARGE_AFTER, 0.0, 1.0)
+
+
+func _show_isolation(u: UnitInstance) -> void:
+	var fill := snappedf(isolation_meter(u), 0.1)
+	var charging := is_pariah_charging(u)
+	var had: Array = _iso_shown.get(u.uid, [-1.0, false])
+	if is_equal_approx(float(had[0]), fill) and bool(had[1]) == charging:
+		return
+	_iso_shown[u.uid] = [fill, charging]
+	sim._emit("isolation_meter", {uid = u.uid, cell = u.cell, fill = fill, charging = charging})
+
+
+func _pariah_charge_step(u: UnitInstance, alone: bool) -> bool:
 	## True while it is charging (its isolation is held on for it).
 	if is_pariah_charging(u):
 		_charge_left[u.uid] = float(_charge_left[u.uid]) - CombatSim.TICK

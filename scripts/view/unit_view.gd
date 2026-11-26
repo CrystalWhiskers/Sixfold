@@ -418,6 +418,18 @@ func set_shield(value: float) -> void:
 	queue_redraw()
 
 
+## The Pariah's isolation meter in boss defence: -1 for none, else how full it is;
+## `isolation_charging` while the charge it buys is running down.
+var isolation := -1.0
+var isolation_charging := false
+
+
+func set_isolation(fill: float, charging: bool) -> void:
+	isolation = clampf(fill, 0.0, 1.0)
+	isolation_charging = charging
+	queue_redraw()
+
+
 func set_mana(value: float) -> void:
 	mana = clampf(value, 0.0, UnitInstance.MANA_MAX)
 	queue_redraw()
@@ -1235,6 +1247,17 @@ func _draw() -> void:
 		var mana_col := Color(0.98, 0.85, 0.42) if full else Color(0.42, 0.62, 0.92)
 		mana_col.a = alpha
 		draw_rect(mf, mana_col, true)
+
+	if isolation >= 0.0:
+		# Isolation: fills while it stands alone, then runs down orange while it charges.
+		var ib := Rect2(-half + BAR_INSET, -half - 3.0 + (4.5 if has_ability else 0.0),
+			tile_size - BAR_INSET * 2.0, 3.5)
+		draw_rect(ib, Color(0.08, 0.09, 0.14, 0.85 * alpha), true)
+		var ifl := ib
+		ifl.size.x = ib.size.x * isolation
+		var icol := Color(1.0, 0.55, 0.30) if isolation_charging else Color(0.80, 0.62, 0.95)
+		icol.a = alpha
+		draw_rect(ifl, icol, true)
 
 	var font := ThemeDB.fallback_font
 	var hp_text := _compact(hp_cur)

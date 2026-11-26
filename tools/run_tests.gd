@@ -14468,6 +14468,10 @@ func _test_boss_units(_data: BossData) -> void:
 			and not _kind_events(simp2, "pariah_charge").is_empty())
 		simp2.board.move_unit(pal2, bfp2._nearest_free(par.cell + Vector2i(1, 0), par.cell))
 		bfp2._tick_solitude()
+		var meters := _kind_events(simp2, "isolation_meter")
+		_check("an isolation meter fills while it stands alone, then shows the charge",
+			meters.size() >= 3 and float(meters[1].fill) > float(meters[0].fill) - 0.001
+			and bool(meters.back().charging), "%d meter events" % meters.size())
 		_check("and keeps its isolated strength even with allies around it",
 			par.isolated and not bfp2.seek_solitude(par))
 		for k in int((BossFight.PARIAH_CHARGE_SECONDS + 0.2) / CombatSim.TICK):

@@ -694,6 +694,10 @@ func _apply(e: Dictionary) -> void:
 			_view.effects().ring(_view.cell_to_pos(e.cell), _view.tile_size * 0.2,
 				_view.tile_size * 0.8, AbilityFx.color_for(&"second_wind"), _fx_life(0.6))
 			_respawn(e)
+		"isolation_meter":
+			var iv := _view.view_for(int(e.uid))
+			if iv != null:
+				iv.set_isolation(float(e.fill), bool(e.charging))
 		"mana":
 			var mv := _view.view_for(e.uid)
 			if mv != null:
