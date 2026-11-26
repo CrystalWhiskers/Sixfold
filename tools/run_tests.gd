@@ -14430,6 +14430,40 @@ func _test_boss_executions(data: BossData) -> void:
 
 func _test_boss_units(_data: BossData) -> void:
 	_section("Boss defence: how the army's units behave here")
+	# Her posture: enough damage and she reels, stunned and taking more.
+	var sg := _boss_board([["warden"], [], []])
+	var bfg: BossFight = sg.bf
+	var simg: CombatSim = sg.sim
+	simg._absorb_new_units()
+	var hitter: UnitInstance = null
+	for u in simg._units:
+		if u.is_alive() and u.data.id == &"warden":
+			hitter = u
+	if hitter != null:
+		bfg.marked = {}
+		bfg.pause_left = 0.0
+		var taken0 := bfg.boss.stat(StatModifier.Stat.DAMAGE_TAKEN)
+		var guard_p := 0
+		while bfg.posture < bfg.data.posture_damage and guard_p < 100:
+			simg._damage(bfg.boss, 1.0e6, hitter)
+			guard_p += 1
+		bfg.marked = {}
+		bfg.tick()
+		_check("enough damage and she reels: stunned, and taking more",
+			bfg.staggers == 1 and bfg.boss.is_stunned() and bfg.stagger_left > 0.0
+			and bfg.boss.stat(StatModifier.Stat.DAMAGE_TAKEN) > taken0
+			and not _kind_events(simg, "boss_staggered").is_empty())
+		_check("and her posture starts again from nothing", bfg.posture == 0.0 and bfg.posture_cd > 0.0)
+		var taken_st := bfg.boss.stat(StatModifier.Stat.DAMAGE_TAKEN)
+		for k in int((bfg.data.posture_seconds + 0.3) / CombatSim.TICK):
+			simg.step()
+		_check("then she recovers and takes normal damage again",
+			not bfg.boss.is_stunned() and bfg._stagger_mods.is_empty()
+			and bfg.boss.stat(StatModifier.Stat.DAMAGE_TAKEN) < taken_st - bfg.data.posture_amp * 0.9,
+			"stun %.1f stagger %.1f taken %.2f vs %.2f" % [bfg.boss.stun_left, bfg.stagger_left, bfg.boss.stat(StatModifier.Stat.DAMAGE_TAKEN), taken0])
+	else:
+		_check("the stagger test could set up", false)
+	BoardModel.reset_map()
 	# Late and enraged, against a maxed army, her summons stay in the thousands.
 	var sl := _boss_board([["warden"], [], []])
 	var bfl: BossFight = sl.bf

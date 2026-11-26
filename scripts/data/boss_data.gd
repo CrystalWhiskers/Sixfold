@@ -171,6 +171,13 @@ extends Resource
 ## its multiplier. 0 keeps the plain attack-times-multiplier for both.
 ## Her big (wound-up) moves hit her own summons standing in them too.
 @export var friendly_fire: bool = false
+## Her posture: after `posture_damage` from the army she reels for `posture_seconds`,
+## stunned and taking `posture_amp` more, then `posture_cooldown` before it builds
+## again. 0 damage for never.
+@export var posture_damage: float = 0.0
+@export var posture_seconds: float = 3.0
+@export var posture_amp: float = 0.25
+@export var posture_cooldown: float = 10.0
 ## How much of her and the army's growth her summons take on (0.15 = 15% of it); 0
 ## for all of it.
 @export var summon_scale_share: float = 0.0

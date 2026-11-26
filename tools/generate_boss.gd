@@ -527,6 +527,12 @@ func _initialize() -> void:
 	# multiplier.
 	# And her big moves do not spare her own summons.
 	b.friendly_fire = true
+	# Every 5000 damage the army lands she reels: 3 s stunned, taking 25% more, then
+	# 10 s before her posture builds again.
+	b.posture_damage = 5000.0
+	b.posture_seconds = 3.0
+	b.posture_amp = 0.25
+	b.posture_cooldown = 10.0
 	# Her summons grow with the fight only slightly: 5% of her and the army's growth,
 	# and +5% a surge of enrage (down from 10%) — a phase-4 summon at 11 surges against
 	# a Lv10 army is a few thousand health, not tens of thousands.

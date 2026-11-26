@@ -387,6 +387,9 @@ func _on_event(e: Dictionary) -> void:
 				boss_data.display_name, roundi(_stance_need), String(e.name)]
 		"boss_stance_meter":
 			_stance_taken = float(e.taken)
+		"boss_staggered":
+			_status.text = "%s reels! Stunned for %ds and taking %d%% more damage — hit her now!" % [
+				boss_data.display_name, roundi(float(e.seconds)), roundi(float(e.amp) * 100.0)]
 		"boss_stance_broken":
 			_stance_need = 0.0
 			_status.text = "Broken! %s is staggered and takes extra damage." % boss_data.display_name

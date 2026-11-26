@@ -304,6 +304,8 @@ func _apply(e: Dictionary) -> void:
 			_view.spawn_label(_at(int(e.uid), e.cell), "%s..." % String(e.name).to_upper(),
 				Color(1.0, 0.55, 0.35))
 			Audio.play_boss_charge()
+		"boss_staggered":
+			_view.spawn_label(_at(int(e.uid), e.cell), "STAGGERED", Color(0.70, 0.95, 0.70))
 		"boss_stance_broken":
 			_view.spawn_label(_at(int(e.uid), e.cell), "BROKEN", Color(0.70, 0.95, 0.70))
 		"boss_empowered":

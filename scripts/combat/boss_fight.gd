@@ -156,6 +156,9 @@ func shape_boss_damage(amount: float, source: UnitInstance) -> float:
 	if gate_holds():
 		# The health gate: nothing takes her below it until her recovery is over.
 		out = minf(out, maxf(boss.current_hp - gate_hp(), 0.0))
+	if source != null and source.team == player_team() and out > 0.0 and posture_cd <= 0.0:
+		# Her posture: enough damage and she reels (see _check_posture).
+		posture += out
 	return out
 
 
@@ -761,6 +764,46 @@ func _break_stance(mv: BossMove) -> void:
 	sim._emit("stun", {uid = boss.uid, cell = boss.cell, seconds = mv.stagger_seconds})
 
 
+## Her posture: damage the army deals her builds it; at `posture_damage` she reels —
+## stunned, unable to do anything, and taking `posture_amp` more — for
+## `posture_seconds`. Then it starts again from nothing after `posture_cooldown`.
+var posture := 0.0
+var posture_cd := 0.0
+var staggers := 0
+
+
+func _check_posture() -> void:
+	if posture_cd > 0.0:
+		posture_cd = maxf(posture_cd - CombatSim.TICK, 0.0)
+		return
+	if data.posture_damage <= 0.0 or posture < data.posture_damage or not boss.is_alive():
+		return
+	# Never in the middle of something she has committed to: the next free moment.
+	if not marked.is_empty() or in_stance() or pause_left > 0.0 or boss.sealed or stagger_left > 0.0:
+		return
+	stagger(data.posture_seconds, data.posture_amp)
+
+
+func stagger(seconds: float, amp: float) -> void:
+	## She reels: stunned for `seconds`, taking `amp` more damage the whole time.
+	posture = 0.0
+	posture_cd = seconds + data.posture_cooldown
+	staggers += 1
+	boss.stun_left = maxf(boss.stun_left, seconds)
+	boss.state = UnitInstance.State.IDLE
+	boss.state_timer = 0.0
+	boss.target = null
+	_stagger_mods = [StatModifier.make(StatModifier.Stat.DAMAGE_TAKEN,
+		StatModifier.Mode.PERCENT, amp)]
+	for m in _stagger_mods:
+		boss.add_battle_modifier(m)
+	stagger_left = seconds
+	var p := _phase()
+	gap_left = maxf(gap_left, maxf(p.gap if p != null else 3.0, seconds))
+	sim._emit("boss_staggered", {uid = boss.uid, cell = boss.cell, seconds = seconds, amp = amp})
+	sim._emit("stun", {uid = boss.uid, cell = boss.cell, seconds = seconds})
+
+
 func _complete_stance(mv: BossMove) -> void:
 	## Not broken: it comes out of the stance stronger and opens with its finisher.
 	_end_stance()
@@ -1345,6 +1388,7 @@ func tick() -> void:
 		if boss.current_hp > top:
 			boss.current_hp = top
 	_check_gate()
+	_check_posture()
 	if in_stance():
 		_tick_stance()
 	elif bool(marked.get("windup", false)):
