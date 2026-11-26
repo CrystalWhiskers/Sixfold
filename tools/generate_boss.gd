@@ -303,7 +303,9 @@ func _initialize() -> void:
 	b.display_name = "The Vermilion Arbiter"
 	b.title = "Keeper of Every Blade"
 	b.note = "A duellist in lacquered red who has outlived every weapon she was handed and kept them all. She starts with one blade and a spear, picks up a second blade when she is hurt, and fights hardest at the end."
-	b.max_hp = 100000.0
+	# Doubled from 100,000 so every phase lasts longer; her single-hit cap stays at
+	# 1000 (0.5% below), so the extra health is real time, not just bigger hits.
+	b.max_hp = 200000.0
 	b.attack_damage = 100.0
 	b.attack_speed = 0.9
 	b.move_time = 0.9
@@ -473,7 +475,7 @@ func _initialize() -> void:
 	# for a long while — sealed, mending, calling everything she has.
 	var recovery := _move(&"crimson_recovery", "Crimson Recovery", S.RETREAT, 0, 0, 0.0, 0.5)
 	recovery.retreat_seconds = 30.0
-	recovery.retreat_heal = 0.003
+	recovery.retreat_heal = 0.0015
 	recovery.retreat_vulnerability = 0.0
 	recovery.retreat_attack = 0.20
 	recovery.retreat_speed = 0.10
@@ -520,9 +522,9 @@ func _initialize() -> void:
 		b.phases[i].ranged_resist = [0.30, 0.40, 0.50, 0.60][i]
 		b.phases[i].long_range_resist = [0.45, 0.55, 0.65, 0.75][i]
 		b.phases[i].regen = bonus[i][1]
-	# No blow takes more than 1% of her health (1000 of 100,000); ranged hits are cut by 30%; every
+	# No blow takes more than 0.5% of her health (1000 of 200,000); ranged hits are cut by 30%; every
 	# fallen unit of the army makes her 0.2% stronger.
-	b.max_hit_percent = 0.01
+	b.max_hit_percent = 0.005
 	# ...growing very slowly with the army: +5% of that per average upgrade level.
 	b.max_hit_growth = 0.05
 	# Her map-wide moves (hp_scaled) hit for a share of the victim's own health: 10%
@@ -531,9 +533,9 @@ func _initialize() -> void:
 	# multiplier.
 	# And her big moves do not spare her own summons.
 	b.friendly_fire = true
-	# Every 5000 damage the army lands she reels: 3 s stunned, taking 25% more, then
+	# Every 8000 damage the army lands she reels: 3 s stunned, taking 25% more, then
 	# 10 s before her posture builds again.
-	b.posture_damage = 5000.0
+	b.posture_damage = 8000.0
 	b.posture_seconds = 3.0
 	b.posture_amp = 0.25
 	b.posture_cooldown = 10.0
