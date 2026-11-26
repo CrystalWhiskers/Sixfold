@@ -111,6 +111,10 @@ const CHASSIS_NAMES := {
 
 ## The radius its ordinary attack splashes over once empowered. 1 is a 3x3.
 @export var empower_splash_radius: int = 0
+## A minor splash on every hit, empowered or not: `splash_share` of the blow to each
+## enemy within `splash_radius` tiles of the target. Her summons use it.
+@export var splash_radius: int = 0
+@export var splash_share: float = 0.0
 
 ## What fraction of its attack damage a swing does to stone. Everyone can chew
 ## through a wall eventually — that is what stops an army being sealed in

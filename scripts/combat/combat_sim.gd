@@ -1233,6 +1233,14 @@ func _begin_attack(u: UnitInstance) -> void:
 			struck[other.uid] = true
 			_damage(other, dmg, u)
 
+	if u.data.splash_radius > 0 and u.data.splash_share > 0.0:
+		# A minor splash: a share of the blow on everything round what it hit.
+		for other in board.units_in_box(victim.cell, u.data.splash_radius, 1 - u.team):
+			if struck.has(other.uid) or not other.is_alive():
+				continue
+			struck[other.uid] = true
+			_damage(other, dmg * u.data.splash_share, u)
+
 	_mana_from_swing(u)
 	# A husk that connects is back inside something. Last, after everything the
 	# swing does, so it is a live enemy that survived the blow being taken over

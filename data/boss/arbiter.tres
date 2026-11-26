@@ -529,6 +529,20 @@ music_label = "Theme 4"
 music_from = 183.2727
 
 [sub_resource type="Resource" id="Resource_kd7dq"]
+script = ExtResource("1_s8kb7")
+id = &"ember_caster"
+display_name = "Ember Caster"
+max_hp = 280.0
+attack_damage = 26.0
+attack_speed = 0.8
+move_time = 0.85
+attack_range = 3
+ranged = true
+splash_radius = 1
+splash_share = 0.3
+accent = Color(0.95, 0.45, 0.2, 1)
+
+[sub_resource type="Resource" id="Resource_cmy1e"]
 script = ExtResource("2_lqgl0")
 id = &"bladestorm_whirl"
 display_name = "Bladestorm Whirl"
@@ -538,7 +552,7 @@ span = 3
 damage_mult = 3.5
 windup = 1.5
 
-[sub_resource type="Resource" id="Resource_cmy1e"]
+[sub_resource type="Resource" id="Resource_g3c8p"]
 script = ExtResource("1_s8kb7")
 id = &"thrall"
 display_name = "Crimson Thrall"
@@ -578,8 +592,8 @@ upgrade_stat_growth = 1.2
 minion_hp = 420.0
 minion_attack = 35.0
 minion_cap = 16
-summon_pool = Array[ExtResource("1_s8kb7")]([SubResource("Resource_od8ds"), SubResource("Resource_b7mvm"), SubResource("Resource_od8ds"), SubResource("Resource_pntgj"), SubResource("Resource_vvtju")])
-swarm_kind = SubResource("Resource_cmy1e")
+summon_pool = Array[ExtResource("1_s8kb7")]([SubResource("Resource_od8ds"), SubResource("Resource_b7mvm"), SubResource("Resource_kd7dq"), SubResource("Resource_od8ds"), SubResource("Resource_pntgj"), SubResource("Resource_vvtju"), SubResource("Resource_kd7dq")])
+swarm_kind = SubResource("Resource_g3c8p")
 swarm_every = 40.0
 swarm_count = 14
 first_phase_swarm = 6
@@ -609,7 +623,7 @@ kill_power = 0.001
 kill_power_per_tier = 1.0
 kill_power_per_level = 0.1
 kill_execute_share = 0.25
-surround_move = SubResource("Resource_kd7dq")
+surround_move = SubResource("Resource_cmy1e")
 crystal_share = 0.01
 crystal_big_cap = 10.0
 crystal_hit_damage = 100.0

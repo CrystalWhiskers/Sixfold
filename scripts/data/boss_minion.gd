@@ -31,6 +31,10 @@ extends Resource
 enum Targeting { NEAREST, TOP_TIER, CROWD, RANGED }
 @export var targeting: Targeting = Targeting.NEAREST
 @export var cleave_radius: int = 0
+## A minor splash: every hit also lands `splash_share` of itself on the enemies within
+## `splash_radius` tiles of what it hit.
+@export var splash_radius: int = 0
+@export var splash_share: float = 0.0
 ## Whether what it kills stays dead — no second wind, no raise. Only a few have it
 ## (the Headhunter); her ordinary summons kill the ordinary way.
 @export var soul_taker: bool = false

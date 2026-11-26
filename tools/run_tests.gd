@@ -14444,6 +14444,42 @@ func _test_boss_executions(data: BossData) -> void:
 
 func _test_boss_units(_data: BossData) -> void:
 	_section("Boss defence: how the army's units behave here")
+	# The Ember Caster: its bolts splash a little onto what stands round the target.
+	var se := _boss_board([["warden", "warden"], [], []])
+	var bfe: BossFight = se.bf
+	var sime: CombatSim = se.sim
+	sime._absorb_new_units()
+	var ember_kind: BossMinion = null
+	for k in bfe.data.summon_pool:
+		if k.id == &"ember_caster":
+			ember_kind = k
+	var pair: Array[UnitInstance] = []
+	for u in sime._units:
+		if u.is_alive() and u.data.id == &"warden":
+			pair.append(u)
+	if ember_kind != null and pair.size() >= 2:
+		var c0 := bfe._nearest_free(Vector2i(8, 14), Vector2i(-1, -1))
+		sime.board.move_unit(pair[0], c0)
+		var c1 := bfe._nearest_free(c0 + Vector2i(1, 0), c0)
+		sime.board.move_unit(pair[1], c1)
+		var em := bfe._spawn_minion(bfe._nearest_free(c0 + Vector2i(0, -2), c0), 1.0, ember_kind)
+		sime._absorb_new_units()
+		bfe._spawned_at.clear()
+		for w in pair:
+			w.shield = 0.0
+		var h0 := pair[0].current_hp
+		var h1 := pair[1].current_hp
+		em.target = pair[0]
+		sime._begin_attack(em)
+		var main_hit := h0 - pair[0].current_hp
+		var side_hit := h1 - pair[1].current_hp
+		_check("an Ember Caster's bolt splashes a share onto the unit beside its target",
+			BoardModel.box_distance(c0, c1) <= 1 and main_hit > 0.0
+			and absf(side_hit - main_hit * ember_kind.splash_share) < 1.0,
+			"%.1f main, %.1f beside" % [main_hit, side_hit])
+	else:
+		_check("the Ember Caster test could set up", false)
+	BoardModel.reset_map()
 	# What she kills herself makes her slightly stronger: more for big, upgraded units,
 	# much less for an execution, and nothing for deaths that are not hers.
 	var sk := _boss_board([["warden", "warden", "warden"], [], []])

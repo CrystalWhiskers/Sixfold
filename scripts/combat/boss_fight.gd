@@ -2013,6 +2013,8 @@ func _spawn_minion(cell: Vector2i, power: float, kind: BossMinion = null) -> Uni
 		md.accent = kind.accent
 		burst = kind.burst_mult
 		md.empower_splash_radius = kind.cleave_radius
+		md.splash_radius = kind.splash_radius
+		md.splash_share = kind.splash_share
 	var m := UnitInstance.create(md, boss_team())
 	if not sim.board.force_place(m, cell):
 		return null

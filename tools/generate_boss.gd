@@ -445,7 +445,14 @@ func _initialize() -> void:
 		Color(0.75, 0.35, 0.12))
 	berserker.targeting = BossMinion.Targeting.CROWD
 	berserker.cleave_radius = 1
-	b.summon_pool = [shade, hunter, shade, berserker, thorn] as Array[BossMinion]
+	# The Ember Caster: a ranged summon whose bolts splash a little onto everything
+	# around what they hit — 30% to each enemy within a tile.
+	var ember := _minion(&"ember_caster", "Ember Caster", 280.0, 26.0, 0.8, 0.85, 3,
+		Color(0.95, 0.45, 0.20))
+	ember.ranged = true
+	ember.splash_radius = 1
+	ember.splash_share = 0.30
+	b.summon_pool = [shade, hunter, ember, shade, berserker, thorn, ember] as Array[BossMinion]
 	# Fodder: weak bodies, a crowd of fourteen every forty seconds.
 	var thrall := _minion(&"thrall", "Crimson Thrall", 120.0, 12.0, 1.0, 0.6, 1,
 		Color(0.55, 0.12, 0.12))
