@@ -208,7 +208,8 @@ func _upgrades() -> BossUpgrades:
 			"u.mana_per_charge*": [1.1, 1.2, 1.3, 1.4, 1.6],
 			"u.shield_on_hit": [0.01, 0.02, 0.03, 0.04, 0.06]}),
 		# Assemble: builds sooner, and mends faster.
-		&"engineer": _lv({"a.cast_time": [9.0, 8.0, 7.0, 6.0, 4.0],
+		# Assemble: every level builds the Sentry faster — 10 s down to 2.5 s at Lv5.
+		&"engineer": _lv({"a.cast_time": [8.0, 6.5, 5.0, 4.0, 2.5],
 			"u.repair_per_second*": [1.2, 1.4, 1.6, 2.0, 3.0],
 			"u.mana_per_charge*": [1.1, 1.2, 1.3, 1.4, 1.6]}),
 		# Martyrdom: a longer last stand, cutting through more.

@@ -376,6 +376,8 @@ static func describe_change(field: String, a, b, relative: bool, base) -> String
 		return "Move speed +%d%% → +%d%%" % [roundi((float(base) / float(a) - 1.0) * 100.0),
 			roundi((float(base) / float(b) - 1.0) * 100.0)]
 	var label := field.replace("_", " ").capitalize()
+	if field == "cast_time":
+		label = "Cast / build time (s)"
 	if relative and base != null and float(base) != 0.0:
 		return "%s +%d%% → +%d%%" % [label, roundi((float(a) / float(base) - 1.0) * 100.0),
 			roundi((float(b) / float(base) - 1.0) * 100.0)]

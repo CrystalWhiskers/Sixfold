@@ -14444,6 +14444,25 @@ func _test_boss_executions(data: BossData) -> void:
 
 func _test_boss_units(_data: BossData) -> void:
 	_section("Boss defence: how the army's units behave here")
+	# The Engineer's upgrades build its Sentry faster.
+	var sen2 := _boss_board([["engineer"], [], []])
+	var bke: Barracks = sen2.barracks
+	var eng := _find("engineer")
+	var times: Array[float] = []
+	for lv in [0, 1, 3, 5, 10]:
+		bke.level[eng.id] = lv
+		times.append(bke.field_data(eng).ability.cast_time)
+	var faster := true
+	for k in range(1, times.size()):
+		if times[k] > times[k - 1] + 0.001:
+			faster = false
+	_check("every Engineer upgrade builds its Sentry faster",
+		faster and times[0] > times[3] + 5.0 and times[4] > 0.5 and times[4] <= times[3],
+		str(times))
+	bke.level[eng.id] = 0
+	_check("and the upgrade bar calls it build time",
+		" ".join(bke.level_changes(eng, 1)).contains("build time"))
+	BoardModel.reset_map()
 	# Difficulty: a copy of her data, harder or easier; Normal is her as designed.
 	var base_d := load("res://data/boss/arbiter.tres") as BossData
 	var easy := BossDifficulty.apply(base_d, 0)
