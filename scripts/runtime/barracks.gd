@@ -289,7 +289,7 @@ func field_data_at(d: UnitData, lv: int) -> UnitData:
 			else:
 				target.set(field, value)
 	if data.upgrades != null and out.ability != null and out.ability.summon_unit != null:
-		var form := data.upgrades.form_at(d.id, lv)
+		var form := data.upgrades.form_at(d.id, mini(lv, ability_cap))
 		if not form.is_empty():
 			out.ability.summon_unit = _form_chain(d.ability.summon_unit, form, d.id, lv)
 	_field_cache[key] = out
@@ -352,7 +352,7 @@ func statline(d: UnitData, lv: int) -> PackedStringArray:
 			if obj == null or obj.get(field) == null:
 				continue
 			out.append("%s %s" % [field.replace("_", " ").capitalize(), _num(obj.get(field))])
-		var f_at := data.upgrades.form_at(d.id, lv)
+		var f_at := data.upgrades.form_at(d.id, mini(lv, ability_cap))
 		if not f_at.is_empty():
 			out.append("Summons %s: %s" % [String(f_at.get("name", "")), String(f_at.get("desc", ""))])
 	return out
@@ -384,8 +384,8 @@ func level_changes(d: UnitData, lv: int) -> PackedStringArray:
 			continue
 		out.append(describe_change(field, a, b, k.begins_with("u.") and k.ends_with("*"),
 			d.get(field) if k.begins_with("u.") else null))
-	var f_now := data.upgrades.form_at(d.id, lv)
-	if not f_now.is_empty() and f_now != data.upgrades.form_at(d.id, lv - 1):
+	var f_now := data.upgrades.form_at(d.id, mini(lv, ability_cap))
+	if not f_now.is_empty() and f_now != data.upgrades.form_at(d.id, mini(lv - 1, ability_cap)):
 		out.append("Summons become %s: %s" % [String(f_now.get("name", "")), String(f_now.get("desc", ""))])
 	return out
 

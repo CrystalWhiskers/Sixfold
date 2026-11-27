@@ -233,6 +233,9 @@ func _upgrades() -> BossUpgrades:
 	}
 	# The Conjurer's wisps evolve with its level, each form keeping everything the
 	# last one gave and adding something new.
+	# ...arriving every couple of levels rather than every one: Greater at Lv3, Radiant
+	# at Lv5, Elder at Lv7, Ancient at Lv9 and Sovereign at Lv10.
+	u.form_levels = [3, 5, 7, 9, 10] as Array[int]
 	u.forms = {
 		&"conjurer": [
 			{"name": "Greater Wisp", "desc": "tougher, and every hit wards it with a shield",

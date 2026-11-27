@@ -14256,7 +14256,7 @@ func _test_boss_polish() -> void:
 		for lv in range(1, BossUpgrades.MAX_LEVEL + 1):
 			var vals := data.upgrades.level_values(id, lv)
 			# An evolving summon (the Conjurer's wisps) counts as one of the three.
-			var things := vals.size() + (0 if data.upgrades.form_at(id, lv).is_empty() else 1)
+			var things := vals.size() + (1 if data.upgrades.forms.has(id) else 0)
 			if things != 3:
 				not_three.append("%s Lv%d has %d" % [id, lv, vals.size()])
 			for raw in vals:
@@ -14843,21 +14843,26 @@ func _test_boss_units(_data: BossData) -> void:
 	var bkc: Barracks = sc.barracks
 	var conj := _find("conjurer")
 	var plain_w: UnitData = bkc.field_data(conj).ability.summon_unit
-	bkc.level[conj.id] = 1
+	bkc.level[conj.id] = 2
+	var g0: UnitData = bkc.field_data(conj).ability.summon_unit
+	bkc.level[conj.id] = 3
 	var g1: UnitData = bkc.field_data(conj).ability.summon_unit
-	bkc.level[conj.id] = 5
+	bkc.level[conj.id] = 10
 	var g5: UnitData = bkc.field_data(conj).ability.summon_unit
-	_check("at Lv1 the Conjurer's wisps become Greater Wisps, tougher and self-warding",
+	_check("the wisps stay plain wisps for the first two levels",
+		g0 != null and g0.display_name == "Wisp", g0.display_name if g0 != null else "none")
+	_check("at Lv3 the Conjurer's wisps become Greater Wisps, tougher and self-warding",
 		g1 != null and g1.display_name == "Greater Wisp" and g1.max_hp > plain_w.max_hp
 		and g1.shield_on_hit > 0.0, "%s" % [g1.display_name if g1 != null else "none"])
 	var g1t2 := BoardModel.at_tier(g1, 2)
 	_check("and every tier evolves with them",
 		g1t2 != null and g1t2.display_name == "Greater Wisp II" and g1t2.max_hp > BoardModel.at_tier(plain_w, 2).max_hp)
-	_check("each form keeps what the last gave and adds more",
+	_check("each form keeps what the last gave and adds more, Sovereign by Lv10",
 		g5 != null and g5.display_name == "Sovereign Wisp" and g5.shield_on_hit >= g1.shield_on_hit
 		and g5.pierce_targets >= 4 and g5.attack_range >= 2 and g5.attack_speed > g1.attack_speed)
 	_check("and the upgrade bar says what the wisps become",
-		" ".join(bkc.level_changes(conj, 1)).contains("Greater Wisp"))
+		" ".join(bkc.level_changes(conj, 3)).contains("Greater Wisp")
+		and not " ".join(bkc.level_changes(conj, 2)).contains("Wisp"))
 	var t6 := BoardModel.at_tier(bkc.field_data(conj), 6)
 	var c6 := UnitInstance.create(BoardModel.at_tier(conj, 6), BoardModel.TEAM_B)
 	c6.data = bkc.field_data(BoardModel.at_tier(conj, 6))

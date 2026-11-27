@@ -786,3 +786,4 @@ forms = {
 "u.shield_on_hit": 0.1
 }]
 }
+form_levels = Array[int]([3, 5, 7, 9, 10])

@@ -30,6 +30,11 @@ const LV10_CAPS := {"a.shell_arm": 5, "u.attack_range": 7, "a.banner_radius": 5,
 	"a.banner_resist": 0.6}
 
 
+## The upgrade level at which each form arrives, in order (form 1 at the first number,
+## and so on); empty for one form per level.
+@export var form_levels: Array[int] = []
+
+
 func form_at(id: StringName, level: int) -> Dictionary:
 	## The form a summoner's summon takes at `level`, or {} for its own.
 	if level <= 0 or not forms.has(id):
@@ -37,7 +42,16 @@ func form_at(id: StringName, level: int) -> Dictionary:
 	var list: Array = forms[id]
 	if list.is_empty():
 		return {}
-	return list[mini(level, list.size()) - 1]
+	var n := mini(level, list.size())
+	if not form_levels.is_empty():
+		n = 0
+		for at in form_levels:
+			if level >= at:
+				n += 1
+		n = mini(n, list.size())
+	if n <= 0:
+		return {}
+	return list[n - 1]
 
 
 func has_unit(id: StringName) -> bool:
