@@ -203,6 +203,28 @@ func recruit(section: int) -> bool:
 	return true
 
 
+func fill_board() -> int:
+	## The Fill button: recruits into the emptiest section, again and again, until every
+	## slot is full or the Supply runs out. Returns how many were recruited.
+	var n := 0
+	while true:
+		var pick := -1
+		for s in SECTIONS:
+			if free_slot(s) >= 0 and (pick < 0 or unit_count(s) < unit_count(pick)):
+				pick = s
+		if pick < 0 or not recruit(pick):
+			break
+		n += 1
+	return n
+
+
+func can_fill() -> bool:
+	for s in SECTIONS:
+		if free_slot(s) >= 0:
+			return supply >= recruit_price()
+	return false
+
+
 func upgrade_income() -> bool:
 	if not _pay(income_price()):
 		return false

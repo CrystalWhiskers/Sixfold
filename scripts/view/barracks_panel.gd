@@ -26,6 +26,7 @@ var _header: Label = null
 var _income_btn: Button = null
 var _recruit_btns: Array[Button] = []
 var _merge_btns: Array[Button] = []
+var _fill_btn: Button = null
 var _pull_btns: Array[Button] = []
 var _last_key: Array = []
 var _type_btns: Array[Button] = []
@@ -47,6 +48,14 @@ func setup(p_barracks: Barracks) -> void:
 	_income_btn.add_theme_font_size_override("font_size", 13)
 	_income_btn.pressed.connect(_on_income)
 	add_child(_income_btn)
+	# Recruit into every empty slot, emptiest lane first, as far as the Supply goes.
+	_fill_btn = Button.new()
+	_fill_btn.position = Vector2(size.x - 230 - 104, 4)
+	_fill_btn.size = Vector2(98, 28)
+	_fill_btn.add_theme_font_size_override("font_size", 13)
+	_fill_btn.tooltip_text = "Recruit into every empty slot, emptiest lane first, for as long as the Supply lasts."
+	_fill_btn.pressed.connect(_on_fill)
+	add_child(_fill_btn)
 	for s in Barracks.SECTIONS:
 		var x := 10.0 + float(s) * (SECTION_W + 8.0) + _grid_w() + 8.0
 		var r := Button.new()
@@ -130,14 +139,20 @@ func refresh() -> void:
 	if barracks == null:
 		return
 	var grow := barracks.next_passive_in()
-	_header.text = "BARRACKS   Supply %d   (+%.0f/s%s)" % [floori(barracks.supply), barracks.income,
-		("  ·  +%.0f in %ds" % [barracks.data.passive_income, ceili(grow)]) if not is_inf(grow) else ""]
+	# Compact numbers, so the header leaves room for the buttons beside it however rich
+	# the Barracks gets.
+	_header.text = "BARRACKS  Supply %s  (+%s/s%s)" % [BossStats.short(floorf(barracks.supply)),
+		BossStats.short(barracks.income),
+		(" · +%.0f in %ds" % [barracks.data.passive_income, ceili(grow)]) if not is_inf(grow) else ""]
 	if barracks.income_maxed():
 		_income_btn.text = "Income MAX  (%d/%d)" % [barracks.income_level, barracks.data.income_max_level]
 	else:
 		_income_btn.text = "Income +%s/s  (%d)  Lv%d" % [_amount(barracks.next_income_gain()),
 			ceili(barracks.income_price()), barracks.income_level]
 	_income_btn.disabled = barracks.supply < barracks.income_price()
+	if _fill_btn != null:
+		_fill_btn.text = "Fill board"
+		_fill_btn.disabled = not barracks.can_fill()
 	for s in _merge_btns.size():
 		var pairs := false
 		for i in barracks.slot_count():
@@ -305,6 +320,15 @@ func _last_filled(section: int) -> int:
 			last = i
 	return last
 
+
+
+func _on_fill() -> void:
+	var n := barracks.fill_board()
+	if n > 0:
+		Audio.play_merge()
+		changed.emit("Recruited %d unit%s to fill the board — they join the next waves." % [n,
+			"" if n == 1 else "s"])
+	refresh()
 
 
 func _on_income() -> void:

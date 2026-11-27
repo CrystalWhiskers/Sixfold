@@ -15247,6 +15247,24 @@ func _test_boss_enrage(data: BossData) -> void:
 	bf3.phase = 0
 	_check("the results screen counts every tier of a unit as one",
 		BossStats.base_name("Vexer IV") == "Vexer" and BossStats.base_name("Warden") == "Warden")
+	# Fill board: recruits into every empty slot, emptiest lane first, while Supply lasts.
+	var fb := Barracks.new()
+	fb.setup(data, load("res://data/loadouts/starter.tres") as LoadoutData, 7)
+	fb.supply = 1.0e9
+	var made_f := fb.fill_board()
+	var all_full := true
+	for fs in Barracks.SECTIONS:
+		if fb.free_slot(fs) >= 0:
+			all_full = false
+	_check("Fill board recruits until every slot is full", made_f > 0 and all_full and not fb.can_fill(),
+		"%d recruited" % made_f)
+	var fb2 := Barracks.new()
+	fb2.setup(data, load("res://data/loadouts/starter.tres") as LoadoutData, 7)
+	fb2.supply = fb2.recruit_price() * 2.5
+	var before_counts := [fb2.unit_count(0), fb2.unit_count(1), fb2.unit_count(2)]
+	var made2 := fb2.fill_board()
+	_check("and stops when the Supply runs out, spreading over the emptiest lanes",
+		made2 >= 1 and made2 <= 3 and fb2.supply < fb2.recruit_price(), "%d recruited from %s" % [made2, str(before_counts)])
 	# Merge from the other lanes: partners elsewhere come to this lane and merge here.
 	var ml := Barracks.new()
 	ml.setup(data, load("res://data/loadouts/starter.tres") as LoadoutData, 6)
