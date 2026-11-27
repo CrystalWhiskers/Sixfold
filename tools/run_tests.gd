@@ -5800,6 +5800,13 @@ func _test_beam_wash() -> void:
 		line.has(Vector2i(2, 3)) and line.has(Vector2i(2, 0))
 			and not line.has(Vector2i(2, 9)),
 		"%d cells" % line.size())
+	var slant := sim.beam_cells(Vector2i(0, 9), Vector2i(3, 8))
+	_check("at an angle it lights the tiles the drawn line crosses, not a diagonal",
+		slant.has(Vector2i(1, 9)) and slant.has(Vector2i(3, 8)) and not slant.has(Vector2i(2, 7)),
+		str(slant))
+	var short := sim.beam_cells(Vector2i(2, 9), Vector2i(2, 6), BoardModel.NOBODY, false, false)
+	_check("and a short beam stops at its target, as it is drawn",
+		short.has(Vector2i(2, 6)) and not short.has(Vector2i(2, 4)), str(short))
 
 	var hp := {
 		front = front.current_hp, behind = behind.current_hp,

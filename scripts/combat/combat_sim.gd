@@ -1265,27 +1265,39 @@ func _mana_from_swing(u: UnitInstance) -> void:
 
 
 func beam_cells(from: Vector2i, toward: Vector2i,
-		team := BoardModel.NOBODY, through_walls := false) -> Array[Vector2i]:
-	# The line the beam travels, from the shooter to the far edge of the board.
-	# `through_walls` is the apex Transcendence: its beam does not stop at stone,
-	# it goes through it, so the line runs to the edge of the board regardless of
-	# what is standing in the way.
+		team := BoardModel.NOBODY, through_walls := false, endless := true) -> Array[Vector2i]:
+	# The tiles the beam passes over: the straight line from the shooter's centre
+	# through the target's, at whatever angle that is — the same line the view draws —
+	# on to the edge of the board (or, for a short beam, just to its target).
+	# `through_walls` is the apex Transcendence: its beam goes through stone.
 	var out: Array[Vector2i] = []
-	var step := Vector2i(signi(toward.x - from.x), signi(toward.y - from.y))
-	if step == Vector2i.ZERO:
+	var d := Vector2(toward - from)
+	if d.length_squared() < 0.001:
 		return out
-	var c := from + step
-	while board.in_bounds(c):
+	var dir := d.normalized()
+	var origin := Vector2(from) + Vector2(0.5, 0.5)
+	var reach := d.length() + 0.25 if not endless else 1.0e6
+	var t := 0.0
+	var seen := {from: true}
+	while t <= reach:
+		t += 0.2
+		var p := origin + dir * t
+		var c := Vector2i(floori(p.x), floori(p.y))
+		if not board.in_bounds(c):
+			break
+		if seen.has(c):
+			continue
+		seen[c] = true
 		if not through_walls and BoardModel.blocks_sight(c, team):
 			break
 		out.append(c)
-		c += step
 	return out
 
 
 func _beam_wash(u: UnitInstance, victim: UnitInstance, dmg: float,
 		struck: Dictionary) -> void:
-	var line := beam_cells(u.cell, victim.cell, u.team, shoots_through_walls(u))
+	var line := beam_cells(u.cell, victim.cell, u.team, shoots_through_walls(u),
+		u.data.beam_endless)
 	if line.is_empty():
 		return
 	var washed: Array[Vector2i] = []
