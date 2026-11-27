@@ -14750,8 +14750,10 @@ func _test_boss_units(_data: BossData) -> void:
 	_break(simr2, bfr2.crystals[0], bfr2.boss)
 	bfr2._tick_rebuilds()
 	bfr2._restore_crystal(0)
-	_check("and a crystal rebuilt again comes back weaker",
-		bfr2.crystals[0].current_hp < first_hp - 1.0, "%.0f then %.0f" % [first_hp, bfr2.crystals[0].current_hp])
+	_check("and every rebuild comes back at full health",
+		is_equal_approx(first_hp, bfr2.crystals[0].stat(StatModifier.Stat.MAX_HP))
+		and is_equal_approx(bfr2.crystals[0].current_hp, first_hp),
+		"%.0f then %.0f" % [first_hp, bfr2.crystals[0].current_hp])
 	BoardModel.reset_map()
 	# On a crystal she swings at a fixed pace; fresh wave units are protected.
 	var sp := _boss_board([["warden"], [], []])

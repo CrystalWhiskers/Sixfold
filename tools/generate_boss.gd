@@ -409,8 +409,9 @@ func _initialize() -> void:
 	b.surround_count = 6
 	b.surround_cooldown = 10.0
 	# A big move chipping a crystal in its way: 99% resisted, and never more than 10.
-	# Rebuilds take a fixed time but come back weaker each time: 50%, 25%, 12.5%...
-	b.crystal_rebuild_decay = 0.5
+	# A rebuilt crystal comes back at full health, every time.
+	b.crystal_rebuild_fraction = 1.0
+	b.crystal_rebuild_decay = 0.0
 	# And each rebuild of the same crystal takes 30 s longer: 90, 120, 150...
 	b.crystal_rebuild_step = 30.0
 	b.crystal_share = 0.01
