@@ -705,10 +705,10 @@ func _check_voice_lines() -> void:
 	# The voices are placeholder material that is going to be deleted, so what is
 	# asserted here is the MECHANISM, not the specific lines: that the pools load,
 	# that they stay separate, and that an empty folder leaves a working game.
-	_check("the death lines loaded", Audio._death_voice.size() == 6,
+	_check("the death lines loaded (6 originals + 328 Deadlock pain_death)", Audio._death_voice.size() == 334,
 		"%d loaded" % Audio._death_voice.size())
 	_check("and the overkill lines loaded separately",
-		Audio._overkill_voice.size() == 3,
+		Audio._overkill_voice.size() == 78,
 		"%d loaded" % Audio._overkill_voice.size())
 
 	# The pools must not share a stream. If an overkill line is also in the
