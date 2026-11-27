@@ -105,10 +105,12 @@ const HEADHUNTER_ID := &"headhunter"
 const BERSERKER_ID := &"berserker"
 const THRALL_ID := &"thrall"
 const STALKER_ID := &"stalker"
+const EMBER_ID := &"ember_caster"
 
 
 static func is_summon_icon(id: StringName) -> bool:
-	return id in [SHADE_ID, THORN_ID, CHALICE_ID, HEADHUNTER_ID, BERSERKER_ID, THRALL_ID, STALKER_ID]
+	return id in [SHADE_ID, THORN_ID, CHALICE_ID, HEADHUNTER_ID, BERSERKER_ID, THRALL_ID, STALKER_ID,
+		EMBER_ID]
 
 
 func _draw_summon_tier(body: Rect2, alpha: float) -> void:
@@ -138,6 +140,32 @@ func _draw_headhunter(body: Rect2, alpha: float) -> void:
 	for dir in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
 		draw_line(c + dir * s * 0.25, c + dir * s * 0.8, red, maxf(s * 0.08, 1.5))
 	draw_circle(c, s * 0.1, Color(1.0, 0.85, 0.6, alpha))
+
+
+func _draw_ember(body: Rect2, alpha: float) -> void:
+	## Ember Caster: a flame cupped over glowing embers — its bolts splash fire
+	## onto everything round what they hit.
+	var c := body.get_center()
+	var s := body.size.x * 0.5 * 0.9
+	draw_circle(c, s * 0.82, Color(0.16, 0.05, 0.02, 0.92 * alpha))
+	# The outer flame, then a brighter core inside it.
+	for layer in [[1.0, Color(0.95, 0.38, 0.12)], [0.62, Color(1.0, 0.78, 0.30)]]:
+		var k: float = layer[0]
+		var col: Color = layer[1]
+		col.a = alpha
+		var base := c + Vector2(0, 0.42) * s
+		draw_colored_polygon(PackedVector2Array([
+			base + Vector2(-0.42, 0.0) * s * k,
+			base + Vector2(-0.48, -0.45) * s * k,
+			base + Vector2(-0.18, -0.70) * s * k,
+			base + Vector2(-0.05, -1.15) * s * k,
+			base + Vector2(0.20, -0.72) * s * k,
+			base + Vector2(0.48, -0.50) * s * k,
+			base + Vector2(0.42, 0.0) * s * k,
+		]), col)
+	# Three sparks thrown off to the sides: the splash.
+	for p in [Vector2(-0.62, -0.30), Vector2(0.64, -0.40), Vector2(0.0, 0.62)]:
+		draw_circle(c + p * s, s * 0.08, Color(1.0, 0.65, 0.25, alpha))
 
 
 func _draw_stalker(body: Rect2, alpha: float) -> void:
@@ -935,6 +963,9 @@ func _draw() -> void:
 		_draw_summon_tier(body, alpha)
 	elif unit.data.id == STALKER_ID:
 		_draw_stalker(body, alpha)
+		_draw_summon_tier(body, alpha)
+	elif unit.data.id == EMBER_ID:
+		_draw_ember(body, alpha)
 		_draw_summon_tier(body, alpha)
 	else:
 		# Its short name, not an initial: with seven units starting "S" a single
