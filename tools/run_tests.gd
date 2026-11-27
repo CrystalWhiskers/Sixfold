@@ -13654,6 +13654,9 @@ func _test_boss_defence() -> void:
 	late.recruits = 100
 	_check("and by the hundredth recruit they cost well over a thousand",
 		late.recruit_price() > 1000.0, "%.0f" % late.recruit_price())
+	late.rising_recruits = false
+	_check("with rising recruit cost switched off, every recruit costs the base price",
+		is_equal_approx(late.recruit_price(), data.recruit_cost), "%.0f" % late.recruit_price())
 	# Merging: two of the same in a section become one of the next tier.
 	for i in b.slot_count():
 		b.sections[0][i] = null

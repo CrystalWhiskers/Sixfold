@@ -103,6 +103,7 @@ func _ready() -> void:
 	barracks.setup(boss_data, GameSetup.loadout_for(BoardModel.TEAM_B), _rng.seed)
 	barracks.uncapped = GameSetup.boss_uncapped_upgrades
 	barracks.income_exponential = GameSetup.boss_income_exponential
+	barracks.rising_recruits = GameSetup.boss_rising_recruits
 	var top := (1 << 20) if barracks.uncapped else 10
 	barracks.ability_cap = top if GameSetup.boss_ability_lv10 else BossUpgrades.MAX_LEVEL
 

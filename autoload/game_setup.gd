@@ -141,6 +141,8 @@ var boss_ability_lv10 := true
 ## exponentially instead of quadratically. Both off by default.
 var boss_uncapped_upgrades := false
 var boss_income_exponential := false
+## Boss defence: each recruit costs more than the last (on), or always the base price.
+var boss_rising_recruits := true
 ## Boss defence difficulty, 0 (Easy) to 4 (Nightmare); 1 is Normal. See BossDifficulty.
 var boss_difficulty := BossDifficulty.NORMAL
 

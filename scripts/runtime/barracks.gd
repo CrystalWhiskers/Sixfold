@@ -155,7 +155,13 @@ func income_price() -> float:
 	return data.income_cost * pow(data.income_growth, income_level)
 
 
+## Off: every recruit costs the base price, however many came before (a setting).
+var rising_recruits := true
+
+
 func recruit_price() -> float:
+	if not rising_recruits:
+		return roundf(data.recruit_cost)
 	return roundf(data.recruit_cost * pow(data.recruit_growth, recruits) + data.recruit_step * recruits)
 
 

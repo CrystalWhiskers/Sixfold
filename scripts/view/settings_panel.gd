@@ -34,6 +34,7 @@ var _army_button: Button = null
 var _ability_button: Button = null
 var _uncap_button: Button = null
 var _income_exp_button: Button = null
+var _recruit_cost_button: Button = null
 var _volume_slider: HSlider = null
 var _volume_label: Label = null
 
@@ -686,6 +687,12 @@ func _build_army_limit_toggle() -> Control:
 		GameSetup.boss_income_exponential = not GameSetup.boss_income_exponential
 		_refresh_army_limit())
 	row.add_child(_income_exp_button)
+	# Rising recruit cost, on its own line under the two above.
+	_recruit_cost_button = _small_switch(func():
+		GameSetup.boss_rising_recruits = not GameSetup.boss_rising_recruits
+		_refresh_army_limit())
+	_recruit_cost_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	box.add_child(_recruit_cost_button)
 	_refresh_army_limit()
 	return box
 
@@ -703,6 +710,9 @@ func _refresh_army_limit() -> void:
 			"Upgrades: no max level", "Upgrades stop at Lv10")
 		_paint_switch(_income_exp_button, GameSetup.boss_income_exponential,
 			"Income gain: exponential", "Income gain: quadratic")
+	if _recruit_cost_button != null:
+		_paint_switch(_recruit_cost_button, GameSetup.boss_rising_recruits,
+			"Recruit cost: rises each recruit", "Recruit cost: flat")
 	if _ability_button != null:
 		var ten := GameSetup.boss_ability_lv10
 		_ability_button.text = "Ability upgrades to Lv10" if ten else "Ability upgrades stop at Lv5"
