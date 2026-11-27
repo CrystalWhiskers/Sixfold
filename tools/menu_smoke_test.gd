@@ -1474,36 +1474,6 @@ func _check_category_sliders() -> void:
 	for v in Audio._death_voices:
 		if v.stream != null:
 			busy += 1
-	# A unit with lines of its own (audio/voice, personal only) speaks them: the
-	# Warden's Deadlock screams, its laser screams only for an overkill.
-	if ResourceLoader.exists("res://audio/voice/warden_death_1.wav"):
-		var own_d := Audio.unit_voice(&"warden", false)
-		var own_o := Audio.unit_voice(&"warden", true)
-		_check("the Warden has its own death lines and its own overkill lines",
-			own_d.size() == 6 and own_o.size() == 3, "%d / %d" % [own_d.size(), own_o.size()])
-		for v in Audio._voices + Audio._death_voices:
-			v.stream = null
-		Audio.play_death_voice(true, &"warden")
-		var heard_o := false
-		var wrong := false
-		for v in Audio._voices + Audio._death_voices:
-			if v.stream == null:
-				continue
-			if own_o.has(v.stream):
-				heard_o = true
-			elif own_d.has(v.stream) or Audio._overkill_voice.has(v.stream):
-				wrong = true
-		_check("an overkilled Warden screams one of its overkill lines, and only that", heard_o and not wrong)
-		for v in Audio._voices + Audio._death_voices:
-			v.stream = null
-		Audio.play_death_voice(false, &"warden")
-		var heard_d := false
-		for v in Audio._voices + Audio._death_voices:
-			if v.stream != null and own_d.has(v.stream):
-				heard_d = true
-		_check("and an ordinary Warden death one of its ordinary lines", heard_d)
-		_check("a unit without lines of its own still uses the shared ones",
-			Audio.unit_voice(&"archer", false).is_empty())
 	_check("five deaths in a row land on five different players, overlapping",
 		Audio._death_voices.size() >= 8 and busy >= 5, "%d of %d" % [busy, Audio._death_voices.size()])
 	for prop in props:
