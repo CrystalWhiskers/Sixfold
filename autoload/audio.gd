@@ -41,6 +41,10 @@ const SFX_DIR := "res://assets/sfx"
 ## one roster-wide voice is what the game actually wants today, and a per-unit
 ## pool with exactly one unit in it is machinery pretending to be a feature.
 const VOICE_DIR := "res://assets/voice"
+## A unit's own lines, personal use only (never committed, never exported): files named
+## <unit id>_death_<n>.wav and <unit id>_overkill_<n>.wav. A unit with lines here speaks
+## them instead of the shared ones.
+const UNIT_VOICE_DIR := "res://audio/voice"
 
 ## How many effects may overlap. Eight is comfortably more than a busy tick ever
 ## needs and small enough that a stuck one is obvious.
@@ -367,7 +371,22 @@ func _load_one(file: String) -> AudioStream:
 	return load(path) as AudioStream
 
 
-func _load_voice_run(kind: String) -> Array[AudioStream]:
+## unit id -> [death lines, overkill lines] of its own, read the first time it dies.
+var _unit_voice: Dictionary = {}
+
+
+func unit_voice(unit_id: StringName, overkill: bool) -> Array[AudioStream]:
+	## A unit's own death (or overkill) lines, or an empty list if it has none.
+	if unit_id == &"":
+		return [] as Array[AudioStream]
+	if not _unit_voice.has(unit_id):
+		_unit_voice[unit_id] = [_load_voice_run("%s_death" % unit_id, UNIT_VOICE_DIR),
+			_load_voice_run("%s_overkill" % unit_id, UNIT_VOICE_DIR)]
+	var pair: Array = _unit_voice[unit_id]
+	return pair[1] if overkill else pair[0]
+
+
+func _load_voice_run(kind: String, dir := VOICE_DIR) -> Array[AudioStream]:
 	## Counts upward from _1 until a number is missing, the same trick the melee
 	## pool uses — except the count is not written down anywhere, because these
 	## files are going to be deleted and a hard-coded 6 would turn that deletion
@@ -377,7 +396,7 @@ func _load_voice_run(kind: String) -> Array[AudioStream]:
 	var out: Array[AudioStream] = []
 	var n := 1
 	while true:
-		var path := "%s/%s_%d.wav" % [VOICE_DIR, kind, n]
+		var path := "%s/%s_%d.wav" % [dir, kind, n]
 		if not ResourceLoader.exists(path):
 			break
 		var s := load(path) as AudioStream
@@ -781,7 +800,7 @@ func play_shield_hit() -> void:
 	_fire(_shield_hit, SHIELD_DB, _rng.randf_range(0.94, 1.06))
 
 
-func play_death_voice(overkill := false) -> void:
+func play_death_voice(overkill := false, unit_id: StringName = &"") -> void:
 	## Layered over play_death(), not instead of it: the thump is the event, the
 	## cry is the character. With the folder empty this does nothing at all and
 	## every death is just the thump, which is why it is safe to call on every
@@ -793,6 +812,11 @@ func play_death_voice(overkill := false) -> void:
 	## back to the ordinary pool when the overkill pool is empty: the line is
 	## supposed to mean something, and a fallback would make it mean nothing.
 	var pool := _overkill_voice if overkill else _death_voice
+	# A unit with lines of its own (audio/voice) speaks those — still kept apart:
+	# its overkill line for an overkill, its ordinary line otherwise.
+	var own := unit_voice(unit_id, overkill)
+	if not own.is_empty():
+		pool = own
 	# No pitch wander here. It works on a thump because a thump has no pitch to
 	# speak of; on a voice it sounds like a broken tape.
 	_fire(_pick(pool), OVERKILL_DB if overkill else VOICE_DB, 1.0, VOICE_BUS, true)

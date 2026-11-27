@@ -1038,7 +1038,9 @@ func _kill(e: Dictionary) -> void:
 	# blow that landed was bigger than the unit's whole health bar — the sim
 	# decided that when it dealt the damage and put the answer on the event,
 	# because it is the only place that ever saw the number.
-	Audio.play_death_voice(bool(e.get("overkill", false)))
+	var dead: UnitInstance = _units.get(uid, null)
+	Audio.play_death_voice(bool(e.get("overkill", false)),
+		dead.data.id if dead != null and dead.data != null else &"")
 	_view.kill_view(uid)
 	_moves.erase(uid)
 	_lunges.erase(uid)
