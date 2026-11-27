@@ -41,7 +41,7 @@ const SFX_DIR := "res://assets/sfx"
 ## one roster-wide voice is what the game actually wants today, and a per-unit
 ## pool with exactly one unit in it is machinery pretending to be a feature.
 const VOICE_DIR := "res://assets/voice"
-## A unit's own lines, personal use only (never committed, never exported): files named
+## A unit's own lines (Deadlock clips; see audio/voice/README.md): files named
 ## <unit id>_death_<n>.wav and <unit id>_overkill_<n>.wav. A unit with lines here speaks
 ## them instead of the shared ones.
 const UNIT_VOICE_DIR := "res://audio/voice"
