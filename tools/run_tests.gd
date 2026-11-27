@@ -14770,6 +14770,11 @@ func _test_boss_units(_data: BossData) -> void:
 	_check("but a big move hits her own summons standing in it",
 		BossFight.is_big(big_ff) and (own.current_hp < hp_own or not own.is_alive()),
 		"%.0f -> %.0f" % [hp_own, own.current_hp])
+	if own.is_alive():
+		_check("for 75% less than it would do to your units",
+			absf((hp_own - own.current_hp) - bff2.move_hit(big_ff, own) * (1.0 - bff2.data.friendly_fire_resist)) < 1.0
+			and is_equal_approx(bff2.data.friendly_fire_resist, 0.75),
+			"%.0f taken" % (hp_own - own.current_hp))
 	_check("and Onrush, both kinds, hits for a share of health",
 		_move_named(bff2.data, &"onrush").hp_scaled and _move_named(bff2.data, &"endless_onrush").hp_scaled)
 	BoardModel.reset_map()

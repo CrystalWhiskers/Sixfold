@@ -1344,7 +1344,8 @@ func _strike() -> void:
 		_soul_blow = false
 	for a in allies:
 		if a.is_alive():
-			sim._damage(a, move_hit(mv, a), boss, true)
+			# Her own take only a quarter of the blow (75% less).
+			sim._damage(a, move_hit(mv, a) * (1.0 - clampf(data.friendly_fire_resist, 0.0, 1.0)), boss, true)
 	if not executed.is_empty():
 		sim._emit("boss_execute", {uid = boss.uid, name = mv.display_name, cells = executed,
 			tier = doomed, cell = boss.cell})

@@ -610,6 +610,7 @@ enrage_attack = 0.4
 enrage_minions = 0.05
 max_hit_percent = 0.005
 friendly_fire = true
+friendly_fire_resist = 0.75
 posture_damage = 8000.0
 summon_scale_share = 0.05
 spawn_protect_seconds = 3.0

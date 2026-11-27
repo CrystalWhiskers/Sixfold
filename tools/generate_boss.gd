@@ -553,6 +553,8 @@ func _initialize() -> void:
 	# multiplier.
 	# And her big moves do not spare her own summons.
 	b.friendly_fire = true
+	# ...but they take 75% less from it than your units do.
+	b.friendly_fire_resist = 0.75
 	# Every 8000 damage the army lands she reels: 3 s stunned, taking 25% more, then
 	# 10 s before her posture builds again.
 	b.posture_damage = 8000.0
