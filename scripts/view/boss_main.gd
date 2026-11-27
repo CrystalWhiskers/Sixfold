@@ -472,6 +472,8 @@ func _on_event(e: Dictionary) -> void:
 func _on_finished(_winner: int) -> void:
 	phase = "over"
 	var won := result == BoardModel.TEAM_B
+	if won and play_cutscene:
+		await _victory_cutscene()
 	_banner.text = "VICTORY" if won else "DEFEAT"
 	_banner.add_theme_color_override("font_color",
 		Color(0.70, 0.95, 0.70) if won else Color(1.0, 0.45, 0.40))
@@ -484,8 +486,122 @@ func _on_finished(_winner: int) -> void:
 	else:
 		_status.text = "Time is up after %s — %s holds the field." % [
 			clock, boss_data.display_name]
+	if won:
+		_victory_banner()
+		if play_cutscene:
+			await _pause(1.4)
 	_again_btn.visible = true
 	_show_results(won, clock)
+
+
+# --- Her fall ---------------------------------------------------------------------
+
+## The cutscene when her health reaches zero. Off for the headless smoke tests, which
+## read the results the moment the fight is over; a click skips the rest of it.
+var play_cutscene := DisplayServer.get_name() != "headless"
+var cutscene_running := false
+var _skip_cutscene := false
+var _cutscene_layer: CanvasLayer = null
+
+
+func _pause(seconds: float) -> void:
+	## Waits `seconds`, or less if the player clicked to skip.
+	var left := seconds
+	while left > 0.0 and not _skip_cutscene and is_inside_tree():
+		await get_tree().process_frame
+		left -= get_process_delta_time()
+
+
+func _victory_cutscene() -> void:
+	## She reels, the field shakes and flashes red, rings of light burst from her, a
+	## white-out — and her name, falling.
+	cutscene_running = true
+	_skip_cutscene = false
+	_cutscene_layer = CanvasLayer.new()
+	_cutscene_layer.layer = 4
+	add_child(_cutscene_layer)
+	var veil := ColorRect.new()
+	veil.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	veil.color = Color(0.8, 0.08, 0.08, 0.0)
+	veil.mouse_filter = Control.MOUSE_FILTER_STOP
+	veil.gui_input.connect(func(e: InputEvent) -> void:
+		if e is InputEventMouseButton and e.pressed:
+			_skip_cutscene = true)
+	_cutscene_layer.add_child(veil)
+	var fallen := Label.new()
+	fallen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	fallen.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	fallen.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	fallen.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	fallen.text = "%s\nFALLS" % boss_data.display_name.to_upper()
+	fallen.add_theme_font_size_override("font_size", 40)
+	fallen.add_theme_color_override("font_color", Color(1.0, 0.86, 0.80))
+	fallen.add_theme_constant_override("outline_size", 12)
+	fallen.add_theme_color_override("font_outline_color", Color(0.25, 0.0, 0.0, 0.95))
+	fallen.modulate.a = 0.0
+	fallen.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_cutscene_layer.add_child(fallen)
+
+	var at := _view.cell_to_pos(fight.boss.cell)
+	var fx := _view.effects()
+	var origin := _view.position
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4242
+	Audio.play_boss_charge()
+	# She reels: the field shakes, red pulses, rings of light burst from her.
+	for beat in 7:
+		if _skip_cutscene:
+			break
+		fx.ring(at, _view.tile_size * 0.3, _view.tile_size * (2.5 + beat * 0.8),
+			Color(1.0, 0.32 + beat * 0.08, 0.25), 0.8)
+		veil.color.a = 0.32
+		var strength := 4.0 + beat * 2.0
+		for f in 8:
+			if _skip_cutscene:
+				break
+			_view.position = origin + Vector2(rng.randf_range(-strength, strength),
+				rng.randf_range(-strength, strength))
+			veil.color.a = maxf(veil.color.a - 0.05, 0.0)
+			await get_tree().process_frame
+		await _pause(0.08)
+	_view.position = origin
+	# The white-out, and her name.
+	Audio.play_boss_slam()
+	if not _skip_cutscene:
+		for k in 3:
+			fx.ring(at, _view.tile_size * 0.5, _view.tile_size * 9.0, Color(1.0, 0.95, 0.85), 1.2)
+	veil.color = Color(1.0, 0.96, 0.90, 0.0)
+	var tw := create_tween()
+	tw.tween_property(veil, "color:a", 1.0, 0.35)
+	tw.parallel().tween_property(fallen, "modulate:a", 1.0, 0.6)
+	tw.tween_interval(0.3)
+	tw.tween_property(veil, "color:a", 0.0, 1.1)
+	await _pause(2.6)
+	tw.kill()
+	var out := create_tween()
+	out.tween_property(fallen, "modulate:a", 0.0, 0.4)
+	await _pause(0.45)
+	_cutscene_layer.queue_free()
+	_cutscene_layer = null
+	_view.position = origin
+	cutscene_running = false
+
+
+func _victory_banner() -> void:
+	## VICTORY slams in, gold and oversized, and settles.
+	_banner.add_theme_color_override("font_color", Color(1.0, 0.86, 0.42))
+	_banner.add_theme_font_size_override("font_size", 72)
+	_banner.pivot_offset = Vector2(_banner.size.x * 0.5, 40.0)
+	if not play_cutscene:
+		return
+	_banner.scale = Vector2(2.6, 2.6)
+	_banner.modulate.a = 0.0
+	var tw := create_tween()
+	tw.tween_property(_banner, "scale", Vector2.ONE, 0.45).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(_banner, "modulate:a", 1.0, 0.25)
+	_view.effects().ring(_view.cell_to_pos(fight.boss.cell), _view.tile_size * 0.5,
+		_view.tile_size * 12.0, Color(1.0, 0.86, 0.42), 1.0)
+	Audio.play_promotion()
 
 
 func result_rows(won: bool, clock: String) -> Array:
