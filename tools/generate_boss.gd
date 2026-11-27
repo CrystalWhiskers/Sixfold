@@ -324,10 +324,12 @@ func _initialize() -> void:
 	# longer to pay for itself — 15 s for the first, ~30 s for the fourth, ~57 s for the
 	# sixth, ~250 s for the ninth.
 	b.income_growth = 2.2
-	# Recruits: 10 Supply, then 2 more each time — 10, 12, 14, 16...
+	# Recruits: 10 Supply, 2 more each time, and 5% compounding on top — cheap early
+	# (10, 13, 15, 18...), ~300 by the 60th and ~1,500 by the 100th, so the flood of
+	# Supply late in a long fight does not buy an endless army.
 	b.recruit_cost = 10.0
 	b.recruit_step = 2.0
-	b.recruit_growth = 1.0
+	b.recruit_growth = 1.05
 	b.upgrade_costs = PackedFloat32Array([30, 50, 80, 120, 180])
 	b.upgrade_stat_per_level = 0.15
 	# Exponential upgrades: up to Lv10, each level x2.2 the price of the last (50, 110, 242, 532, 1171...) and x1.2

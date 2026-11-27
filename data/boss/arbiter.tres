@@ -582,6 +582,7 @@ income_step_growth = 1.0
 income_step_quad = 0.5
 damage_income = 0.02
 summon_damage_income = 0.01
+recruit_growth = 1.05
 upgrades = ExtResource("5_3tb7n")
 upgrade_costs = PackedFloat32Array(30, 50, 80, 120, 180)
 upgrade_stat_per_level = 0.15
